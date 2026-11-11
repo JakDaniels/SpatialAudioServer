@@ -41,15 +41,36 @@ public sealed record ParticipantSnapshot(
 
 public sealed record CreateRoomCommand(string? Name, string? ExternalId, int? MaxParticipants, JsonObject? Metadata);
 
+/// <summary>Body of get-or-create by external id. Only used when the room is created; name defaults to the external id.</summary>
+public sealed record EnsureRoomCommand(string? Name, int? MaxParticipants, JsonObject? Metadata);
+
 public sealed record AddParticipantCommand(
     string? DisplayName, string? ExternalId, Vec3? Position, Quat? Orientation, JsonObject? Metadata);
 
 /// <summary>Partial update: null fields are left unchanged.</summary>
 public sealed record UpdateParticipantCommand(bool? Muted, double? Gain, Vec3? Position, Quat? Orientation);
 
-public sealed record JoinResult(ParticipantSnapshot Participant, string JoinToken, DateTimeOffset ExpiresAt);
+/// <param name="ReplacedParticipantId">
+/// Set when a participant with the same externalId was already in the room and has been replaced (treated as a reconnect).
+/// </param>
+public sealed record JoinResult(ParticipantSnapshot Participant, string JoinToken, DateTimeOffset ExpiresAt, Guid? ReplacedParticipantId);
 
 public sealed class NotFoundException(string message) : Exception(message);
+
+/// <summary>The request clashes with existing state (e.g. a duplicate room externalId).</summary>
+public sealed class ConflictException(string message) : Exception(message);
+
+/// <summary>
+/// External ids are caller-defined strings (OpenSim region/parcel/avatar UUIDs in practice). Anything that parses
+/// as a GUID is normalised to lowercase "D" form, so "{ABC…}" and "abc…" address the same room or participant.
+/// </summary>
+public static class ExternalIds
+{
+    public static string? Normalize(string? value) =>
+        value is null ? null
+        : Guid.TryParse(value, out var guid) ? guid.ToString("D")
+        : value.Trim();
+}
 
 public sealed class LimitExceededException(string message) : Exception(message);
 

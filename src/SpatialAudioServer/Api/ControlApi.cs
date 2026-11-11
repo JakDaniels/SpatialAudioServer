@@ -10,7 +10,8 @@ public sealed record RoomDetails(
     Guid Id, string Name, string? ExternalId, int MaxParticipants, System.Text.Json.Nodes.JsonObject? Metadata,
     DateTimeOffset CreatedAt, int ParticipantCount, IReadOnlyList<ParticipantSnapshot> Participants);
 
-public sealed record JoinResponse(Guid ParticipantId, Guid RoomId, string JoinToken, string SignalUrl, DateTimeOffset ExpiresAt);
+public sealed record JoinResponse(
+    Guid ParticipantId, Guid RoomId, string JoinToken, string SignalUrl, DateTimeOffset ExpiresAt, Guid? ReplacedParticipantId);
 
 public sealed record StatusResponse(
     string Version, DateTimeOffset StartedAt, double UptimeSeconds, GstStatusDto Gstreamer, int Rooms, int Participants, LimitOptions Limits);
@@ -46,43 +47,94 @@ public static class ControlApi
 
         roomsApi.MapGet("/", (string? externalId, RoomManager rooms) => rooms.ListRooms(externalId));
 
-        roomsApi.MapGet("/{roomId:guid}", (Guid roomId, RoomManager rooms) =>
+        // Get-or-create by external id: 201 when created, 200 with the existing room otherwise.
+        roomsApi.MapPut($"/by-external/{{{RoomExternalId}}}", (string roomExternalId, EnsureRoomCommand? body, RoomManager rooms) =>
         {
-            var (r, participants) = rooms.GetRoom(roomId);
+            var (room, created) = rooms.EnsureRoom(roomExternalId, body);
+            return created ? Results.Created($"/api/rooms/{room.Id}", room) : Results.Ok(room);
+        });
+
+        // Every room route exists twice: by our id and by external id (OpenSim region/parcel UUID). Likewise for
+        // participants (OpenSim avatar UUID), so the region module never has to store our ids.
+        MapRoom(roomsApi.MapGroup($"/{{{RoomId}:guid}}"));
+        MapRoom(roomsApi.MapGroup($"/by-external/{{{RoomExternalId}}}"));
+    }
+
+    private const string RoomId = "roomId";
+    private const string RoomExternalId = "roomExternalId";
+    private const string ParticipantId = "participantId";
+    private const string ParticipantExternalId = "participantExternalId";
+
+    private static void MapRoom(RouteGroupBuilder room)
+    {
+        room.MapGet("/", (HttpContext http, RoomManager rooms) =>
+        {
+            var (r, participants) = rooms.GetRoom(ResolveRoom(http, rooms));
             return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, participants);
         });
 
-        roomsApi.MapDelete("/{roomId:guid}", (Guid roomId, RoomManager rooms) =>
+        room.MapDelete("/", (HttpContext http, RoomManager rooms) =>
         {
-            rooms.DeleteRoom(roomId);
+            rooms.DeleteRoom(ResolveRoom(http, rooms));
             return Results.NoContent();
         });
 
-        var participantsApi = roomsApi.MapGroup("/{roomId:guid}/participants");
+        var participants = room.MapGroup("/participants");
 
-        participantsApi.MapPost("/", (Guid roomId, AddParticipantCommand body, RoomManager rooms) =>
+        participants.MapPost("/", (HttpContext http, AddParticipantCommand body, RoomManager rooms) =>
         {
+            var roomId = ResolveRoom(http, rooms);
             var join = rooms.AddParticipant(roomId, body);
             var id = join.Participant.Id;
             return Results.Created(
                 $"/api/rooms/{roomId}/participants/{id}",
-                new JoinResponse(id, roomId, join.JoinToken, $"/signal/{id}", join.ExpiresAt));
+                new JoinResponse(id, roomId, join.JoinToken, $"/signal/{id}", join.ExpiresAt, join.ReplacedParticipantId));
         });
 
-        participantsApi.MapGet("/", (Guid roomId, RoomManager rooms) => rooms.ListParticipants(roomId));
+        participants.MapGet("/", (HttpContext http, RoomManager rooms) => rooms.ListParticipants(ResolveRoom(http, rooms)));
 
-        participantsApi.MapGet("/{participantId:guid}", (Guid roomId, Guid participantId, RoomManager rooms) =>
-            rooms.GetParticipant(roomId, participantId));
+        MapParticipant(participants.MapGroup($"/{{{ParticipantId}:guid}}"));
+        MapParticipant(participants.MapGroup($"/by-external/{{{ParticipantExternalId}}}"));
+    }
 
-        participantsApi.MapPatch("/{participantId:guid}",
-            (Guid roomId, Guid participantId, UpdateParticipantCommand body, RoomManager rooms) =>
-                rooms.UpdateParticipant(roomId, participantId, body));
-
-        participantsApi.MapDelete("/{participantId:guid}", (Guid roomId, Guid participantId, RoomManager rooms) =>
+    private static void MapParticipant(RouteGroupBuilder participant)
+    {
+        participant.MapGet("/", (HttpContext http, RoomManager rooms) =>
         {
+            var (roomId, participantId) = ResolveParticipant(http, rooms);
+            return rooms.GetParticipant(roomId, participantId);
+        });
+
+        participant.MapPatch("/", (HttpContext http, UpdateParticipantCommand body, RoomManager rooms) =>
+        {
+            var (roomId, participantId) = ResolveParticipant(http, rooms);
+            return rooms.UpdateParticipant(roomId, participantId, body);
+        });
+
+        participant.MapDelete("/", (HttpContext http, RoomManager rooms) =>
+        {
+            var (roomId, participantId) = ResolveParticipant(http, rooms);
             rooms.RemoveParticipant(roomId, participantId);
             return Results.NoContent();
         });
+    }
+
+    private static Guid ResolveRoom(HttpContext http, RoomManager rooms)
+    {
+        var values = http.Request.RouteValues;
+        return values.TryGetValue(RoomId, out var id)
+            ? Guid.Parse((string)id!)
+            : rooms.ResolveRoom((string)values[RoomExternalId]!);
+    }
+
+    private static (Guid RoomId, Guid ParticipantId) ResolveParticipant(HttpContext http, RoomManager rooms)
+    {
+        var roomId = ResolveRoom(http, rooms);
+        var values = http.Request.RouteValues;
+        var participantId = values.TryGetValue(ParticipantId, out var id)
+            ? Guid.Parse((string)id!)
+            : rooms.ResolveParticipant(roomId, (string)values[ParticipantExternalId]!);
+        return (roomId, participantId);
     }
 }
 

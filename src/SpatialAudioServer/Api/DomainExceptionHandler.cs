@@ -14,6 +14,7 @@ internal sealed class DomainExceptionHandler(IProblemDetailsService problems) : 
             DomainValidationException v => new ValidationProblemDetails(v.Errors) { Status = StatusCodes.Status400BadRequest },
             NotFoundException => new ProblemDetails { Status = StatusCodes.Status404NotFound, Title = "Not found", Detail = exception.Message },
             LimitExceededException => new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Limit reached", Detail = exception.Message },
+            ConflictException => new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Conflict", Detail = exception.Message },
             _ => null,
         };
         if (details is null)

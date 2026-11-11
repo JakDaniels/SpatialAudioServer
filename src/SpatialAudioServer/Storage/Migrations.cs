@@ -61,6 +61,13 @@ internal static class Migrations
         );
         CREATE INDEX ix_events_at ON events(at);
         """,
+
+        // 2: a room's externalId (e.g. OpenSim region/parcel UUID) is unique. NULLs stay allowed and distinct.
+        // Fails if a database already holds duplicates; delete one of the rooms first.
+        """
+        DROP INDEX ix_rooms_external_id;
+        CREATE UNIQUE INDEX ux_rooms_external_id ON rooms(external_id);
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;

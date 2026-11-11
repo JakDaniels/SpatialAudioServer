@@ -15,7 +15,7 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   (`dotnet run -- --selftest` passes). Findings are in PLAN.md "Binding choice". Firefox browser test passed. Still open: Chrome/Edge test
   and a Windows run.
 - **Phase 1 (skeleton) done:** solution `src/SpatialAudioServer.slnx` (server + `SpatialAudioServer.Tests`, all under `src/`).
-  `dotnet test src` runs 15 tests; `dotnet run --project src/SpatialAudioServer` serves HTTP 5000 / HTTPS 5001;
+  `dotnet test src` runs 23 tests; `dotnet run --project src/SpatialAudioServer` serves HTTP 5000 / HTTPS 5001;
   `dotnet run --project src/SpatialAudioServer -- apikey create <label>` makes a control-API key.
 - Next: Phase 2 (media core). Ask the user before starting it.
 
