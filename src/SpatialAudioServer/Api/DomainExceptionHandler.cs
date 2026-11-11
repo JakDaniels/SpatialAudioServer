@@ -15,6 +15,9 @@ internal sealed class DomainExceptionHandler(IProblemDetailsService problems) : 
             NotFoundException => new ProblemDetails { Status = StatusCodes.Status404NotFound, Title = "Not found", Detail = exception.Message },
             LimitExceededException => new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Limit reached", Detail = exception.Message },
             ConflictException => new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Conflict", Detail = exception.Message },
+            Media.MediaUnavailableException => new ProblemDetails { Status = StatusCodes.Status503ServiceUnavailable, Title = "Media unavailable", Detail = exception.Message },
+            UnauthorizedAccessException => new ProblemDetails { Status = StatusCodes.Status401Unauthorized, Title = "Unauthorized", Detail = exception.Message },
+            ArgumentException => new ProblemDetails { Status = StatusCodes.Status400BadRequest, Title = "Bad request", Detail = exception.Message },
             _ => null,
         };
         if (details is null)

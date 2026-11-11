@@ -15,6 +15,7 @@ public enum ParticipantState
     Connecting,
     Connected,
     Disconnected,
+    Failed,
 }
 
 public sealed record RoomSnapshot(

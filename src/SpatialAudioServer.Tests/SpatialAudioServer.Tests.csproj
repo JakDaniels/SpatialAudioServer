@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SpatialAudioServer\SpatialAudioServer.csproj" />
+    <ProjectReference Include="..\SpatialAudioServer.LoadTest\SpatialAudioServer.LoadTest.csproj" />
   </ItemGroup>
 
 </Project>

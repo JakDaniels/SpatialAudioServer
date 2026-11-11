@@ -5,6 +5,7 @@ using SpatialAudioServer.Configuration;
 using SpatialAudioServer.Hosting;
 using SpatialAudioServer.Media;
 using SpatialAudioServer.Rooms;
+using SpatialAudioServer.Signalling;
 using SpatialAudioServer.Storage;
 
 // SpatialAudioServer                      run the server
@@ -26,7 +27,16 @@ builder.Services.AddSingleton<ApiKeyStore>();
 builder.Services.AddSingleton<JoinTokenStore>();
 builder.Services.AddSingleton<ActivityLog>();
 builder.Services.AddSingleton<GstRuntime>();
-builder.Services.AddSingleton<IRoomMedia, NullRoomMedia>(); // Phase 2 replaces this with the GStreamer implementation.
+if (builder.Configuration.GetValue($"{MediaOptions.Section}:{nameof(MediaOptions.Enabled)}", true))
+{
+    builder.Services.AddSingleton<GstRoomMedia>();
+    builder.Services.AddSingleton<IRoomMedia>(sp => sp.GetRequiredService<GstRoomMedia>());
+}
+else
+{
+    builder.Services.AddSingleton<IRoomMedia, NullRoomMedia>();
+}
+builder.Services.AddSingleton<SignalSessions>();
 builder.Services.AddSingleton<RoomManager>();
 builder.Services.AddSingleton<ApiKeyValidator>();
 builder.Services.AddHostedService<StartupService>();
@@ -71,6 +81,7 @@ app.UseStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControlApi();
+app.MapSignalling();
 
 app.Run();
 return 0;
