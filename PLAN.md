@@ -93,20 +93,32 @@ Lessons to apply from the earlier experiments:
 All control endpoints require `X-Api-Key` (or `Authorization: Bearer`).
 
 ```
-POST   /api/rooms                         {id?, name, maxParticipants?, metadata?}   -> room
-GET    /api/rooms                          -> [room]
+POST   /api/rooms                         {name, externalId?, maxParticipants?, metadata?}   -> room (201)
+GET    /api/rooms[?externalId=]            -> [room]
 GET    /api/rooms/{roomId}                 -> room + participants
 DELETE /api/rooms/{roomId}                 -> disconnects everyone, tears down pipeline
 
-POST   /api/rooms/{roomId}/participants    {id?, displayName, externalId?(avatar UUID), position?, metadata?}
-                                            -> {participantId, joinToken, signalUrl, expiresAt}
+POST   /api/rooms/{roomId}/participants    {displayName, externalId?(avatar UUID), position?, orientation?, metadata?}
+                                            -> {participantId, roomId, joinToken, signalUrl, expiresAt} (201)
 GET    /api/rooms/{roomId}/participants    -> [participant]
+GET    /api/rooms/{roomId}/participants/{pid}   -> participant
 DELETE /api/rooms/{roomId}/participants/{pid}   -> remove/disconnect
 PATCH  /api/rooms/{roomId}/participants/{pid}   {muted?, gain?, position?, orientation?}
                                             (position used later by spatial engine; stored now)
 
-GET    /api/status                         -> version, uptime, GStreamer version, plugin check, counts
+GET    /api/status                         -> version, uptime, GStreamer version, plugin check, counts, limits
 ```
+
+As implemented in Phase 1:
+- IDs (rooms and participants) are always server-generated UUIDs; the draft's optional `id` was dropped. Callers
+  correlate via `externalId`.
+- `position` is `{x,y,z}`; `orientation` is a quaternion `{x,y,z,w}` (SL/OpenSim's rotation form). `gain` is 0–4
+  (1 = unity; `audioamplify` range). `metadata` is any JSON object up to 16 KB. Name/displayName ≤ 200 chars.
+- Errors are RFC 9457 problem details: 400 validation (with per-field `errors`), 401 missing/invalid key,
+  404 unknown room/participant, 409 room/participant/server limit reached.
+- API keys: bootstrap keys from config (`Auth:ApiKeys`, e.g. env `Auth__ApiKeys__0`), never stored; plus keys
+  created with `SpatialAudioServer apikey create <label>` (`list`, `revoke <id|prefix>`), stored as SHA-256 hashes
+  with a display prefix (`sas_xxxxxxxx`). Join tokens: 5 min lifetime (`Auth:JoinTokenLifetime`), one-time.
 
 Client signalling (authenticated by the one-time join token, not the API key):
 
@@ -125,7 +137,9 @@ phase; the signalling endpoints above are shaped so the module can proxy the vie
 ## Persistence (SQLite)
 
 Live state (pipelines, ICE state) is in memory. SQLite holds:
-- `rooms` – definition so rooms can optionally be restored after restart (flag per room: persistent vs ephemeral).
+- `rooms` – definitions; every room persists until deleted and is restored (empty) at start-up (see "Resolved
+  requirements"; the earlier persistent/ephemeral flag idea was dropped). On start-up, sessions left open are closed
+  with reason `server-restart` and all join tokens are deleted.
 - `api_keys` – hashed keys, label, created/last used.
 - `join_tokens` – hashed token, participant, expiry, used.
 - `sessions` – participant join/leave history (room, participant, external id, times, disconnect reason).
@@ -147,19 +161,24 @@ connection state. Used for manual testing and as the reference for real clients.
 ## Project layout
 
 ```
-SpatialAudioServer.sln
+src/SpatialAudioServer.slnx
+src/Directory.Build.props        net10.0, nullable, warnings as errors
 src/SpatialAudioServer/
-  Program.cs                 host, DI, config, Kestrel
-  Api/                       minimal API endpoints, DTOs, auth filters
-  Rooms/                     RoomManager, Room, Participant (domain, no GStreamer types)
-  Media/                     GStreamer layer: GstRuntime (init/mainloop/plugin check),
-                             RoomPipeline, ParticipantEndpoint (webrtcbin), ListenerMix,
+  Program.cs                 host, DI, config, Kestrel (HTTP 5000 + HTTPS 5001), `apikey` CLI dispatch
+  Configuration/             options classes (Server, Storage, Auth, Limits, Media sections)
+  Api/                       minimal API endpoints, DTOs, API-key auth, problem-details mapping
+  Rooms/                     RoomManager, models, validation (domain, no GStreamer types)
+  Media/                     GStreamer layer: GstRuntime (init/plugin check), IRoomMedia (+ NullRoomMedia until
+                             Phase 2), later RoomPipeline, ParticipantEndpoint (webrtcbin), ListenerMix,
                              MixChain, PadProbeHelpers, DotDump
-  Signalling/                SDP/ICE handling
-  Storage/                   SQLite store + migrations
-  wwwroot/admin, wwwroot/client
-tests/SpatialAudioServer.Tests/   unit + integration tests
-tools/                            GStreamer-based fake client for load/integration tests
+  Hosting/                   StartupService, DevCertificate, ApiKeyCommand (CLI)
+  Signalling/                SDP/ICE handling (Phase 3)
+  Storage/                   SQLite stores + numbered migrations (PRAGMA user_version)
+  wwwroot/admin, wwwroot/client   (Phases 3-4)
+  data/                      runtime: SQLite db + generated dev cert (git-ignored)
+src/SpatialAudioServer.Tests/    xUnit unit + integration tests (WebApplicationFactory, temp SQLite)
+spikes/WebRtcEcho/               Phase 0 spike (not part of the solution)
+tools/                           GStreamer-based fake client for load/integration tests (from the spike's FakeClient)
 docs/
 ```
 Domain/API code talks to the media layer via an interface (`IRoomMedia`) so the API and storage can be
@@ -174,6 +193,9 @@ tested without GStreamer.
    self-built newer GStreamer in a private prefix (see below).
 1. **Skeleton.** Solution, config, logging, GStreamer init + plugin check, SQLite + migrations, API key auth,
    `/api/status`, room/participant CRUD against in-memory + SQLite (no media).
+   **Done 2026-11-11:** 15 tests pass (`dotnet test src`); smoke-tested over HTTPS on the LAN. Participant `state`
+   stays `awaitingSignal` until Phase 3. Event log is written (room/participant/mute/apikey events) but only
+   readable from code until the admin API (Phase 4).
 2. **Media core.** RoomPipeline, participant ingress/egress, per-listener mix-minus with gain/pan, dynamic
    add/remove with pad probes, silence keep-alive. Test with 2, 4, 8, 16 participants; record CPU/latency;
    confirm clean teardown (no leaks, no hangs) when participants/rooms churn.

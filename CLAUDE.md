@@ -1,6 +1,6 @@
 # SpatialAudioServer – session handoff
 
-Read [PLAN.md](PLAN.md) first: it is the full spec and holds every decision made so far. No code exists yet.
+Read [PLAN.md](PLAN.md) first: it is the full spec and holds every decision made so far.
 
 ## What this is
 MCU-style audio conferencing server in C# on GStreamer. Rooms and participants are managed via a JSON HTTP API; web clients
@@ -14,7 +14,10 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 - **Phase 0 mostly done:** binding chosen = `GstSharp.Net` 1.28.17 (GirCore is the fallback). Spike in `spikes/WebRtcEcho`
   (`dotnet run -- --selftest` passes). Findings are in PLAN.md "Binding choice". Firefox browser test passed. Still open: Chrome/Edge test
   and a Windows run.
-- Then Phase 1 (skeleton), per PLAN.md. Ask the user before starting anything beyond Phase 0.
+- **Phase 1 (skeleton) done:** solution `src/SpatialAudioServer.slnx` (server + `SpatialAudioServer.Tests`, all under `src/`).
+  `dotnet test src` runs 15 tests; `dotnet run --project src/SpatialAudioServer` serves HTTP 5000 / HTTPS 5001;
+  `dotnet run --project src/SpatialAudioServer -- apikey create <label>` makes a control-API key.
+- Next: Phase 2 (media core). Ask the user before starting it.
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.
