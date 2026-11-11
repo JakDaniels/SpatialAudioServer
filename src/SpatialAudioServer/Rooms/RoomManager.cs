@@ -74,39 +74,73 @@ public sealed class RoomManager(
         restored.ForEach(media.RoomCreated);
     }
 
+    /// <summary>Creates a room. A room with the same externalId already existing is a <see cref="ConflictException"/>.</summary>
     public RoomSnapshot CreateRoom(CreateRoomCommand command)
     {
-        var limit = limits.Value;
-        new Validation()
-            .Required("name", command.Name, Validation.MaxNameLength)
-            .Optional("externalId", command.ExternalId, Validation.MaxExternalIdLength)
-            .Range("maxParticipants", command.MaxParticipants, 1, limit.MaxParticipantsPerRoom)
-            .Metadata("metadata", command.Metadata)
-            .ThrowIfInvalid();
+        command = command with { ExternalId = ExternalIds.Normalize(command.ExternalId) };
+        ValidateCreate(command);
 
         RoomSnapshot snapshot;
         lock (_lock)
         {
-            if (_rooms.Count >= limit.MaxRooms)
+            if (command.ExternalId is { } externalId && FindRoomByExternalId(externalId) is not null)
             {
-                throw new LimitExceededException($"The server already has the maximum of {limit.MaxRooms} rooms.");
+                throw new ConflictException($"A room with externalId '{externalId}' already exists.");
             }
-            var record = new RoomRecord(
-                Guid.NewGuid(), command.Name!.Trim(), command.ExternalId, command.MaxParticipants ?? limit.MaxParticipantsPerRoom,
-                command.Metadata?.ToJsonString(), time.GetUtcNow());
-            rooms.Insert(record);
-            var room = new Room(record);
-            _rooms[room.Id] = room;
-            snapshot = room.Snapshot();
-            activity.Event("room.created", room.Id, detail: room.Name);
+            snapshot = CreateRoomLocked(command);
         }
-        log.LogInformation("Room {RoomId} '{Name}' created", snapshot.Id, snapshot.Name);
-        media.RoomCreated(snapshot);
+        RoomCreated(snapshot);
         return snapshot;
+    }
+
+    /// <summary>
+    /// Get-or-create by external id (e.g. the region module at region start). Returns the existing room unchanged,
+    /// or creates one from <paramref name="command"/>, whose name defaults to the external id.
+    /// </summary>
+    public (RoomSnapshot Room, bool Created) EnsureRoom(string externalId, EnsureRoomCommand? command)
+    {
+        var normalized = ExternalIds.Normalize(externalId);
+        var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata);
+        ValidateCreate(create);
+
+        RoomSnapshot snapshot;
+        lock (_lock)
+        {
+            if (FindRoomByExternalId(normalized!) is { } existing)
+            {
+                return (existing.Snapshot(), false);
+            }
+            snapshot = CreateRoomLocked(create);
+        }
+        RoomCreated(snapshot);
+        return (snapshot, true);
+    }
+
+    /// <summary>The id of the room with this external id; <see cref="NotFoundException"/> if none.</summary>
+    public Guid ResolveRoom(string externalId)
+    {
+        var normalized = ExternalIds.Normalize(externalId)!;
+        lock (_lock)
+        {
+            return FindRoomByExternalId(normalized)?.Id
+                ?? throw new NotFoundException($"No room with externalId '{normalized}'.");
+        }
+    }
+
+    /// <summary>The id of the participant with this external id in the room; <see cref="NotFoundException"/> if none.</summary>
+    public Guid ResolveParticipant(Guid roomId, string externalId)
+    {
+        var normalized = ExternalIds.Normalize(externalId)!;
+        lock (_lock)
+        {
+            return FindParticipantByExternalId(FindRoom(roomId), normalized)?.Id
+                ?? throw new NotFoundException($"No participant with externalId '{normalized}' in room {roomId}.");
+        }
     }
 
     public IReadOnlyList<RoomSnapshot> ListRooms(string? externalId = null)
     {
+        externalId = ExternalIds.Normalize(externalId);
         lock (_lock)
         {
             return _rooms.Values
@@ -150,8 +184,14 @@ public sealed class RoomManager(
         media.RoomDeleted(roomId);
     }
 
+    /// <summary>
+    /// Adds a participant and issues its join token. If a participant with the same externalId is already in the
+    /// room it is removed first (reason "replaced") and the new one takes its place: a re-add is a reconnect, which
+    /// also covers a region module that missed a leave event.
+    /// </summary>
     public JoinResult AddParticipant(Guid roomId, AddParticipantCommand command)
     {
+        command = command with { ExternalId = ExternalIds.Normalize(command.ExternalId) };
         new Validation()
             .Required("displayName", command.DisplayName, Validation.MaxNameLength)
             .Optional("externalId", command.ExternalId, Validation.MaxExternalIdLength)
@@ -161,9 +201,15 @@ public sealed class RoomManager(
             .ThrowIfInvalid();
 
         JoinResult result;
+        Guid? replaced = null;
         lock (_lock)
         {
             var room = FindRoom(roomId);
+            if (command.ExternalId is { } externalId && FindParticipantByExternalId(room, externalId) is { } previous)
+            {
+                replaced = previous.Id;
+                EndParticipant(room, previous.Id, "replaced");
+            }
             if (room.Participants.Count >= room.MaxParticipants)
             {
                 throw new LimitExceededException($"Room {roomId} is full ({room.MaxParticipants} participants).");
@@ -190,7 +236,12 @@ public sealed class RoomManager(
             activity.SessionStarted(participant.Id, roomId, participant.ExternalId, participant.DisplayName, participant.JoinedAt);
             activity.Event("participant.joined", roomId, participant.Id, participant.DisplayName);
             room.Participants[participant.Id] = participant;
-            result = new JoinResult(participant.Snapshot(), token, expires);
+            result = new JoinResult(participant.Snapshot(), token, expires, replaced);
+        }
+        if (replaced is { } old)
+        {
+            log.LogInformation("Participant {Old} replaced by {New} (same externalId)", old, result.Participant.Id);
+            media.ParticipantRemoved(roomId, old);
         }
         log.LogInformation("Participant {ParticipantId} '{Name}' added to room {RoomId}",
             result.Participant.Id, result.Participant.DisplayName, roomId);
@@ -252,6 +303,43 @@ public sealed class RoomManager(
         media.ParticipantUpdated(snapshot);
         return snapshot;
     }
+
+    private void ValidateCreate(CreateRoomCommand command) =>
+        new Validation()
+            .Required("name", command.Name, Validation.MaxNameLength)
+            .Optional("externalId", command.ExternalId, Validation.MaxExternalIdLength)
+            .Range("maxParticipants", command.MaxParticipants, 1, limits.Value.MaxParticipantsPerRoom)
+            .Metadata("metadata", command.Metadata)
+            .ThrowIfInvalid();
+
+    private RoomSnapshot CreateRoomLocked(CreateRoomCommand command)
+    {
+        var limit = limits.Value;
+        if (_rooms.Count >= limit.MaxRooms)
+        {
+            throw new LimitExceededException($"The server already has the maximum of {limit.MaxRooms} rooms.");
+        }
+        var record = new RoomRecord(
+            Guid.NewGuid(), command.Name!.Trim(), command.ExternalId, command.MaxParticipants ?? limit.MaxParticipantsPerRoom,
+            command.Metadata?.ToJsonString(), time.GetUtcNow());
+        rooms.Insert(record);
+        var room = new Room(record);
+        _rooms[room.Id] = room;
+        activity.Event("room.created", room.Id, detail: room.Name);
+        return room.Snapshot();
+    }
+
+    private void RoomCreated(RoomSnapshot snapshot)
+    {
+        log.LogInformation("Room {RoomId} '{Name}' created", snapshot.Id, snapshot.Name);
+        media.RoomCreated(snapshot);
+    }
+
+    private Room? FindRoomByExternalId(string externalId) =>
+        _rooms.Values.FirstOrDefault(r => r.ExternalId == externalId);
+
+    private static Participant? FindParticipantByExternalId(Room room, string externalId) =>
+        room.Participants.Values.FirstOrDefault(p => p.ExternalId == externalId);
 
     private Room FindRoom(Guid roomId) =>
         _rooms.TryGetValue(roomId, out var room) ? room : throw new NotFoundException($"Room {roomId} not found.");

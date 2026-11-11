@@ -109,9 +109,29 @@ PATCH  /api/rooms/{roomId}/participants/{pid}   {muted?, gain?, position?, orien
 GET    /api/status                         -> version, uptime, GStreamer version, plugin check, counts, limits
 ```
 
+Addressing by external id (OpenSim region/parcel UUID for rooms, avatar UUID for participants):
+
+```
+PUT    /api/rooms/by-external/{rid}       {name?, maxParticipants?, metadata?}  get-or-create: 201 new, 200 existing
+                                           (body only used on create; name defaults to the external id)
+GET|DELETE /api/rooms/by-external/{rid}
+POST|GET   /api/rooms/by-external/{rid}/participants
+GET|PATCH|DELETE /api/rooms/by-external/{rid}/participants/by-external/{aid}
+```
+Every room route accepts `{roomId}` or `by-external/{rid}`, and every participant route `{pid}` or
+`by-external/{aid}`, in any combination, so the region module never needs to store our ids.
+
 As implemented in Phase 1:
 - IDs (rooms and participants) are always server-generated UUIDs; the draft's optional `id` was dropped. Callers
-  correlate via `externalId`.
+  correlate via `externalId`. Using OpenSim UUIDs as our ids was considered and rejected (2026-11-11): one avatar can
+  be in two rooms at once (region crossings, region + parcel voice), a reconnect would collide with the old
+  connection's id, and session history is keyed by participant id.
+- Room `externalId` is unique server-wide (409 on a duplicate create; unique index, migration 2). Participant
+  `externalId` is unique within a room: **adding a participant whose externalId is already in the room replaces the
+  old one** (treated as a reconnect, which also covers a missed leave event). The old one's session closes with reason
+  `replaced`, its join token dies, and the response's `replacedParticipantId` names it. Replacement works even in a
+  full room. The same avatar may be in different rooms at once.
+- External ids that parse as GUIDs are normalised to lowercase `D` form (`{ABC…}` = `abc…`); others are trimmed.
 - `position` is `{x,y,z}`; `orientation` is a quaternion `{x,y,z,w}` (SL/OpenSim's rotation form). `gain` is 0–4
   (1 = unity; `audioamplify` range). `metadata` is any JSON object up to 16 KB. Name/displayName ≤ 200 chars.
 - Errors are RFC 9457 problem details: 400 validation (with per-field `errors`), 401 missing/invalid key,
@@ -193,7 +213,7 @@ tested without GStreamer.
    self-built newer GStreamer in a private prefix (see below).
 1. **Skeleton.** Solution, config, logging, GStreamer init + plugin check, SQLite + migrations, API key auth,
    `/api/status`, room/participant CRUD against in-memory + SQLite (no media).
-   **Done 2026-11-11:** 15 tests pass (`dotnet test src`); smoke-tested over HTTPS on the LAN. Participant `state`
+   **Done 2026-11-11:** 23 tests pass (incl. external-id addressing) (`dotnet test src`); smoke-tested over HTTPS on the LAN. Participant `state`
    stays `awaitingSignal` until Phase 3. Event log is written (room/participant/mute/apikey events) but only
    readable from code until the admin API (Phase 4).
 2. **Media core.** RoomPipeline, participant ingress/egress, per-listener mix-minus with gain/pan, dynamic
