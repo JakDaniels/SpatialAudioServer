@@ -1,0 +1,262 @@
+using System.IO.Pipelines;
+using System.Runtime.CompilerServices;
+using System.Security.Cryptography.Xml;
+using System.Text;
+using System.Text.Json.Serialization;
+using System.Threading;
+using GLib;
+using Gst;
+using Gst.Sdp;
+using Gst.WebRTC;
+using log4net;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Task = System.Threading.Tasks.Task;
+
+namespace WebRtcTest1
+{
+    public class WebRtcConnection : IAsyncDisposable
+    {
+        private readonly ILog _log;
+        private Guid Uuid { get; set; }
+
+
+        private Pipeline Pipeline { get; }
+        private Bin? Bin { get; set; }
+        private ManualResetEvent OfferSent { get; } = new ManualResetEvent(false);
+        private string QueueName { get; }
+        private string OpusPayName { get; }
+        private string WebRtcBinName { get; }
+        private string WebRtcPipeline { get; }
+        private string StunServer { get; } = "stun://stun.l.google.com:19302";
+        private bool _isDisposing = false;
+
+
+        public WebRtcConnection(Guid uuid, Pipeline pipeline, string stunServer)
+        {
+            _log = LogManager.GetLogger(typeof(WebRtcConnection));
+            Uuid = uuid;
+            Pipeline = pipeline;
+            StunServer = stunServer;
+
+            WebRtcBinName = $"webrtcbin-{Uuid}";
+            QueueName = $"queue-{Uuid}";
+            OpusPayName = $"opuspay-{Uuid}";
+
+            WebRtcPipeline = $@"queue name={QueueName} max-size-bytes=20971520 max-size-time=0 leaky=downstream !
+                opus name={OpusPayName} aggregate-mode=zero-latency config-interval=-1 timestamp-offset=0 !
+                webrtcbin name={WebRtcBinName} bundle-policy=max-bundle";
+
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (Bin == null) return;
+            if (_isDisposing) return;
+            _isDisposing = true;
+
+            await Task.Run(RemoveFromPipeline);
+
+        }
+
+        public void AddIceCandidate(string iceCandidate)
+        {
+            _log.Debug($"Adding ICE candidate: {iceCandidate}");
+            try
+            {
+                var msg = JsonConvert.DeserializeObject<dynamic>(iceCandidate);
+                string candidate = msg!.candidate;
+                uint sdpMLineIndex = msg.sdpMLineIndex;
+
+                Pipeline.GetByName(WebRtcBinName).Emit("add-ice-candidate",  sdpMLineIndex, candidate);
+            }
+            catch (Exception ex)
+            {
+                _log.Error($"Error adding ICE candidate: {ex.Message}");
+            }
+        }
+
+        public void Answer(string answer)
+        {
+            _log.Debug($"Answer from client: {answer}");
+            var sdp =JObject.Parse(answer)["sdp"]!.Value<string>()!;
+            
+            try
+            {
+                SDPMessage.New(out var sdpMsg);
+                SDPMessage.ParseBuffer(Encoding.Default.GetBytes(sdp), (uint)sdp.Length, sdpMsg);
+                var streamDescription = WebRTCSessionDescription.New(WebRTCSDPType.Answer, sdpMsg);
+                var promise = new Promise();
+                Pipeline.GetByName(WebRtcBinName)?.Emit("set-remote-description", streamDescription, promise);
+            }
+            catch (Exception ex)
+            {
+                 _log.Error($"Error answering SDP: {ex.Message}");
+            }
+        }
+
+        public async void StartAsync()
+        {
+            _log.Debug($"Client connected");
+            Bin = Parse.BinFromDescription(WebRtcPipeline, true);
+            await InitializeWebRtcBinAsync();
+            Bin.SetState(State.Playing);
+            var tee = Pipeline.GetByName("t");
+            var teeSource = tee.GetRequestPad("src_%u");
+            var binPad = Bin.GetStaticPad("sink");
+
+            teeSource.AddProbe(PadProbeType.Blocking, (
+                _,
+                _) => Bin.CurrentState != State.Playing ? PadProbeReturn.Drop : PadProbeReturn.Remove);
+
+            Pipeline.Add(Bin);
+            teeSource.Link(binPad);
+        }
+
+        private async Task InitializeWebRtcBinAsync()
+        {
+            var webRtcBin = Bin?.GetByName(WebRtcBinName);
+
+            if (webRtcBin == null)
+            {
+                _log.Error("Webrtcbin element not found!");
+                return;
+            }
+
+            webRtcBin.Connect("on-negotiation-needed", OnNegotiationNeeded);
+            webRtcBin.Connect("on-ice-candidate", OnIceCandidate);
+
+            var result = (bool)webRtcBin.Emit("add-stun-server", StunServer);
+            _log.Info($"Added STUN server {StunServer} - {result}");
+        }
+
+        private void OnIceCandidate(object o, SignalArgs args)
+        {
+            var sdpMLineIndex = (uint)args.Args[0];
+            var candidate = (string)args.Args[1];
+            var obj = new
+            {
+                ice = new
+                {
+                    sdpMLineIndex,
+                    candidate
+                }
+            };
+            var iceCandidate = JsonConvert.SerializeObject(obj);
+
+            Task.Run(async () =>
+            {
+                OfferSent.WaitOne();
+
+                if (_isDisposing)
+                {
+                    _log.Warn("Disposing web rtc connection, so not sending ice candidate");
+                    return;
+                }
+
+                _log.Info($"Sending ice candidate to {Uuid}: {iceCandidate}");
+                await _roomService.SendIceCandidateAsync(Uuid, iceCandidate);
+            });
+        }
+
+        private void OnNegotiationNeeded(object o, SignalArgs args)
+        {
+            _log.Info("Negotiation needed, creating offer");
+
+            var promise = new Promise(OnOfferCreated);
+            var structure = new Structure($"struct{Uuid}");
+
+            Pipeline.GetByName(WebRtcBinName)
+                ?.Emit("create-offer", structure, promise);
+        }
+
+        private void OnOfferCreated(
+            Promise promise)
+        {
+            _log.Info("Offer created.");
+            promise.Wait();
+            var reply = promise.RetrieveReply();
+            var offerValue = reply.GetValue("offer");
+            var offer = (WebRTCSessionDescription)offerValue.Val;
+            promise = new Promise();
+
+            Pipeline.GetByName(WebRtcBinName)
+                ?.Emit("set-local-description", offer, promise);
+            promise.Interrupt();
+            SendSdpOffer(offer);
+        }
+
+        private void SendSdpOffer(WebRTCSessionDescription description)
+        {
+            var text = description.Sdp.AsText();
+            var obj = new
+            {
+                sdp = new
+                {
+                    type = "offer",
+                    sdp = text
+                }
+            };
+            var offer = JsonConvert.SerializeObject(obj);
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    _log.Info($"Sending offer to {Uuid}: {offer}");
+                    await _roomService.SendOfferAsync(Uuid, offer, StunServer);
+                    OfferSent.Set();
+                    _log.Info("Offer sent");
+                }
+                catch (Exception ex)
+                {
+                    _log.Error(ex);
+                }
+            });
+        }
+
+        private void RemoveFromPipeline()
+        {
+            try
+            {
+                OfferSent.Set();
+
+                var tee = Pipeline.GetByName("t");
+                var teeSource = Bin!.GetStaticPad("sink")
+                    .Peer;
+                tee.Unlink(Bin);
+                tee.ReleaseRequestPad(teeSource);
+
+                var queue = Bin!.GetByName(QueueName);
+                var opusPay = Bin!.GetByName(OpusPayName);
+                var webRtcBin = Bin!.GetByName(WebRtcBinName);
+
+                Pipeline.Remove(webRtcBin);
+                webRtcBin.Disconnect("on-negotiation-needed", OnNegotiationNeeded);
+                webRtcBin.Disconnect("on-ice-candidate", OnIceCandidate);
+
+                webRtcBin.SetState(State.Null);
+                webRtcBin.Dispose();
+
+                Pipeline.Remove(opusPay);
+                opusPay.SetState(State.Null);
+                opusPay.Dispose();
+
+                Pipeline.Remove(queue);
+                queue.SetState(State.Null);
+                queue.Dispose();
+
+                Pipeline.Remove(Bin);
+                Bin.SetState(State.Null);
+                Bin.Dispose();
+
+                _log.Info($"Disposed connection from {Uuid}");
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex);
+            }
+        }
+
+    }
+}
