@@ -1,6 +1,6 @@
 # SpatialAudioServer – Plan
 
-An MCU-style audio conferencing server in C#/.NET using GStreamer (`GStreamer-Sharp-NetCore`).
+An MCU-style audio conferencing server in C#/.NET using GStreamer (`GstSharp.Net` bindings; see "Binding choice").
 Rooms and participants are managed through a JSON HTTP API. Audio is mixed server-side with a
 **separate mix chain per listener**, so spatial audio (per-source gain/pan from avatar position)
 can be added later without restructuring.
@@ -22,9 +22,9 @@ but nothing in phase 1 should make that harder.
 | Admin | Built-in web UI (static HTML/JS, no build step) served by the same process. |
 | Reference code | `~/src/gstreamer-testing` (`audiomixer-test3` per-pair queue→amplify→panorama chains, `webrtc-test1`), `~/src/gstreamer-test2`. Used for ideas, not copied wholesale. |
 
-Local environment: .NET 10.0.115 SDK, GStreamer 1.20.3 with webrtcbin/nice/dtls/srtp/opus/rtpmanager.
-Reference projects used `net8.0` + `gstreamer-sharp-netcore 0.0.8`; target **net8.0** (LTS, known to work
-with the package) unless a reason appears to move.
+Local environment (Phase 0, Ubuntu 26.04, 2026-11-11): `dotnet --version` 10.0.115, `gst-inspect-1.0 --version`
+1.28.2, with webrtcbin/nice/dtls/srtp/opus/audiomixer/audiopanorama/audioamplify present.
+Target **net10.0** (LTS; required by GstSharp.Net). The reference projects used `net8.0` + `gstreamer-sharp-netcore 0.0.8`.
 
 ## Architecture
 
@@ -168,7 +168,7 @@ tested without GStreamer.
 ## Phases
 
 0. **Spike / de-risk (do first).** Console test: webrtcbin answerer with a browser offer, Opus in → loopback
-   out, driven from C# via `gstreamer-sharp-netcore 0.0.8`. Confirm the package exposes what's needed
+   out, driven from C# (originally planned with `gstreamer-sharp-netcore 0.0.8`; GstSharp.Net chosen, see "Binding choice"). Confirm the package exposes what's needed
    (webrtcbin promises/`create-answer`, `GstWebRTCSessionDescription`, `add-ice-candidate`, request pads,
    pad probes). If bindings are missing, write thin P/Invoke shims. Also verify on Windows, and with a
    self-built newer GStreamer in a private prefix (see below).
@@ -189,8 +189,8 @@ tested without GStreamer.
 
 ## Risks / things to verify
 
-- **gstreamer-sharp-netcore 0.0.8 completeness** for webrtcbin APIs (see Phase 0). Old test code used
-  property-style access for offers, which may not be the real API.
+- ~~gstreamer-sharp-netcore 0.0.8 completeness~~ - resolved: GstSharp.Net chosen and proven in Phase 0. Remaining
+  binding risk is its maintenance (single maintainer); keep it behind `Media/`.
 - **GStreamer version differences.** Linux distro has 1.20.3; webrtcbin has had many fixes since (1.22/1.24).
   ICE port-range / NAT 1:1 control may only exist in newer versions. Recommend documenting a minimum
   version and providing a Docker image with a newer GStreamer.
@@ -251,10 +251,47 @@ later deployment aid rather than a requirement.
 Requested package: `GStreamer-Sharp-NetCore` 0.0.8 (a community port of old gstreamer-sharp, roughly 1.14-1.16 era API).
 Phase 0 time-boxes a webrtcbin spike against each candidate and picks one. All GStreamer use stays behind the `Media/` layer
 so a swap is contained:
+**Decision (2026-11-11): `GstSharp.Net` 1.28.17** (`GstSharp.Net`, `GstSharp.Net.Sdp`, `GstSharp.Net.WebRTC`; add
+`GstSharp.Net.App`/`.Audio` if needed). GirCore stays the fallback; the other candidates were not spiked.
+
+Phase 0 spike: [spikes/WebRtcEcho](spikes/WebRtcEcho/README.md) (ASP.NET minimal API + GStreamer echo; `--selftest` runs a
+GStreamer fake client against it). Findings:
+- **Works end to end on GStreamer 1.28.2:** HTTP offer → server answer, trickle ICE both ways (server candidates polled),
+  DTLS/SRTP, Opus in → `opusdec` → `audiomixer` (with a silent live keep-alive source) → `opusenc` → back out. Self-test:
+  connected in < 1 s, ~95% of returned buffers carry the echoed tone, 3/3 runs passed. **Firefox over the LAN (HTTPS, self-signed): works**, own
+  voice heard back ~0.3 s later (round trip; likely dominated by webrtcbin's default 200 ms jitterbuffer `latency`, plus
+  the browser's jitterbuffer, 40 ms mixer latency and Opus framing). Tune in Phase 2: try webrtcbin `latency` ~50 ms on LAN.
+- **HTTPS is needed for any non-localhost browser** (`getUserMedia`). The spike generates a self-signed cert covering
+  localhost, host name and local IPv4s (`DevCertificate.cs`, saved to git-ignored `.devcert/`); reuse this in Phase 1.
+- **Everything Phase 0 needed is exposed:** `Promise` (`New`, `Wait`, `GetReply`), `WebRTCSessionDescription.New/GetSdp`,
+  `SDPMessage.NewFromText/AsText`, typed enums for `ice-gathering-state`/`connection-state`, `RequestPadSimple`,
+  `ReleaseRequestPad`, `Pad.AddProbe/RemoveProbe` (used in the fake client), buffer mapping as a `Span<byte>`.
+- **webrtcbin has no .gir**, so its signals are called by name (`EmitSignal("create-answer", …)`, `ConnectSignal(…)`).
+  Keep all of those in one class (`WebRtcPeer` in the spike) so a typo can only live in one place.
+- Server is answerer with the send branch linked **before** the offer arrives: webrtcbin reuses that request-pad
+  transceiver for the offered m-line. The send payload type must equal the browser's Opus PT (Chrome 111, Firefox 109),
+  so it is read from the offer before building the pipeline.
+- Threading as the plan assumed: promise/ICE/notify callbacks on webrtcbin's own thread, `pad-added` on a streaming
+  thread; no GLib main loop needed (bus is polled on a thread). Promise waits block, so never call them from a GStreamer
+  thread. The binding reports exceptions thrown in callbacks via `ExceptionTrap.UnhandledException`.
+- `using Gst;` clashes with `System.Uri`, `System.DateTime`, `System.Threading.Tasks.Task`: alias them, or keep `Gst`
+  out of files that do not need it (another reason for the `Media/` boundary).
+- GStreamer logs "loop detected in the graph" when one webrtcbin both feeds and is fed by the same mixer (the echo).
+  Harmless here; the real mix-minus never routes a source to its own listener, but cycles across participants
+  (A→B's mix→B's webrtcbin, B→A's mix→A's webrtcbin) will exist. Check whether this warning matters in Phase 2.
+- A bare caps string cannot end a `ParseBinFromDescription` string; use `capsfilter caps="…"`.
+- Licence: GstSharp.Net is LGPL-2.1-or-later, consumed as NuGet packages (dynamic linking), compatible with our
+  Apache-2.0. The source clone in `docs/reference/GstSharp.Net` is git-ignored and must stay out of this repo.
+- Risk: effectively single-maintainer and ~3 months old. Mitigated by the `Media/` boundary and the GirCore fallback.
+
+Still open from Phase 0: Chrome/Edge test of the spike page (Firefox done); Windows run (official MSVC runtime);
+self-built newer GStreamer is no longer needed (distro 1.28.2 is current).
+
+Candidates considered:
 - `GStreamer-Sharp-NetCore` 0.0.8 - baseline; known from the earlier experiments; likely missing GstWebRTC types.
 - `GirCore.Gst-1.0` / `GirCore.GstSdp` / `GirCore.GstWebRTC` (gir.core, generated from GObject Introspection, actively developed) -
   strongest candidate for full, current webrtcbin coverage; needs the matching typelibs (`gir1.2-gst-plugins-bad-1.0`). Verify current versions on NuGet.
-- `GstSharp.Net` + `GstSharp.Net.WebRTC` (1.28 bindings, net10.0 only, young project, maintenance unverified) - promising but unproven.
+- `GstSharp.Net` + `GstSharp.Net.WebRTC` (1.28 bindings, net10.0 only, young project, maintenance unverified) - **chosen**, see above.
 - `GstSharpBundle` - bundles native binaries (only a Windows x64 runtime package so far), LGPL-2.1, GStreamer version unstated. Possibly useful for
   Windows packaging, not for the Linux server.
 - Official `GstSharp` NuGet is stale (1.18, .NET Framework 4.5). Not an option.

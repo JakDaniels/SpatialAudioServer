@@ -10,12 +10,10 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 ## Where we are
 - Planning is complete; all requirements questions are answered (see "Resolved requirements" in PLAN.md).
 - The session continues on a new machine running Ubuntu 26.04 (previous machine: Ubuntu 22.04, GStreamer 1.20.3, .NET 10 SDK).
-- **Next step: Phase 0 spike** (see PLAN.md "Phases" and "Binding choice"):
-  1. Run `scripts/setup-ubuntu.sh`, record `dotnet --version` and `gst-inspect-1.0 --version` in PLAN.md.
-  2. Spike webrtcbin (browser offer -> server answer, Opus in -> loopback out) with candidate bindings, in order of preference:
-     GirCore (`GirCore.Gst-1.0`, `GirCore.GstWebRTC-1.0`, `GirCore.GstSdp-1.0`), `GstSharp.Net` + `GstSharp.Net.WebRTC`,
-     `GStreamer-Sharp-NetCore` 0.0.8. Check current NuGet versions first. Pick one; keep GStreamer use behind the `Media/` layer.
-  3. Record the choice and findings in PLAN.md.
+- Machine: Ubuntu 26.04, .NET SDK 10.0.115, GStreamer 1.28.2.
+- **Phase 0 mostly done:** binding chosen = `GstSharp.Net` 1.28.17 (GirCore is the fallback). Spike in `spikes/WebRtcEcho`
+  (`dotnet run -- --selftest` passes). Findings are in PLAN.md "Binding choice". Firefox browser test passed. Still open: Chrome/Edge test
+  and a Windows run.
 - Then Phase 1 (skeleton), per PLAN.md. Ask the user before starting anything beyond Phase 0.
 
 ## Key decisions (summary; PLAN.md is authoritative)
