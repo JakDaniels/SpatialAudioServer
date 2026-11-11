@@ -60,6 +60,7 @@ public sealed class RoomManager(
                 return;
             }
             _restored = true;
+            media.ParticipantStateChanged += SetParticipantState;
 
             var closed = activity.CloseOpenSessions("server-restart");
             joinTokens.DeleteAll();
@@ -302,6 +303,26 @@ public sealed class RoomManager(
         }
         media.ParticipantUpdated(snapshot);
         return snapshot;
+    }
+
+    /// <summary>Called by the media layer (on a GStreamer thread) as a participant's WebRTC connection changes.</summary>
+    public void SetParticipantState(Guid roomId, Guid participantId, ParticipantState state)
+    {
+        lock (_lock)
+        {
+            if (!_rooms.TryGetValue(roomId, out var room)
+                || !room.Participants.TryGetValue(participantId, out var participant)
+                || participant.State == state)
+            {
+                return;
+            }
+            participant.State = state;
+            if (state is ParticipantState.Connected or ParticipantState.Disconnected or ParticipantState.Failed)
+            {
+                activity.Event($"participant.{state.ToString().ToLowerInvariant()}", roomId, participantId);
+            }
+        }
+        log.LogInformation("Participant {ParticipantId} in room {RoomId} is {State}", participantId, roomId, state);
     }
 
     private void ValidateCreate(CreateRoomCommand command) =>

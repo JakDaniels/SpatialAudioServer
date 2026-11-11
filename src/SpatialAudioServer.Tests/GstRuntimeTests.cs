@@ -4,6 +4,7 @@ using SpatialAudioServer.Api;
 namespace SpatialAudioServer.Tests;
 
 /// <summary>Needs GStreamer and the plugins from scripts/setup-ubuntu.sh installed on the test machine.</summary>
+[Collection("media")]
 public sealed class GstRuntimeTests : IDisposable
 {
     private readonly TempDir _dir = new();

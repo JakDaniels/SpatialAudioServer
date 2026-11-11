@@ -219,7 +219,12 @@ tested without GStreamer.
 2. **Media core.** RoomPipeline, participant ingress/egress, per-listener mix-minus with gain/pan, dynamic
    add/remove with pad probes, silence keep-alive. Test with 2, 4, 8, 16 participants; record CPU/latency;
    confirm clean teardown (no leaks, no hangs) when participants/rooms churn.
-3. **Signalling + web client.** HTTP offer/answer/ICE, join tokens, test web client, STUN/TURN config,
+   Decided 2026-11-11: **basic signalling moves into Phase 2** (`/signal/{pid}/offer`, `/signal/{pid}/ice` POST/GET,
+   `DELETE /signal/{pid}`, join-token redemption), so the mix can be heard with real browsers and fake clients test
+   over real HTTP. Load testing: correctness and churn tests on the dev box now (4-core Pentium Silver N6005, 5 GB;
+   fake clients share the CPU, so CPU numbers are indicative only); the real 32-participant benchmark runs later with
+   the fake clients (`tools/`) on a second LAN machine.
+3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.
 5. **Hardening.** Limits, input validation, token expiry, rate limiting, graceful shutdown, Dockerfile,

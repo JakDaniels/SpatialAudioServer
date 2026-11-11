@@ -63,4 +63,16 @@ public sealed class MediaOptions
 
     /// <summary>Initialise GStreamer at start-up and refuse to start if required plugins are missing.</summary>
     public bool Enabled { get; set; } = true;
+
+    /// <summary>webrtcbin's RTP jitterbuffer latency (its default is 200 ms; LAN needs much less).</summary>
+    public uint JitterBufferMs { get; set; } = 100;
+
+    /// <summary>How long each listener's audiomixer waits for late input before mixing without it.</summary>
+    public uint MixerLatencyMs { get; set; } = 40;
+
+    /// <summary>Opus bitrate of each listener's stereo mix, bits/s.</summary>
+    public int OpusBitrate { get; set; } = 64000;
+
+    /// <summary>Per-(source, listener) chain queue size; older audio is dropped beyond this.</summary>
+    public uint ChainQueueMs { get; set; } = 200;
 }
