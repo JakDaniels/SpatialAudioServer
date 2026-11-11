@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using Gst;
+using Microsoft.Extensions.Logging;
 using SpatialAudioServer.Media;
 using SpatialAudioServer.Signalling;
 using Task = System.Threading.Tasks.Task;
@@ -19,11 +20,13 @@ public sealed class FakeClient : IDisposable
     private readonly WebRtcBin _rtc;
     private readonly ManualResetEventSlim _negotiationNeeded = new();
     private readonly CancellationTokenSource _stop = new();
+    private readonly BusWatcher _bus;
     private Task? _iceLoop;
     private int _receiving;
+    private int _disposed;
     private string? _sessionToken;
 
-    public FakeClient(string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100)
+    public FakeClient(string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100, ILogger? log = null)
     {
         Name = name;
         ToneHz = toneHz;
@@ -45,6 +48,7 @@ public sealed class FakeClient : IDisposable
         {
             throw new InvalidOperationException($"Fake client send branch: {linked}");
         }
+        _bus = new BusWatcher(_pipeline, $"fake-{name}", log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
     }
 
     public string Name { get; }
@@ -98,6 +102,10 @@ public sealed class FakeClient : IDisposable
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
         _stop.Cancel();
         try
         {
@@ -107,6 +115,7 @@ public sealed class FakeClient : IDisposable
         {
         }
         _pipeline.SetState(State.Null);
+        _bus.Dispose();
         _rtc.Dispose();
         _pipeline.Dispose();
         _negotiationNeeded.Dispose();

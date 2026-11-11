@@ -3,6 +3,7 @@ using System.Globalization;
 using Gst;
 using Gst.GLib;
 using Gst.WebRTC;
+using DateTime = System.DateTime;
 using SpatialAudioServer.Configuration;
 using SpatialAudioServer.Rooms;
 
@@ -30,8 +31,7 @@ internal sealed class RoomPipeline : IDisposable
     private readonly ILogger _log;
     private readonly ConcurrentDictionary<Guid, ParticipantMedia> _participants = new();
     private readonly Dictionary<(Guid Source, Guid Listener), MixChain> _chains = []; // worker only
-    private readonly CancellationTokenSource _stop = new();
-    private readonly Thread _busThread;
+    private readonly BusWatcher _bus;
     private int _disposed;
 
     public RoomPipeline(Guid roomId, MediaOptions options, ILogger log)
@@ -45,8 +45,7 @@ internal sealed class RoomPipeline : IDisposable
         {
             throw new InvalidOperationException($"Room {roomId} pipeline refused to go to PLAYING.");
         }
-        _busThread = new Thread(PollBus) { IsBackground = true, Name = $"bus-{roomId.ToString()[..8]}" };
-        _busThread.Start();
+        _bus = new BusWatcher(_pipeline, $"room-{roomId.ToString()[..8]}", log);
     }
 
     public Guid RoomId { get; }
@@ -90,10 +89,11 @@ internal sealed class RoomPipeline : IDisposable
         {
             throw new NotFoundException($"Participant {participantId} has no media in room {RoomId}.");
         }
-        // The send branch is linked before the offer is applied, so its payload type must be the offer's Opus
-        // one (Chrome 111, Firefox 109); webrtcbin then reuses that transceiver for the offered m-line.
+        // The send branch payloads with the offer's Opus payload type (Chrome 111, Firefox 109).
         var payloadType = WebRtcBin.OpusPayloadType(offerSdp)
             ?? throw new ArgumentException("The offer has no Opus audio.");
+        var mline = WebRtcBin.FirstAudioMLine(offerSdp)
+            ?? throw new ArgumentException("The offer has no audio m-line.");
 
         if (p.Endpoint is not null)
         {
@@ -106,7 +106,19 @@ internal sealed class RoomPipeline : IDisposable
         string answer;
         try
         {
-            answer = endpoint.Rtc.AnswerOffer(offerSdp);
+            // Deterministic answerer order (see WebRtcBin.PrepareSendTransceiver): offer first, then bind the send
+            // branch to the transceiver the offer created, by requesting that m-line's sink pad explicitly.
+            endpoint.Rtc.ApplyRemoteOffer(offerSdp);
+            using (var codec = Caps.FromString(SendCaps(payloadType)) ?? throw new InvalidOperationException("Bad send caps."))
+            {
+                endpoint.Rtc.PrepareSendTransceiver(mline, codec);
+            }
+            Link(endpoint.Egress.GetStaticPad("src"), endpoint.Rtc.Element.RequestPadSimple($"sink_{mline}"), "egress → webrtcbin");
+            // Downstream first, so nothing pushes into an element that is not running yet.
+            endpoint.Egress.SyncStateWithParent();
+            endpoint.Mixer.SyncStateWithParent();
+            endpoint.Silence.SyncStateWithParent();
+            answer = endpoint.Rtc.CreateAndApplyAnswer();
         }
         catch
         {
@@ -158,10 +170,8 @@ internal sealed class RoomPipeline : IDisposable
             _log.LogError(ex, "Room {RoomId}: teardown failed", RoomId);
         }
         _worker.Dispose();
-        _stop.Cancel();
-        _busThread.Join();
+        _bus.Dispose();
         _pipeline.Dispose();
-        _stop.Dispose();
     }
 
     private WebRtcBin RtcOf(Guid participantId) =>
@@ -170,6 +180,9 @@ internal sealed class RoomPipeline : IDisposable
             : throw new ConflictException($"Participant {participantId} has not sent an offer yet.");
 
     private static float SourceGain(ParticipantMedia p) => p.Muted ? 0f : (float)p.Gain;
+
+    private static string SendCaps(int payloadType) =>
+        $"application/x-rtp,media=audio,encoding-name=OPUS,payload={payloadType},clock-rate=48000";
 
     private Endpoint BuildEndpoint(ParticipantMedia p, int payloadType)
     {
@@ -188,7 +201,7 @@ internal sealed class RoomPipeline : IDisposable
             "capsfilter caps=\"audio/x-raw,format=S16LE,rate=48000,channels=2\" ! " +
             $"opusenc bitrate={_options.OpusBitrate.ToString(CultureInfo.InvariantCulture)} inband-fec=true ! " +
             $"rtpopuspay pt={payloadType} ! " +
-            $"capsfilter caps=\"application/x-rtp,media=audio,encoding-name=OPUS,payload={payloadType},clock-rate=48000\"",
+            $"capsfilter caps=\"{SendCaps(payloadType)}\"",
             ghostUnlinkedPads: true);
         egress.SetName($"egress-{id}");
 
@@ -206,13 +219,9 @@ internal sealed class RoomPipeline : IDisposable
 
         Link(silence.GetStaticPad("src"), mixer.RequestPadSimple("sink_%u"), "silence → mixer");
         Link(mixer.GetStaticPad("src"), egress.GetStaticPad("sink"), "mixer → egress");
-        Link(egress.GetStaticPad("src"), rtc.Element.RequestPadSimple("sink_%u"), "egress → webrtcbin");
 
-        // Downstream first, so nothing pushes into an element that is not running yet.
+        // Only webrtcbin starts now; the send branch starts once it is linked to the negotiated transceiver.
         rtc.Element.SyncStateWithParent();
-        egress.SyncStateWithParent();
-        mixer.SyncStateWithParent();
-        silence.SyncStateWithParent();
         return endpoint;
     }
 
@@ -385,30 +394,6 @@ internal sealed class RoomPipeline : IDisposable
         WebRTCPeerConnectionState.Disconnected or WebRTCPeerConnectionState.Closed => ParticipantState.Disconnected,
         _ => ParticipantState.Connecting,
     };
-
-    private void PollBus()
-    {
-        using var bus = _pipeline.GetBus();
-        var interval = ClockTime.FromMilliseconds(200);
-        while (!_stop.IsCancellationRequested)
-        {
-            using var message = bus.TimedPopFiltered(interval, MessageType.Error | MessageType.Warning);
-            if (message is null)
-            {
-                continue;
-            }
-            if (message.Type == MessageType.Error)
-            {
-                (GException error, string? debug) = message.ParseError();
-                _log.LogError("Room {RoomId}: GStreamer error from {Source}: {Message} ({Debug})", RoomId, message.SourceName, error.Message, debug);
-            }
-            else
-            {
-                (GException warning, string? debug) = message.ParseWarning();
-                _log.LogWarning("Room {RoomId}: GStreamer warning from {Source}: {Message} ({Debug})", RoomId, message.SourceName, warning.Message, debug);
-            }
-        }
-    }
 
     /// <summary>What the media layer knows about a participant. Mutated on the worker only.</summary>
     private sealed class ParticipantMedia(Guid id, double gain, bool muted)

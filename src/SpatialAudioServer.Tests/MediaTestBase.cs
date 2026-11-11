@@ -106,7 +106,7 @@ public abstract class MediaTestBase : IDisposable
 
     protected static string Describe(IEnumerable<FakeClient> clients) =>
         string.Join("; ", clients.Select(c =>
-            $"{c.Name}({c.ToneHz}) frames={c.Meter.Frames} hears " +
+            $"{c.Name}({c.ToneHz}) rx={c.Receiving} frames={c.Meter.Frames} hears " +
             string.Join(",", c.Meter.Presence().Where(p => p.Value > 0).Select(p => $"{p.Key}:{p.Value:P0}"))));
 
     private static string Describe(Dictionary<FakeClient, IReadOnlyDictionary<double, double>> measured) =>
