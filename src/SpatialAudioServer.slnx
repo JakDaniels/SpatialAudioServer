@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SpatialAudioServer.Tests/SpatialAudioServer.Tests.csproj" />
+  <Project Path="SpatialAudioServer/SpatialAudioServer.csproj" />
+</Solution>
