@@ -1,0 +1,579 @@
+using Gst;
+using Gst.App;
+using Gst.Video;
+using System;
+using System.Threading;
+using System.Net.WebSockets;
+using System.Text;
+using System.Threading.Tasks;
+using System.Net;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net.Sockets;
+using GLib;
+
+// Disambiguate Task type
+using SystemTask = System.Threading.Tasks.Task;
+
+namespace GStreamerTestApp
+{
+    class Program
+    {
+        private static Pipeline? pipeline;
+        private static Element? _webrtcbin;
+        private static WebSocket? _webSocket;
+        private static Pipeline? _pipeline;
+        private static string? _offer;
+        private static string? _answer;
+        private static string? _iceCandidate;
+
+        private static async void OnNegotiationNeeded(object? sender, EventArgs e)
+        {
+            if (_webrtcbin == null || _webrtcbin.Handle == IntPtr.Zero) return;
+            
+            try
+            {
+                Console.WriteLine("Creating SDP offer...");
+                var offerValue = _webrtcbin.GetProperty("offer");
+                if (offerValue.Val == null || offerValue.Val.Equals(IntPtr.Zero)) return;
+                
+                var offer = offerValue.Val.ToString();
+                if (string.IsNullOrEmpty(offer)) return;
+                
+                _offer = offer;
+                Console.WriteLine($"Created offer: {_offer}");
+                
+                // Set local description
+                _webrtcbin.SetProperty("local-description", new GLib.Value(_offer));
+                
+                // Send offer to remote peer
+                if (_webSocket?.State == WebSocketState.Open)
+                {
+                    await SendMessage("sdp", $"offer {_offer}").ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in OnNegotiationNeeded: {ex.Message}");
+            }
+        }
+
+        private static async void OnIceCandidate(object? sender, EventArgs e)
+        {
+            if (_webrtcbin == null) return;
+            
+            try
+            {
+                Console.WriteLine("New ICE candidate");
+                var candidateValue = _webrtcbin.GetProperty("ice-candidate");
+                if (candidateValue.Val == null || candidateValue.Val.Equals(IntPtr.Zero)) return;
+                
+                var candidate = candidateValue.ToString();
+                if (string.IsNullOrEmpty(candidate)) return;
+                
+                _iceCandidate = candidate;
+                
+                // Send ICE candidate to remote peer
+                if (_webSocket?.State == WebSocketState.Open)
+                {
+                    await SendMessage("ice-candidate", _iceCandidate).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in OnIceCandidate: {ex.Message}");
+            }
+        }
+
+        private static void OnConnectionStateChange(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (_webrtcbin == null) return;
+                
+                var state = _webrtcbin.GetProperty("connection-state").Val.ToString() ?? "unknown";
+                Console.WriteLine($"WebRTC connection state changed: {state}");
+                
+                // Handle connection state changes if needed
+                switch (state.ToLower())
+                {
+                    case "connected":
+                        Console.WriteLine("WebRTC connection established");
+                        break;
+                    case "disconnected":
+                        Console.WriteLine("WebRTC connection lost");
+                        break;
+                    case "failed":
+                        Console.WriteLine("WebRTC connection failed");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in OnConnectionStateChange: {ex.Message}");
+            }
+        }
+
+        private static async SystemTask HandleMessage(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return;
+            
+            try
+            {
+                var parts = message.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 0) return;
+                
+                var type = parts[0].ToLower();
+                var data = parts.Length > 1 ? parts[1] : string.Empty;
+
+                Console.WriteLine($"Handling message of type: {type}");
+
+                switch (type)
+                {
+                    case "sdp":
+                        if (string.IsNullOrEmpty(data))
+                        {
+                            Console.WriteLine("Empty SDP data received");
+                            return;
+                        }
+
+                        if (data.StartsWith("offer "))
+                        {
+                            var sdp = data.Substring(6);
+                            Console.WriteLine("Received SDP offer");
+                            // Process SDP offer and create answer
+                            await SendMessage("sdp", "answer <SDP answer>");
+                        }
+                        else if (data.StartsWith("answer "))
+                        {
+                            var sdp = data.Substring(7);
+                            Console.WriteLine("Received SDP answer");
+                            if (_webrtcbin != null)
+                            {
+                                _webrtcbin.SetProperty("remote-description", new GLib.Value(data));
+                            }
+                            break;
+                        }
+                        break;
+
+                    case "ice":
+                        if (_webrtcbin != null)
+                        {
+                            _webrtcbin.SetProperty("add-ice-candidate", new GLib.Value(data));
+                            // Process ICE candidate
+                        }
+                        break;
+
+                    default:
+                        Console.WriteLine($"Unknown message type: {type}");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error handling message: {ex.Message}");
+            }
+        }
+
+        private static async SystemTask StartWebSocketServer()
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 8080);
+            listener.Start();
+            Console.WriteLine($"WebSocket server started at ws://localhost:8080");
+
+            try
+            {
+                while (true)
+                {
+                    var client = await listener.AcceptTcpClientAsync().ConfigureAwait(false);
+                    _ = SystemTask.Run(() => HandleWebSocketClient(client).ConfigureAwait(false));
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Console.WriteLine($"WebSocket server error: {ex.Message}");
+            }
+            finally
+            {
+                listener.Stop();
+            }
+        }
+
+        private static async SystemTask HandleWebSocketClient(TcpClient? client)
+        {
+            if (client == null) return;
+            
+            try
+            {
+                using var stream = client.GetStream();
+                using var reader = new StreamReader(stream, Encoding.UTF8, false, 8192, leaveOpen: true);
+                using var writer = new StreamWriter(stream, Encoding.UTF8, 8192, leaveOpen: true);
+                {
+                    // Read HTTP headers
+                    var headers = new Dictionary<string, string>();
+                    string line;
+                    while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync()))
+                    {
+                        var parts = line.Split(':', 2);
+                        if (parts.Length == 2)
+                        {
+                            headers[parts[0].Trim()] = parts[1].Trim();
+                        }
+                    }
+
+                    // Generate WebSocket accept key
+                    if (!headers.TryGetValue("Sec-WebSocket-Key", out var key))
+                    {
+                        Console.WriteLine("Invalid WebSocket handshake: Missing Sec-WebSocket-Key");
+                        return;
+                    }
+
+                    var responseKey = Convert.ToBase64String(
+                        System.Security.Cryptography.SHA1.Create()
+                            .ComputeHash(Encoding.UTF8.GetBytes(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")));
+
+                    // Send WebSocket handshake response
+                    await writer.WriteAsync("HTTP/1.1 101 Switching Protocols\r\n");
+                    await writer.WriteAsync("Upgrade: websocket\r\n");
+                    await writer.WriteAsync("Connection: Upgrade\r\n");
+                    await writer.WriteAsync($"Sec-WebSocket-Accept: {responseKey}\r\n\r\n");
+                    await writer.FlushAsync();
+
+                    // Now handle WebSocket messages
+                try
+                {
+                    _webSocket = WebSocket.CreateFromStream(stream, false, "", TimeSpan.FromSeconds(30));
+                    if (_webSocket == null)
+                    {
+                        Console.WriteLine("Failed to create WebSocket from stream");
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error creating WebSocket: {ex.Message}");
+                    return;
+                }
+                    var buffer = new byte[8192];
+
+                    while (_webSocket.State == WebSocketState.Open)
+                    {
+                        var result = await _webSocket.ReceiveAsync(
+                            new ArraySegment<byte>(buffer),
+                            CancellationToken.None).ConfigureAwait(false);
+                            
+                        if (result.MessageType == WebSocketMessageType.Text)
+                        {
+                            var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                            if (!string.IsNullOrEmpty(message))
+                            {
+                                Console.WriteLine($"Received message: {message}");
+                                await HandleMessage(message).ConfigureAwait(false);
+                            }
+                        }
+                        else if (result.MessageType == WebSocketMessageType.Close)
+                        {
+                            await _webSocket.CloseAsync(
+                                WebSocketCloseStatus.NormalClosure,
+                                "Closing",
+                                CancellationToken.None).ConfigureAwait(false);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Console.WriteLine($"WebSocket client error: {ex.Message}");
+            }
+            finally
+            {
+                client.Dispose();
+            }
+            
+            return;
+        }
+
+        private static async SystemTask SendMessage(string type, string? data = null)
+        {
+            if (_webSocket?.State != WebSocketState.Open)
+                return;
+            
+            try
+            {
+                var message = string.IsNullOrEmpty(data) ? type : $"{type} {data}";
+                var bytes = Encoding.UTF8.GetBytes(message);
+                await _webSocket.SendAsync(
+                    new ArraySegment<byte>(bytes),
+                    WebSocketMessageType.Text,
+                    true,
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Console.WriteLine($"Error sending WebSocket message: {ex.Message}");
+            }
+        }
+
+        private static bool OnBusMessage(Bus bus, Message message)
+        {
+            if (message == null) return true;
+
+            try
+            {
+                switch (message.Type)
+                {
+                    case MessageType.Error:
+                        string debug = null;
+                        GLib.GException error = null;
+                        
+                        try
+                        {
+                            message.ParseError(out error, out debug);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error parsing error message: {ex.Message}");
+                        }
+                        
+                        Console.WriteLine($"Error: {error?.Message ?? "Unknown error"}");
+                        if (!string.IsNullOrEmpty(debug))
+                            Console.WriteLine($"Debug info: {debug}");
+                        Environment.Exit(1);
+                        break;
+
+                    case MessageType.Eos:
+                        Console.WriteLine("End of stream received");
+                        break;
+
+                    case MessageType.StateChanged:
+                        State oldState, newState, pendingState;
+                        message.ParseStateChanged(out oldState, out newState, out pendingState);
+                        Console.WriteLine($"Pipeline state changed from {oldState} to {newState}");
+                        
+                        if (newState == State.Playing)
+                            Console.WriteLine("Pipeline is now playing");
+                        else if (newState == State.Paused)
+                            Console.WriteLine("Pipeline is paused");
+                        else if (newState == State.Null)
+                            Console.WriteLine("Pipeline is null");
+                        break;
+
+                    case MessageType.Warning:
+                        string warningDebug = null;
+                        GLib.GException warning = null;
+                        
+                        try
+                        {
+                            IntPtr errorPtr;
+                            message.ParseWarning(out errorPtr, out warningDebug);
+                            if (errorPtr != IntPtr.Zero)
+                            {
+                                warning = new GLib.GException(errorPtr);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error parsing warning message: {ex.Message}");
+                        }
+                        
+                        Console.WriteLine($"Warning: {warning?.Message ?? "Unknown warning"}");
+                        if (!string.IsNullOrEmpty(warningDebug))
+                            Console.WriteLine($"Warning debug: {warningDebug}");
+                        break;
+
+                    case MessageType.Info:
+                        string info = null;
+                        string infoDebug = null;
+                        
+                        try
+                        {
+                            IntPtr infoPtr;
+                            message.ParseInfo(out infoPtr, out infoDebug);
+                            if (infoPtr != IntPtr.Zero)
+                            {
+                                info = GLib.Marshaller.Utf8PtrToString(infoPtr);
+                                GLib.Marshaller.Free(infoPtr);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error parsing info message: {ex.Message}");
+                        }
+                        
+                        if (!string.IsNullOrEmpty(info))
+                        {
+                            Console.WriteLine($"Info: {info}");
+                            if (!string.IsNullOrEmpty(infoDebug))
+                                Console.WriteLine($"Info debug: {infoDebug}");
+                        }
+                        break;
+
+                    case MessageType.Tag:
+                        try
+                        {
+                            var tagList = message.ParseTag();
+                            if (tagList != null)
+                            {
+                                tagList.Foreach((list, tag) =>
+                                {
+                                    try
+                                    {
+                                        var value = list.GetValueIndex(tag, 0);
+                                        var valPtr = (IntPtr)value.Val;
+                                        if (valPtr != IntPtr.Zero)
+                                        {
+                                            string tagValue = System.Runtime.InteropServices.Marshal.PtrToStringAnsi(valPtr);
+                                            if (!string.IsNullOrEmpty(tagValue))
+                                                Console.WriteLine($"Tag: {tag} = {tagValue}");
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"Error processing tag {tag}: {ex.Message}");
+                                    }
+                                });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Error parsing tag list: {ex.Message}");
+                        }
+                        break;
+
+                    default:
+                        Console.WriteLine($"Unhandled message type: {message.Type}");
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error processing bus message: {ex.Message}");
+            }
+            
+            return true;
+        }
+
+        static void Main(string[] args)
+        {
+            // Initialize GStreamer
+            try
+            {
+                Gst.Application.Init();
+                Console.WriteLine("GStreamer initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to initialize GStreamer: {ex.Message}");
+                return;
+            }
+
+            try
+            {
+                // Create pipeline
+                pipeline = new Pipeline("pipeline");
+                
+                // Create elements
+                var videoSource = ElementFactory.Make("videotestsrc", "source");
+                var queue = ElementFactory.Make("queue", "queue");
+                var vp8Encoder = ElementFactory.Make("vp8enc", "vp8enc");
+                var rtpPayloader = ElementFactory.Make("rtpvp8pay", "rtpvp8pay");
+                var webrtc = ElementFactory.Make("webrtcbin", "webrtcbin");
+
+                if (videoSource == null || queue == null || vp8Encoder == null ||
+                    rtpPayloader == null || webrtc == null || pipeline == null)
+                {
+                    Console.WriteLine("Failed to create one or more elements");
+                    return;
+                }
+
+                // Add elements to pipeline
+                pipeline.Add(videoSource, queue, vp8Encoder, rtpPayloader, webrtc);
+
+                // Link elements
+                if (!Element.Link(videoSource, queue, vp8Encoder, rtpPayloader))
+                {
+                    Console.WriteLine("Failed to link elements");
+                    return;
+                }
+
+                // Get source pad from payloader
+                var sourcePad = rtpPayloader.GetStaticPad("src");
+                if (sourcePad == null)
+                {
+                    Console.WriteLine("Failed to get source pad from rtpPayloader");
+                    return;
+                }
+
+                // Get sink pad from webrtcbin
+                var sinkPad = webrtc.GetRequestPad("sink_%u");
+                if (sinkPad == null)
+                {
+                    Console.WriteLine("Failed to get sink pad from webrtcbin");
+                    return;
+                }
+
+                // Link payloader to webrtcbin
+                if (sourcePad.Link(sinkPad) != PadLinkReturn.Ok)
+                {
+                    Console.WriteLine("Failed to link rtpPayloader to webrtcbin");
+                    return;
+                }
+
+                // Configure webrtcbin
+                _webrtcbin = webrtc;
+                _webrtcbin.SetProperty("stun-server", new GLib.Value("stun://stun.l.google.com:19302"));
+                _webrtcbin.SetProperty("bundle-policy", new GLib.Value(2)); // MAX-BUNDLE
+
+                // Connect signals
+                _webrtcbin.AddSignalHandler("on-ice-candidate", OnIceCandidate);
+                _webrtcbin.AddSignalHandler("on-negotiation-needed", OnNegotiationNeeded);
+                _webrtcbin.AddSignalHandler("on-connection-state-change", OnConnectionStateChange);
+
+                // Set up bus
+                var bus = pipeline.Bus;
+                if (bus == null)
+                {
+                    Console.WriteLine("Failed to get pipeline bus");
+                    return;
+                }
+
+                bus.AddSignalWatch();
+                bus.EnableSyncMessageEmission();
+                bus.AddWatch(OnBusMessage);
+
+                // Start pipeline
+                if (pipeline.SetState(State.Playing) == StateChangeReturn.Failure)
+                {
+                    Console.WriteLine("Failed to start pipeline");
+                    return;
+                }
+
+                Console.WriteLine("Pipeline started successfully");
+
+                // Start WebSocket server in background
+                _ = StartWebSocketServer();
+
+                // Keep the application running
+                Console.WriteLine("Press any key to stop...");
+                Console.ReadKey();
+
+                // Cleanup
+                if (pipeline != null)
+                {
+                    pipeline.SetState(State.Null);
+                    var pipelineBus = pipeline.Bus;
+                    if (pipelineBus != null)
+                    {
+                        pipelineBus.RemoveSignalWatch();
+                        pipelineBus.Dispose();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+            }
+        }
+    }
+}
