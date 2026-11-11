@@ -35,6 +35,7 @@ public sealed partial class WebRtcBin : IDisposable
         Element = ElementFactory.Make("webrtcbin", name) ?? throw new InvalidOperationException("webrtcbin is missing.");
         Global.UtilSetObjectArg(Element, "bundle-policy", "max-bundle");
         Element.SetProperty("latency", jitterBufferMs);
+        DisableUpnp();
 
         _handlers.Add(Element.ConnectSignal("on-ice-candidate", (_, args) =>
         {
@@ -90,14 +91,51 @@ public sealed partial class WebRtcBin : IDisposable
 
     public WebRTCPeerConnectionState ConnectionState => Element.GetProperty<WebRTCPeerConnectionState>("connection-state");
 
-    /// <summary>Applies a remote offer and returns the local answer's SDP text.</summary>
-    public string AnswerOffer(string offerSdp)
+    /// <summary>Applies a remote offer. webrtcbin creates one transceiver per offered m-line.</summary>
+    public void ApplyRemoteOffer(string offerSdp) => SetDescription("set-remote-description", WebRTCSDPType.Offer, offerSdp);
+
+    /// <summary>
+    /// Makes the transceiver webrtcbin created for m-line <paramref name="mlineIndex"/> send as well as receive,
+    /// restricted to <paramref name="codec"/>. Request the pad <c>sink_{mlineIndex}</c> afterwards to feed it.
+    /// </summary>
+    /// <remarks>
+    /// This is the deterministic answerer order. Linking a send pad before the offer and letting webrtcbin match it
+    /// to the offered m-line by its caps is timing-dependent: caps that arrive before the offer, or during it, leave
+    /// the pad bound to a transceiver the answer never uses, and webrtcbin blocks it forever.
+    /// </remarks>
+    public void PrepareSendTransceiver(int mlineIndex, Caps codec)
     {
-        SetDescription("set-remote-description", WebRTCSDPType.Offer, offerSdp);
+        using var transceiver = Element.EmitSignal<WebRTCRTPTransceiver>("get-transceiver", mlineIndex)
+            ?? throw new InvalidOperationException($"webrtcbin has no transceiver for m-line {mlineIndex}.");
+        Global.UtilSetObjectArg(transceiver, "direction", "sendrecv");
+        transceiver.SetProperty("codec-preferences", codec);
+    }
+
+    /// <summary>Creates and applies the local answer; returns its SDP text.</summary>
+    public string CreateAndApplyAnswer()
+    {
         using var answer = CreateDescription("create-answer", "answer");
         using var sdp = answer.GetSdp();
         Apply("set-local-description", answer);
         return sdp.AsText();
+    }
+
+    /// <summary>Index of the first <c>m=audio</c> line in an SDP, or null.</summary>
+    public static int? FirstAudioMLine(string sdp)
+    {
+        var index = 0;
+        foreach (var line in sdp.Split('\n'))
+        {
+            if (line.StartsWith("m=", StringComparison.Ordinal))
+            {
+                if (line.StartsWith("m=audio", StringComparison.Ordinal))
+                {
+                    return index;
+                }
+                index++;
+            }
+        }
+        return null;
     }
 
     /// <summary>Creates and applies a local offer and returns its SDP text.</summary>
@@ -189,6 +227,33 @@ public sealed partial class WebRtcBin : IDisposable
         Element.PadAdded -= OnPadAdded;
     }
 
+    /// <summary>
+    /// libnice enables UPnP IGD port mapping by default and starts a "gupnp-igd-thread" per ICE agent that outlives
+    /// the agent: measured +2 threads per join in the churn test. A server has no use for UPnP, so it is turned off
+    /// on the NiceAgent behind webrtcbin's ICE object (GstWebRTCNice "agent" → NiceAgent "upnp").
+    /// </summary>
+    /// <remarks>Raw GObject calls: see <see cref="NativeGObject"/> for why the binding cannot be used here.</remarks>
+    private void DisableUpnp()
+    {
+        var ice = NativeGObject.GetObjectProperty(Element.Handle, "ice-agent");
+        try
+        {
+            var agent = NativeGObject.GetObjectProperty(ice, "agent"); // absent unless the libnice ICE backend
+            try
+            {
+                NativeGObject.SetBooleanProperty(agent, "upnp", false);
+            }
+            finally
+            {
+                NativeGObject.Unref(agent);
+            }
+        }
+        finally
+        {
+            NativeGObject.Unref(ice);
+        }
+    }
+
     private void OnPadAdded(object? sender, Element.PadAddedSignalArgs args)
     {
         if (args.NewPad.Direction == PadDirection.Src)
@@ -217,22 +282,46 @@ public sealed partial class WebRtcBin : IDisposable
 
     private void Apply(string signal, WebRTCSessionDescription description)
     {
-        using var promise = Promise.New();
-        Element.EmitSignal(signal, description, promise.Handle);
-        using var reply = Wait(promise, signal);
+        var (promise, replied) = NewPromise();
+        using (promise)
+        {
+            Element.EmitSignal(signal, description, promise.Handle);
+            using var reply = Wait(promise, replied, signal);
+        }
     }
 
     private WebRTCSessionDescription CreateDescription(string signal, string field)
     {
-        using var promise = Promise.New();
-        Element.EmitSignal(signal, null, promise.Handle);
-        using var reply = Wait(promise, signal) ?? throw new InvalidOperationException($"{signal} replied with nothing.");
-        return reply.GetBoxed<WebRTCSessionDescription>(field)
-            ?? throw new InvalidOperationException($"{signal} reply has no \"{field}\": {reply}");
+        var (promise, replied) = NewPromise();
+        using (promise)
+        {
+            Element.EmitSignal(signal, null, promise.Handle);
+            using var reply = Wait(promise, replied, signal) ?? throw new InvalidOperationException($"{signal} replied with nothing.");
+            return reply.GetBoxed<WebRTCSessionDescription>(field)
+                ?? throw new InvalidOperationException($"{signal} reply has no \"{field}\": {reply}");
+        }
     }
 
-    private static Structure? Wait(Promise promise, string signal)
+    /// <summary>How long a webrtcbin promise may take. It normally replies in milliseconds.</summary>
+    private static readonly TimeSpan PromiseTimeout = TimeSpan.FromSeconds(10);
+
+    private static (Promise Promise, Task Replied) NewPromise()
     {
+        var replied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        return (Promise.NewWithChangeFunc(_ => replied.TrySetResult()), replied.Task);
+    }
+
+    /// <summary>
+    /// Waits for the reply with a timeout: an unanswered promise would otherwise block the caller (the room
+    /// worker) forever.
+    /// </summary>
+    private static Structure? Wait(Promise promise, Task replied, string signal)
+    {
+        if (!replied.Wait(PromiseTimeout))
+        {
+            promise.Interrupt();
+            throw new TimeoutException($"webrtcbin did not answer {signal} within {PromiseTimeout.TotalSeconds:F0} s.");
+        }
         var result = promise.Wait();
         if (result != PromiseResult.Replied)
         {

@@ -224,6 +224,25 @@ tested without GStreamer.
    over real HTTP. Load testing: correctness and churn tests on the dev box now (4-core Pentium Silver N6005, 5 GB;
    fake clients share the CPU, so CPU numbers are indicative only); the real 32-participant benchmark runs later with
    the fake clients (`tools/`) on a second LAN machine.
+   **Stages A+B done 2026-11-11** (33 tests, 3 consecutive clean runs): mix-minus for 2–4 people, late join, leave
+   via API and via signalling, mute/unmute, replace-while-connected, room delete with people connected, signalling
+   auth, 5-round churn with chain-count and native-thread checks. Fake client + Goertzel tone meter live in
+   `src/SpatialAudioServer.LoadTest` (load runs themselves still to do: stage C). Findings, all reflected in code:
+   - **Answerer order must be explicit.** Linking the send branch before the offer and letting webrtcbin match it
+     by caps is a race (≈1 in 3 endpoints never sent: the send pad stayed blocked forever). Fixed order:
+     `set-remote-description` → `get-transceiver` for the audio m-line, set `direction=sendrecv` and
+     `codec-preferences` (Opus, offer's PT) → request `sink_<mline>` explicitly → link + start send branch →
+     `create-answer`/`set-local-description` (`WebRtcBin.PrepareSendTransceiver`).
+   - **Handle LATENCY bus messages** (`RecalculateLatency`) in every pipeline that gains elements while PLAYING
+     (`BusWatcher`), otherwise RTP sessions log "can't determine running time … without configured latency".
+   - **libnice UPnP leaks a thread per ICE agent** (`gupnp-igd-thread`, +2 per join incl. the client). UPnP is
+     disabled on each NiceAgent via raw GObject calls (`NativeGObject`): reading libnice objects through the
+     binding's generic wrappers over-releases them and crashes (`GST_IS_WEBRTC_ICE` assertion).
+   - Promise waits now time out (10 s) so a silent webrtcbin cannot wedge a room's worker forever.
+   - GstSharp.Net: `Pipeline.New(name)`, `SetName()` (Name is read-only), and `Gst.DateTime`/`Gst.Task`/
+     `Gst.GLib.DateTime` clash with System types (alias them).
+   - Browser stereo: Chrome decodes Opus as stereo only if *its own* offer's fmtp has `stereo=1`, so the Phase 3
+     test client must munge its offer; Firefox decodes stereo anyway. The server's answer is not munged.
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.

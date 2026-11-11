@@ -74,6 +74,12 @@ public sealed class ApiKeyAuthenticationHandler(
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        // Signalling carries join/session tokens in Authorization: Bearer, not API keys; don't try them as keys.
+        if (Request.Path.StartsWithSegments("/signal"))
+        {
+            return Task.FromResult(AuthenticateResult.NoResult());
+        }
+
         string? key = Request.Headers[HeaderName];
         if (string.IsNullOrEmpty(key))
         {
