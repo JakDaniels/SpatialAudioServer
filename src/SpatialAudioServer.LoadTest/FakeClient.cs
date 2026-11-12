@@ -31,6 +31,8 @@ public sealed class FakeClient : IDisposable
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
     };
 
+    private readonly double _volume;
+    private readonly Element _tone;
     private int _receiving;
     private int _remoteCandidates;
     private volatile Exception? _iceError;
@@ -38,8 +40,10 @@ public sealed class FakeClient : IDisposable
     private string? _sessionToken;
 
     public FakeClient(
-        string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100, ILogger? log = null, double volume = 0.1)
+        string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100, ILogger? log = null, double volume = 0.1,
+        bool talking = true)
     {
+        _volume = volume;
         Name = name;
         ToneHz = toneHz;
         Meter = new ToneMeter(listenFor) { Threshold = volume / 5 };
@@ -49,10 +53,13 @@ public sealed class FakeClient : IDisposable
         _rtc.IncomingPad += OnIncomingPad;
 
         var send = Global.ParseBinFromDescription(
-            $"audiotestsrc is-live=true wave=sine freq={toneHz.ToString(CultureInfo.InvariantCulture)} volume={volume.ToString(CultureInfo.InvariantCulture)} ! " +
+            $"audiotestsrc name=tone is-live=true wave=sine freq={toneHz.ToString(CultureInfo.InvariantCulture)} " +
+            $"volume={(talking ? volume : 0).ToString(CultureInfo.InvariantCulture)} ! " +
             "audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! opusenc ! rtpopuspay pt=111 ! " +
             "capsfilter caps=\"application/x-rtp,media=audio,encoding-name=OPUS,payload=111,clock-rate=48000\"",
             ghostUnlinkedPads: true);
+        _tone = send.GetByName("tone")!;
+        Talking = talking;
         _pipeline.Add(_rtc.Element);
         _pipeline.Add(send);
         var linked = send.GetStaticPad("src")!.Link(_rtc.Element.RequestPadSimple("sink_%u")!);
@@ -80,6 +87,15 @@ public sealed class FakeClient : IDisposable
     public Guid ParticipantId { get; private set; }
 
     public bool Receiving => Volatile.Read(ref _receiving) == 1;
+
+    /// <summary>Whether the client is sending its tone (otherwise silence). Can change while connected.</summary>
+    public bool Talking { get; private set; }
+
+    public void SetTalking(bool talking)
+    {
+        _tone.SetProperty("volume", talking ? _volume : 0.0);
+        Talking = talking;
+    }
 
     /// <summary>Server candidates received and applied so far.</summary>
     public int RemoteCandidates => Volatile.Read(ref _remoteCandidates);

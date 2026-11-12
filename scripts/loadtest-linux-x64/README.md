@@ -45,6 +45,13 @@ S=http://10.2.2.235:5000                    # the server
 ./SpatialAudioServer.LoadTest --server $S --participants 32 --engine matrix,pairchains-lite
 ```
 
+Realistic talk patterns (needed for `matrix-shared`, which only mixes the current talkers, at most
+`Media:ActiveSpeakers` = 4 by default):
+
+```bash
+./SpatialAudioServer.LoadTest --server $S --participants 32 --talkers 3 --engine matrix-shared,matrix
+```
+
 Other options: `--rooms R` (R rooms of N people each), `--duration S` (measuring window, default 20 s),
 `--jitter-ms`, and `--insecure` (when using `https://…:5001` with the self-signed certificate).
 The exit code is 0 when every run passes.

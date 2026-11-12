@@ -330,7 +330,27 @@ tested without GStreamer.
      by ~17%.
      The first cross-machine run found a load-tool bug (signalling JSON enums), hidden on one machine because ICE
      connected from one-sided candidates; tests now assert both directions of trickle ICE.
-   Next: decide how to close the gap at 32 (user decision pending).
+   - **Decided 2026-11-12:** `Media:OpusComplexity` default 5; new `Media:OpusFrameMs` (10/20/40/60, checked at
+     start-up) default **40 ms** for what the server sends (clients keep their own, typically 20 ms); and a new
+     engine **`matrix-shared`**:
+     - Only current talkers are mixed. A decoded buffer louder than `Media:VadThresholdDb` (−50 dBFS) is voice; a
+       talker stays active for `Media:VadHangoverMs` (800 ms); at most `Media:ActiveSpeakers` (4), current talkers
+       keep their place. Muted sources never talk.
+     - Everyone not talking hears one shared mix (all talkers) from one shared encoder; each talker gets a personal
+       mix-minus with its own encoder. Encoders = talkers + 1.
+     - Each listener has `input-selector` (shared Opus | personal Opus) → `rtpopuspay`, so switching happens on Opus
+       frames and the RTP stream stays continuous. Mix-minus is kept across switches: a new talker is switched to their
+       personal branch on its first frame and only then added to the mixes; a talker who stops is removed from every
+       mix and switched back 300 ms later.
+     - **Spatial**: the shared mix is one rendering for everyone, so it is centred; personal (talker) mixes can be
+       spatial. Options for later: cluster listeners whose talker directions quantise the same (one encoder per
+       cluster), or forward the talkers' streams unmixed and spatialise in the client (WebAudio) — no server encoding.
+     - The interleave and safe matrix updates moved to `RoomInterleave`/`MatrixMixer`, shared by both matrix engines.
+     - Load tool `--talkers K`: only K clients per room send their tone; the rest send silence. With matrix-shared use
+       K ≤ `Media:ActiveSpeakers` (everyone talking at once means only the top talkers are mixed, by design).
+     First numbers (server + tool on DevTest26, 3 talkers, new defaults): 8 people matrix 50% / matrix-shared 32% of
+     one core; 16 people 75% / 64%. What remains at 16 is per participant (decode, payload/SRTP/send).
+   Next: benchmark matrix vs matrix-shared at 32 from the 22.04 machine.
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.

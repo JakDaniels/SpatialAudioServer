@@ -25,6 +25,11 @@ public sealed class Matrix : IEngineUnderTest
     public static string Name => "matrix";
 }
 
+public sealed class MatrixShared : IEngineUnderTest
+{
+    public static string Name => "matrix-shared";
+}
+
 [Collection("media")]
 public sealed class PairChainsMix : MixSuite<PairChains>;
 
@@ -42,6 +47,12 @@ public sealed class MatrixMix : MixSuite<Matrix>;
 
 [Collection("media")]
 public sealed class MatrixMixChanges : MixChangeSuite<Matrix>;
+
+[Collection("media")]
+public sealed class MatrixSharedMix : MixSuite<MatrixShared>;
+
+[Collection("media")]
+public sealed class MatrixSharedMixChanges : MixChangeSuite<MatrixShared>;
 
 public sealed class EngineCoverageTests
 {

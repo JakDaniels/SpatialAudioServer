@@ -74,10 +74,27 @@ public sealed class MediaOptions
     public int OpusBitrate { get; set; } = 64000;
 
     /// <summary>
-    /// opusenc complexity 0–10 for each listener's mix (10 is opusenc's default and the most CPU). Encoding is the
-    /// largest per-participant cost once mixing is cheap (matrix engine: ~60% of server CPU at 16 people).
+    /// opusenc complexity 0–10 for each mix (10 is opusenc's default and the most CPU). Encoding is the largest
+    /// per-participant cost once mixing is cheap; 5 cut total server CPU by ~17% at 16 people (matrix engine).
     /// </summary>
-    public int OpusComplexity { get; set; } = 10;
+    public int OpusComplexity { get; set; } = 5;
+
+    /// <summary>
+    /// Duration of each Opus frame (= RTP packet) the server sends: 10, 20, 40 or 60 ms. Longer frames halve the
+    /// per-packet work (payloading, SRTP, sending) at the cost of latency. Clients choose their own for what they send.
+    /// </summary>
+    public int OpusFrameMs { get; set; } = 40;
+
+    public static readonly int[] OpusFrameSizes = [10, 20, 40, 60];
+
+    /// <summary>matrix-shared: how many recent talkers get their own (mix-minus) encoder; everyone else shares one mix.</summary>
+    public int ActiveSpeakers { get; set; } = 4;
+
+    /// <summary>matrix-shared: a decoded buffer louder than this (RMS, dBFS) counts as voice.</summary>
+    public double VadThresholdDb { get; set; } = -50;
+
+    /// <summary>matrix-shared: how long a talker stays active after their last voiced buffer.</summary>
+    public int VadHangoverMs { get; set; } = 800;
 
     /// <summary>Mix engine for rooms created without one (see MixEngines; listed by GET /api/status).</summary>
     public string Engine { get; set; } = Media.Engines.MixEngines.Default;

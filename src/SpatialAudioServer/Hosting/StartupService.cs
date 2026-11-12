@@ -28,6 +28,11 @@ internal sealed class StartupService(
                 $"Media:Engine '{media.Value.Engine}' is not a mix engine. Available: " +
                 string.Join(", ", Media.Engines.MixEngines.All.Select(e => e.Name)) + ".");
         }
+        if (!MediaOptions.OpusFrameSizes.Contains(media.Value.OpusFrameMs))
+        {
+            throw new InvalidOperationException(
+                $"Media:OpusFrameMs must be one of {string.Join(", ", MediaOptions.OpusFrameSizes)} (is {media.Value.OpusFrameMs}).");
+        }
 
         if (media.Value.Enabled)
         {
