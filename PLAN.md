@@ -350,7 +350,16 @@ tested without GStreamer.
        K ≤ `Media:ActiveSpeakers` (everyone talking at once means only the top talkers are mixed, by design).
      First numbers (server + tool on DevTest26, 3 talkers, new defaults): 8 people matrix 50% / matrix-shared 32% of
      one core; 16 people 75% / 64%. What remains at 16 is per participant (decode, payload/SRTP/send).
-   Next: benchmark matrix vs matrix-shared at 32 from the 22.04 machine.
+   - **32-person benchmark from the 22.04 machine (2026-11-12), 3 talkers, Opus complexity 5 / 40 ms:**
+
+     | engine | server CPU | memory | threads | heard min | self max |
+     |---|---|---|---|---|---|
+     | matrix-shared | **196% of 1 core = 49% of 4** | 194 MB | 356 | 100% | 0.1% |
+     | matrix | 257% = 64% of 4 | 219 MB | 353 | 100% | 0.3% |
+
+     **matrix-shared meets the Phase 2 gate (< 60% of 4 cores at 32 participants).** (The tool's "992 pairs" label
+     counts n(n−1) regardless of `--talkers`; with 3 talkers 93 pairs are actually mixed.)
+   Next: choose the default engine (Media:Engine is still pairchains), then Phase 3.
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.

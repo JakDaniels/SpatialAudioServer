@@ -24,7 +24,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   `dotnet test src` runs 69 tests, with the end-to-end suites run once per engine.
 - GStreamer 1.28.2 source is cloned (git-ignored) in `docs/reference/gstreamer` for reading element internals.
 - Load runs go from a Ubuntu 22.04 box using the committed self-contained tool (`scripts/loadtest-linux-x64/`,
-  rebuild with `scripts/build-loadtest.sh`). Next: 32-person `--talkers 3 --engine matrix-shared,matrix` there.
+  rebuild with `scripts/build-loadtest.sh`). 32 people / 3 talkers: matrix-shared 49% of 4 cores (meets the
+  < 60% gate), matrix 64%. Next: pick the default engine, then Phase 3 (test web client, STUN/TURN, reconnect).
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.
