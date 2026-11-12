@@ -311,7 +311,26 @@ tested without GStreamer.
      busy and this is inflated). The remaining cost looks per-participant (decode, encode, SRTP, jitterbuffer), not
      per-pair. One cold-server 16-person matrix run failed the 2% self/leak check (later runs: 0.0–0.2%); watch for
      it in the second-machine benchmark.
-   Next: the 32-person benchmark from a second machine (matrix is the candidate); more engines if wanted.
+   - **Second-machine benchmark (2026-11-12)**: load tool on Ubuntu 22.04 (GStreamer 1.20.3 clients work fine),
+     server on DevTest26 (a Xen guest, 4 vCPUs of an N6005). 20 s windows:
+
+     | people | engine | server CPU | threads | result |
+     |---|---|---|---|---|
+     | 16 | matrix | 85% of 1 core (21% of 4) | 192 | PASS |
+     | 16 | pairchains-lite | 116% (29%) | 207 | PASS |
+     | 16 | pairchains | 176% (44%) | 446 | PASS |
+     | 32 | matrix | **310% (78% of 4)** | 352 | PASS (self max 0.7%) |
+     | 32 | pairchains-lite | 359% (90%) | 383 | FAIL: nothing heard (overloaded) |
+
+     Matrix passes 32 but is over the 60%-of-4-cores gate, and per-person cost rose from 5.3% of a core at 16 to
+     9.7% at 32. The matrix arithmetic is negligible, so the growth is probably contention (VM, ~80% busy, cache)
+     rather than a per-pair term. Per-thread CPU at 16 (matrix, from /proc thread names): listener threads
+     (matrix + Opus encode + RTP/SRTP send) 56–59%, decode-side queues 26%, nicesrc (receive + SRTP) 10%,
+     interleave 3.5%. `Media:OpusComplexity` (new, default 10) at 5 cut the listener threads to 41% and the total
+     by ~17%.
+     The first cross-machine run found a load-tool bug (signalling JSON enums), hidden on one machine because ICE
+     connected from one-sided candidates; tests now assert both directions of trickle ICE.
+   Next: decide how to close the gap at 32 (user decision pending).
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.

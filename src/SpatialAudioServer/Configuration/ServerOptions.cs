@@ -73,6 +73,12 @@ public sealed class MediaOptions
     /// <summary>Opus bitrate of each listener's stereo mix, bits/s.</summary>
     public int OpusBitrate { get; set; } = 64000;
 
+    /// <summary>
+    /// opusenc complexity 0–10 for each listener's mix (10 is opusenc's default and the most CPU). Encoding is the
+    /// largest per-participant cost once mixing is cheap (matrix engine: ~60% of server CPU at 16 people).
+    /// </summary>
+    public int OpusComplexity { get; set; } = 10;
+
     /// <summary>Mix engine for rooms created without one (see MixEngines; listed by GET /api/status).</summary>
     public string Engine { get; set; } = Media.Engines.MixEngines.Default;
 
