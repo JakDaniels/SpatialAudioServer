@@ -14,7 +14,11 @@ public sealed record JoinResponse(
     Guid ParticipantId, Guid RoomId, string JoinToken, string SignalUrl, DateTimeOffset ExpiresAt, Guid? ReplacedParticipantId);
 
 public sealed record StatusResponse(
-    string Version, DateTimeOffset StartedAt, double UptimeSeconds, GstStatusDto Gstreamer, int Rooms, int Participants, LimitOptions Limits);
+    string Version, DateTimeOffset StartedAt, double UptimeSeconds, GstStatusDto Gstreamer, int Rooms, int Participants,
+    LimitOptions Limits, ProcessStatus Process);
+
+/// <summary>Server process resources; the load tool samples CpuSeconds twice to get CPU use over a window.</summary>
+public sealed record ProcessStatus(double CpuSeconds, int ProcessorCount, long WorkingSetBytes, int Threads);
 
 public sealed record GstStatusDto(bool Enabled, bool Ok, string? Version, IReadOnlyList<string> MissingElements, string? Error);
 
@@ -34,7 +38,7 @@ public static class ControlApi
             return new StatusResponse(
                 Version, clock.StartedAt, Math.Round(clock.Uptime.TotalSeconds, 1),
                 new GstStatusDto(g.Enabled, g.Ok, g.Version, g.MissingElements, g.Error),
-                rooms.RoomCount, rooms.ParticipantCount, limits.Value);
+                rooms.RoomCount, rooms.ParticipantCount, limits.Value, CurrentProcess());
         });
 
         var roomsApi = api.MapGroup("/rooms");
@@ -58,6 +62,13 @@ public static class ControlApi
         // participants (OpenSim avatar UUID), so the region module never has to store our ids.
         MapRoom(roomsApi.MapGroup($"/{{{RoomId}:guid}}"));
         MapRoom(roomsApi.MapGroup($"/by-external/{{{RoomExternalId}}}"));
+    }
+
+    private static ProcessStatus CurrentProcess()
+    {
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        return new ProcessStatus(
+            process.TotalProcessorTime.TotalSeconds, Environment.ProcessorCount, process.WorkingSet64, process.Threads.Count);
     }
 
     private const string RoomId = "roomId";

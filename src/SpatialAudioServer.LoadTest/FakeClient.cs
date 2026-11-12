@@ -26,18 +26,19 @@ public sealed class FakeClient : IDisposable
     private int _disposed;
     private string? _sessionToken;
 
-    public FakeClient(string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100, ILogger? log = null)
+    public FakeClient(
+        string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100, ILogger? log = null, double volume = 0.1)
     {
         Name = name;
         ToneHz = toneHz;
-        Meter = new ToneMeter(listenFor);
+        Meter = new ToneMeter(listenFor) { Threshold = volume / 5 };
         _pipeline = Pipeline.New($"fake-{name}");
         _rtc = new WebRtcBin("webrtc", jitterBufferMs);
         _rtc.NegotiationNeeded += _negotiationNeeded.Set;
         _rtc.IncomingPad += OnIncomingPad;
 
         var send = Global.ParseBinFromDescription(
-            $"audiotestsrc is-live=true wave=sine freq={toneHz.ToString(CultureInfo.InvariantCulture)} volume=0.1 ! " +
+            $"audiotestsrc is-live=true wave=sine freq={toneHz.ToString(CultureInfo.InvariantCulture)} volume={volume.ToString(CultureInfo.InvariantCulture)} ! " +
             "audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! opusenc ! rtpopuspay pt=111 ! " +
             "capsfilter caps=\"application/x-rtp,media=audio,encoding-name=OPUS,payload=111,clock-rate=48000\"",
             ghostUnlinkedPads: true);

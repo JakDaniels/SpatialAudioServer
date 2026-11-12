@@ -243,6 +243,25 @@ tested without GStreamer.
      `Gst.GLib.DateTime` clash with System types (alias them).
    - Browser stereo: Chrome decodes Opus as stereo only if *its own* offer's fmtp has `stereo=1`, so the Phase 3
      test client must munge its offer; Firefox decodes stereo anyway. The server's answer is not munged.
+
+   **Stage C (2026-11-12): load tool + first numbers.** `dotnet run --project src/SpatialAudioServer.LoadTest --
+   --api-key KEY [--server URL] [--participants N] [--rooms R] [--duration S] [--insecure]`; tones 300 Hz + 50 Hz·i,
+   volume scaled to avoid clipping; reports server CPU/memory/threads from `/api/status` (now has a `process`
+   block). One room, server and load tool on the same N6005 (4 cores), so the tool's own CPU competes:
+
+   | participants | chains | server CPU | server RSS | server threads | heard others (min / mean) | self |
+   |---|---|---|---|---|---|---|
+   | 4 | 12 | 25% of 1 core (6% of 4) | 143 MB | 85 | 100% / 100% | 0% |
+   | 8 | 56 | 63% of 1 core (16% of 4) | 164 MB | 174 | 100% / 100% | 0% |
+   | 16 | 240 | 214% of 1 core (53% of 4) | 207 MB | 444 | 100% / 90% | 1.2%* |
+
+   \*16-person run: the tool used another 107% of a core, so the box was ~80% busy; the dropouts and the 1.2% "self"
+   (tone detection at 50 Hz spacing, not a routing fault: no self chain exists) are expected to vanish with the
+   tool on another machine — to confirm there.
+   **Finding: the per-pair chain topology does not reach the 32-person target on this CPU.** Cost is ~0.9–1% of a
+   core per chain and chains grow as N(N-1): 32 people = 992 chains ≈ 9 cores, against the gate of < 60% of 4
+   cores. Threads also grow as N² (each chain's `queue` is a streaming thread: ~1,500 for one 32-person room).
+   Next: choose an optimisation (decision pending with the user, 2026-11-12) before the 32-person benchmark.
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.
