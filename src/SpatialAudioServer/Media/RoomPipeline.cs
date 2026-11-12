@@ -178,7 +178,15 @@ internal sealed class RoomPipeline : IDisposable
         MediaBlocks.Add(_pipeline, rtc.Element);
         var endpoint = new Endpoint(rtc);
         rtc.IncomingPad += pad => OnIncomingPad(p, endpoint, pad);
-        rtc.ConnectionStateChanged += state => StateChanged?.Invoke(p.Id, Map(state));
+        rtc.ConnectionStateChanged += state =>
+        {
+            if (state == WebRTCPeerConnectionState.Failed)
+            {
+                _log.LogWarning("Room {RoomId}: participant {ParticipantId} connection failed: {Diagnostics}",
+                    RoomId, p.Id, rtc.Diagnostics());
+            }
+            StateChanged?.Invoke(p.Id, Map(state));
+        };
         // Only webrtcbin starts now; the engine starts its send branch once it is linked to the negotiated transceiver.
         rtc.Element.SyncStateWithParent();
         return endpoint;

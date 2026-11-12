@@ -26,6 +26,7 @@ public sealed partial class WebRtcBin : IDisposable
 {
     private readonly List<ulong> _handlers = [];
     private readonly List<IceCandidate> _candidates = [];
+    private readonly List<string> _remoteCandidates = []; // for Diagnostics
     private TaskCompletionSource _candidatesChanged = NewSignal();
     private bool _gatheringComplete;
     private bool _disposed;
@@ -154,8 +155,42 @@ public sealed partial class WebRtcBin : IDisposable
         // An empty candidate is the browser's end-of-candidates marker; webrtcbin needs nothing for it.
         if (!string.IsNullOrWhiteSpace(candidate.Candidate))
         {
+            lock (_remoteCandidates)
+            {
+                _remoteCandidates.Add(candidate.Candidate);
+            }
             Element.EmitSignal("add-ice-candidate", candidate.SdpMLineIndex, candidate.Candidate);
         }
+    }
+
+    /// <summary>
+    /// One line for logs when a connection fails: ICE state and every local and remote candidate as
+    /// "type proto address:port", which shows whether the failure is ICE (no usable pair) or DTLS (ICE connected).
+    /// </summary>
+    public string Diagnostics()
+    {
+        string local, remote;
+        lock (_candidates)
+        {
+            local = string.Join(", ", _candidates.Select(c => Summarize(c.Candidate)));
+        }
+        lock (_remoteCandidates)
+        {
+            remote = string.Join(", ", _remoteCandidates.Select(Summarize));
+        }
+        var ice = Element.GetProperty<WebRTCICEConnectionState>("ice-connection-state");
+        var gathering = Element.GetProperty<WebRTCICEGatheringState>("ice-gathering-state");
+        return $"ice={ice} gathering={gathering} local=[{local}] remote=[{remote}]";
+    }
+
+    /// <summary>"candidate:f 1 UDP 2015363327 10.2.2.235 43210 typ host" → "host UDP 10.2.2.235:43210".</summary>
+    private static string Summarize(string candidate)
+    {
+        var parts = candidate.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var typ = Array.IndexOf(parts, "typ");
+        return parts.Length >= 6 && typ > 0 && typ + 1 < parts.Length
+            ? $"{parts[typ + 1]} {parts[2]} {parts[4]}:{parts[5]}"
+            : candidate;
     }
 
     public CandidateBatch LocalCandidates(int since)

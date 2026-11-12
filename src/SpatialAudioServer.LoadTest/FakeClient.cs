@@ -21,6 +21,7 @@ public sealed class FakeClient : IDisposable
     private readonly ManualResetEventSlim _negotiationNeeded = new();
     private readonly CancellationTokenSource _stop = new();
     private readonly BusWatcher _bus;
+    private readonly ILogger _log;
     private Task? _iceLoop;
     private int _receiving;
     private int _disposed;
@@ -49,7 +50,15 @@ public sealed class FakeClient : IDisposable
         {
             throw new InvalidOperationException($"Fake client send branch: {linked}");
         }
-        _bus = new BusWatcher(_pipeline, $"fake-{name}", log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+        _log = log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+        _bus = new BusWatcher(_pipeline, $"fake-{name}", _log);
+        _rtc.ConnectionStateChanged += state =>
+        {
+            if (state == Gst.WebRTC.WebRTCPeerConnectionState.Failed)
+            {
+                _log.LogWarning("{Name}: connection failed: {Diagnostics}", Name, _rtc.Diagnostics());
+            }
+        };
     }
 
     public string Name { get; }
@@ -164,6 +173,11 @@ public sealed class FakeClient : IDisposable
         }
         catch (OperationCanceledException)
         {
+        }
+        catch (Exception ex)
+        {
+            // Without this the loop would die silently and ICE would just fail later.
+            _log.LogError(ex, "{Name}: ICE candidate exchange stopped", Name);
         }
     }
 
