@@ -18,11 +18,12 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   `dotnet test src` runs 23 tests; `dotnet run --project src/SpatialAudioServer` serves HTTP 5000 / HTTPS 5001;
   `dotnet run --project src/SpatialAudioServer -- apikey create <label>` makes a control-API key.
 - **Phase 2 (media core) stages A–D done:** mix-minus over real WebRTC, live join/leave/mute, load tool
-  (`src/SpatialAudioServer.LoadTest`), and pluggable mix engines (`Media/Engines/`, chosen per room; engines
-  `pairchains` and `pairchains-lite`). `dotnet test src` runs 49 tests, with the end-to-end suites run once per engine.
-  The per-pair topology does not reach 32 people on this CPU (see PLAN.md Phase 2).
-- Next: the user has alternative mixer topologies to add as engines and compare (load tool `--engine a,b`).
-  The 32-person benchmark runs later from a second machine.
+  (`src/SpatialAudioServer.LoadTest`), and pluggable mix engines (`Media/Engines/`, chosen per room): `pairchains`,
+  `pairchains-lite` and `matrix` (audiointerleave + per-listener audiomixmatrix, the cheapest so far).
+  `dotnet test src` runs 58 tests, with the end-to-end suites run once per engine.
+- GStreamer 1.28.2 source is cloned (git-ignored) in `docs/reference/gstreamer` for reading element internals.
+- Next: the 32-person benchmark from a second machine (`--engine matrix,pairchains-lite`); more engines as the user
+  suggests them.
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.
@@ -37,5 +38,5 @@ on the old machine). They are ideas only: `audiomixer-test3` (per-pair chains, d
 `gstreamer-sharp-netcore` 0.0.8 and are not part of any build.
 
 ## Working preferences
-- Commits end with: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. Commit only when asked.
+- Commits end with: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commit only when asked.
 - The user wants questions asked when the spec is unclear.

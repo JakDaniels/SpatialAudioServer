@@ -27,10 +27,11 @@ internal sealed class RoomPipeline : IDisposable
     private readonly BusWatcher _bus;
     private int _disposed;
 
-    public RoomPipeline(Guid roomId, string engine, MediaOptions options, ILogger log)
+    public RoomPipeline(RoomSnapshot room, MediaOptions options, ILogger log)
     {
+        var roomId = room.Id;
         RoomId = roomId;
-        EngineName = engine;
+        EngineName = room.Engine;
         _options = options;
         _log = log;
         _pipeline = Pipeline.New($"room-{roomId:N}");
@@ -40,7 +41,7 @@ internal sealed class RoomPipeline : IDisposable
             throw new InvalidOperationException($"Room {roomId} pipeline refused to go to PLAYING.");
         }
         _bus = new BusWatcher(_pipeline, $"room-{roomId.ToString()[..8]}", log);
-        _engine = MixEngines.Create(engine, new MixEngineContext(roomId, _pipeline, _worker, options, log));
+        _engine = MixEngines.Create(room.Engine, new MixEngineContext(roomId, room.MaxParticipants, _pipeline, _worker, options, log));
     }
 
     public Guid RoomId { get; }
