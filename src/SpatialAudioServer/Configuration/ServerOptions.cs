@@ -73,6 +73,9 @@ public sealed class MediaOptions
     /// <summary>Opus bitrate of each listener's stereo mix, bits/s.</summary>
     public int OpusBitrate { get; set; } = 64000;
 
+    /// <summary>Mix engine for rooms created without one (see MixEngines; listed by GET /api/status).</summary>
+    public string Engine { get; set; } = Media.Engines.MixEngines.Default;
+
     /// <summary>Per-(source, listener) chain queue size; older audio is dropped beyond this.</summary>
     public uint ChainQueueMs { get; set; } = 200;
 }

@@ -47,7 +47,9 @@ Single ASP.NET Core (Kestrel) process:
 
 ### GStreamer pipeline design
 
-One `Pipeline` per room. Per participant:
+One `Pipeline` per room. Since 2026-11-12 the mix topology is pluggable: `RoomPipeline` owns the webrtcbin
+endpoints and the room's *mix engine* (`IMixEngine`, chosen per room) owns RTP in → RTP out — see "Mix engines"
+under Phase 2. The design below is the first engine, `pairchains`. Per participant:
 
 **Ingress (participant → server)**
 `webrtcbin` (one sendrecv audio transceiver) → `rtpopusdepay` → `opusdec` → `audioconvert` →
@@ -93,7 +95,8 @@ Lessons to apply from the earlier experiments:
 All control endpoints require `X-Api-Key` (or `Authorization: Bearer`).
 
 ```
-POST   /api/rooms                         {name, externalId?, maxParticipants?, metadata?}   -> room (201)
+POST   /api/rooms                         {name, externalId?, maxParticipants?, metadata?, engine?}   -> room (201)
+                                            (engine: mix engine name, default Media:Engine; fixed for the room's life)
 GET    /api/rooms[?externalId=]            -> [room]
 GET    /api/rooms/{roomId}                 -> room + participants
 DELETE /api/rooms/{roomId}                 -> disconnects everyone, tears down pipeline
@@ -106,7 +109,8 @@ DELETE /api/rooms/{roomId}/participants/{pid}   -> remove/disconnect
 PATCH  /api/rooms/{roomId}/participants/{pid}   {muted?, gain?, position?, orientation?}
                                             (position used later by spatial engine; stored now)
 
-GET    /api/status                         -> version, uptime, GStreamer version, plugin check, counts, limits
+GET    /api/status                         -> version, uptime, GStreamer version, plugin check, counts, limits,
+                                              process stats, defaultEngine, engines [{name, description}]
 ```
 
 Addressing by external id (OpenSim region/parcel UUID for rooms, avatar UUID for participants):
@@ -188,9 +192,9 @@ src/SpatialAudioServer/
   Configuration/             options classes (Server, Storage, Auth, Limits, Media sections)
   Api/                       minimal API endpoints, DTOs, API-key auth, problem-details mapping
   Rooms/                     RoomManager, models, validation (domain, no GStreamer types)
-  Media/                     GStreamer layer: GstRuntime (init/plugin check), IRoomMedia (+ NullRoomMedia until
-                             Phase 2), later RoomPipeline, ParticipantEndpoint (webrtcbin), ListenerMix,
-                             MixChain, PadProbeHelpers, DotDump
+  Media/                     GStreamer layer: GstRuntime, IRoomMedia/GstRoomMedia/NullRoomMedia, RoomPipeline
+                             (webrtcbin endpoints per room), WebRtcBin, RoomWorker, BusWatcher, NativeGObject
+  Media/Engines/             IMixEngine + MixEngines catalogue, MediaBlocks, one class per engine
   Hosting/                   StartupService, DevCertificate, ApiKeyCommand (CLI)
   Signalling/                SDP/ICE handling (Phase 3)
   Storage/                   SQLite stores + numbered migrations (PRAGMA user_version)
@@ -261,7 +265,36 @@ tested without GStreamer.
    **Finding: the per-pair chain topology does not reach the 32-person target on this CPU.** Cost is ~0.9–1% of a
    core per chain and chains grow as N(N-1): 32 people = 992 chains ≈ 9 cores, against the gate of < 60% of 4
    cores. Threads also grow as N² (each chain's `queue` is a streaming thread: ~1,500 for one 32-person room).
-   Next: choose an optimisation (decision pending with the user, 2026-11-12) before the 32-person benchmark.
+   **Stage D (2026-11-12): pluggable mix engines**, so alternative topologies can be compared under the same tests
+   and load runs (user's decision, instead of picking one optimisation up front).
+   - Boundary is **RTP in → RTP out**: `RoomPipeline` keeps webrtcbin, signalling, ICE, connection state and the
+     teardown order; `IMixEngine` (`Media/Engines/`) gets `AttachListener(pid, payloadType, webrtcbinSinkPad)` on
+     offer, `AttachSource(pid, rtpPad)` synchronously in pad-added, `Disconnect` (everything still running: take the
+     participant out of every mix) → webrtcbin to NULL → `Release` (remove the rest), plus participant
+     added/updated/removed, `MixedPairs` and `Counters`. Engines can therefore share encoders, skip decoding, or mix
+     in C#. Shared pieces live in `MediaBlocks` (Opus decoder/encoder bins, silence, link, idle-probe unlink).
+   - **Chosen per room**: `engine` on `POST /api/rooms` and `PUT /api/rooms/by-external/{id}`, default
+     `Media:Engine`; stored in `rooms.engine` (migration 3); an unknown stored engine falls back to the default with
+     a warning; an unknown `Media:Engine` stops start-up. `GET /api/status` lists the engines.
+   - **Same tests for every engine**: `MixSuite<TEngine>` and `MixChangeSuite<TEngine>` hold the end-to-end tests;
+     `EngineSuites.cs` has one marker type + two subclasses per engine, and `EngineCoverageTests` fails if a
+     registered engine has no suites. Adding an engine = implement `IMixEngine`, register it in `MixEngines`, add
+     the subclasses.
+   - **Load tool**: `--engine a,b,…` runs the same load against each engine in turn and prints a comparison table.
+   - Engines so far: `pairchains` (stage A–C design) and `pairchains-lite` (no per-chain `queue`/`audioamplify`;
+     gain is the audiomixer pad's `volume`; threads ∝ N instead of N²).
+   - First comparison (one room, server + tool on the N6005, `--engine pairchains,pairchains-lite`, 15 s):
+
+     | participants | engine | server CPU | threads | heard min |
+     |---|---|---|---|---|
+     | 8 | pairchains | 54% of 1 core | 173 | 100% |
+     | 8 | pairchains-lite | 57% of 1 core | 117 | 100% |
+     | 16 | pairchains | 204% of 1 core (51% of 4) | 445 | 100% |
+     | 16 | pairchains-lite | 121% of 1 core (30% of 4) | 204 | 100% |
+
+     Dropping the per-chain queue threads saves ~40% at 16 (context switching grows with threads), but cost is
+     still per pair: extrapolating lite to 32 people (992 pairs) gives ~5 cores, still over the gate.
+   Next: the user's alternative topologies as further engines; compare before the 32-person benchmark.
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.

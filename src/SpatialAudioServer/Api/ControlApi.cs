@@ -2,20 +2,21 @@ using System.Reflection;
 using Microsoft.Extensions.Options;
 using SpatialAudioServer.Configuration;
 using SpatialAudioServer.Media;
+using SpatialAudioServer.Media.Engines;
 using SpatialAudioServer.Rooms;
 
 namespace SpatialAudioServer.Api;
 
 public sealed record RoomDetails(
     Guid Id, string Name, string? ExternalId, int MaxParticipants, System.Text.Json.Nodes.JsonObject? Metadata,
-    DateTimeOffset CreatedAt, int ParticipantCount, IReadOnlyList<ParticipantSnapshot> Participants);
+    DateTimeOffset CreatedAt, int ParticipantCount, string Engine, IReadOnlyList<ParticipantSnapshot> Participants);
 
 public sealed record JoinResponse(
     Guid ParticipantId, Guid RoomId, string JoinToken, string SignalUrl, DateTimeOffset ExpiresAt, Guid? ReplacedParticipantId);
 
 public sealed record StatusResponse(
     string Version, DateTimeOffset StartedAt, double UptimeSeconds, GstStatusDto Gstreamer, int Rooms, int Participants,
-    LimitOptions Limits, ProcessStatus Process);
+    LimitOptions Limits, ProcessStatus Process, string DefaultEngine, IReadOnlyList<MixEngineInfo> Engines);
 
 /// <summary>Server process resources; the load tool samples CpuSeconds twice to get CPU use over a window.</summary>
 public sealed record ProcessStatus(double CpuSeconds, int ProcessorCount, long WorkingSetBytes, int Threads);
@@ -32,13 +33,14 @@ public static class ControlApi
     {
         var api = app.MapGroup("/api").RequireAuthorization();
 
-        api.MapGet("/status", (RoomManager rooms, GstRuntime gst, IOptions<LimitOptions> limits, ServerClock clock) =>
+        api.MapGet("/status", (RoomManager rooms, GstRuntime gst, IOptions<LimitOptions> limits, IOptions<MediaOptions> media, ServerClock clock) =>
         {
             var g = gst.Status;
             return new StatusResponse(
                 Version, clock.StartedAt, Math.Round(clock.Uptime.TotalSeconds, 1),
                 new GstStatusDto(g.Enabled, g.Ok, g.Version, g.MissingElements, g.Error),
-                rooms.RoomCount, rooms.ParticipantCount, limits.Value, CurrentProcess());
+                rooms.RoomCount, rooms.ParticipantCount, limits.Value, CurrentProcess(),
+                media.Value.Engine, MixEngines.All);
         });
 
         var roomsApi = api.MapGroup("/rooms");
@@ -81,7 +83,7 @@ public static class ControlApi
         room.MapGet("/", (HttpContext http, RoomManager rooms) =>
         {
             var (r, participants) = rooms.GetRoom(ResolveRoom(http, rooms));
-            return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, participants);
+            return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, r.Engine, participants);
         });
 
         room.MapDelete("/", (HttpContext http, RoomManager rooms) =>

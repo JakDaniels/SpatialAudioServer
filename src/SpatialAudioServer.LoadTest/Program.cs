@@ -49,19 +49,46 @@ public static class LoadTestProgram
         using var http = new HttpClient(handler) { BaseAddress = options.Server, Timeout = TimeSpan.FromSeconds(60) };
         http.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
 
+        var engines = options.Engines.Count > 0 ? options.Engines : [(await Status(http)).DefaultEngine];
+        var results = new List<RunResult>();
+        foreach (var engine in engines)
+        {
+            if (results.Count > 0)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3)); // let the previous run's teardown finish
+            }
+            results.Add(await RunAsync(http, options, engine, logs));
+        }
+
+        if (results.Count > 1)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"{"engine",-20} {"result",-6} {"CPU %core",9} {"% of all",8} {"MB",6} {"threads",7} {"heard min",9}");
+            foreach (var r in results)
+            {
+                Console.WriteLine($"{r.Engine,-20} {(r.Pass ? "PASS" : "FAIL"),-6} {r.CpuCores * 100,9:F0} {r.CpuCores * 100 / r.Cores,8:F0} " +
+                    $"{r.MemoryBytes / 1048576.0,6:F0} {r.Threads,7} {r.HeardMin,9:P1}");
+            }
+        }
+        return results.All(r => r.Pass) ? 0 : 1;
+    }
+
+    private sealed record RunResult(string Engine, bool Pass, double CpuCores, int Cores, long MemoryBytes, int Threads, double HeardMin);
+
+    private static async Task<RunResult> RunAsync(HttpClient http, Options options, string engine, ILoggerFactory logs)
+    {
         var n = options.Participants;
         var volume = Math.Min(0.1, 0.6 / Math.Max(1, n - 1)); // keep the sum of n-1 tones under full scale
         var tones = Enumerable.Range(0, n).Select(i => 300.0 + 50 * i).ToArray(); // exact Goertzel bins at 20 ms
-        Console.WriteLine($"Server {options.Server}: {options.Rooms} room(s) x {n} participants, tone volume {volume:F3}");
+        Console.WriteLine($"Server {options.Server}, engine {engine}: {options.Rooms} room(s) x {n} participants, tone volume {volume:F3}");
 
         var rooms = new List<Guid>();
         var clients = new List<(FakeClient Client, int Room)>();
-        var exit = 1;
         try
         {
             for (var r = 0; r < options.Rooms; r++)
             {
-                var room = await Post<RoomSnapshot>(http, "api/rooms", new { name = $"loadtest-{r}", maxParticipants = n });
+                var room = await Post<RoomSnapshot>(http, "api/rooms", new { name = $"loadtest-{engine}-{r}", maxParticipants = n, engine });
                 rooms.Add(room.Id);
                 for (var i = 0; i < n; i++)
                 {
@@ -96,9 +123,10 @@ public static class LoadTestProgram
 
             var scores = clients.Select(c => Score(c, clients)).ToList();
             var serverCpu = (after.Process.CpuSeconds - before.Process.CpuSeconds) / elapsed;
-            var chains = options.Rooms * n * (n - 1);
+            var pairs = options.Rooms * n * (n - 1);
             Console.WriteLine();
-            Console.WriteLine($"participants      {clients.Count} ({chains} mix chains)");
+            Console.WriteLine($"engine            {engine}");
+            Console.WriteLine($"participants      {clients.Count} ({pairs} source→listener pairs)");
             Console.WriteLine($"server CPU        {serverCpu * 100:F0}% of one core = {serverCpu * 100 / after.Process.ProcessorCount:F0}% of {after.Process.ProcessorCount} cores");
             Console.WriteLine($"server memory     {after.Process.WorkingSetBytes / 1048576.0:F0} MB, {after.Process.Threads} threads");
             Console.WriteLine($"load tool CPU     {selfCpu / elapsed * 100:F0}% of one core (shares the machine if run on the server)");
@@ -108,7 +136,8 @@ public static class LoadTestProgram
 
             var ok = scores.All(s => s.HeardFraction >= 0.99 && s.SelfPresence < 0.02 && s.ForeignPresence < 0.02);
             Console.WriteLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
-            exit = ok ? 0 : 1;
+            return new RunResult(engine, ok, serverCpu, after.Process.ProcessorCount, after.Process.WorkingSetBytes, after.Process.Threads,
+                scores.Min(s => s.HeardFraction));
         }
         finally
         {
@@ -121,7 +150,6 @@ public static class LoadTestProgram
                 await http.DeleteAsync($"api/rooms/{room}");
             }
         }
-        return exit;
     }
 
     /// <summary>
@@ -157,12 +185,16 @@ public static class LoadTestProgram
     private static async Task<StatusResponse> Status(HttpClient http) =>
         (await http.GetFromJsonAsync<StatusResponse>("api/status", Json))!;
 
-    private sealed record Options(System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure)
+    private sealed record Options(
+        System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure,
+        IReadOnlyList<string> Engines)
     {
         public const string Usage =
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
-            "                                   [--duration 20] [--jitter-ms 100] [--insecure]\n" +
-            "  The API key can also come from SAS_API_KEY. --insecure accepts the server's self-signed certificate.";
+            "                                   [--duration 20] [--jitter-ms 100] [--insecure] [--engine a,b,...]\n" +
+            "  The API key can also come from SAS_API_KEY. --insecure accepts the server's self-signed certificate.\n" +
+            "  --engine runs the same load against each named mix engine in turn and prints a comparison\n" +
+            "  (default: the server's default engine; GET /api/status lists them).";
 
         public static Options Parse(string[] args)
         {
@@ -172,6 +204,7 @@ public static class LoadTestProgram
             var duration = TimeSpan.FromSeconds(20);
             uint jitter = 100;
             var insecure = false;
+            var engines = new List<string>();
             for (var i = 0; i < args.Length; i++)
             {
                 string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -184,6 +217,7 @@ public static class LoadTestProgram
                     case "--duration": duration = TimeSpan.FromSeconds(double.Parse(Value(), CultureInfo.InvariantCulture)); break;
                     case "--jitter-ms": jitter = uint.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--insecure": insecure = true; break;
+                    case "--engine": engines.AddRange(Value().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)); break;
                     default: throw new ArgumentException($"Unknown argument {args[i]}.");
                 }
             }
@@ -195,7 +229,7 @@ public static class LoadTestProgram
             {
                 throw new ArgumentException("--participants must be 1–32 and --rooms at least 1.");
             }
-            return new Options(server, key, participants, rooms, duration, jitter, insecure);
+            return new Options(server, key, participants, rooms, duration, jitter, insecure, engines);
         }
     }
 }

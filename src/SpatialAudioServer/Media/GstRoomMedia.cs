@@ -14,7 +14,7 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
 
     public void RoomCreated(RoomSnapshot room)
     {
-        var pipeline = new RoomPipeline(room.Id, options.Value, log);
+        var pipeline = new RoomPipeline(room.Id, room.Engine, options.Value, log);
         pipeline.StateChanged += (pid, state) => ParticipantStateChanged?.Invoke(room.Id, pid, state);
         if (!_rooms.TryAdd(room.Id, pipeline))
         {
@@ -52,8 +52,11 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
     public Task<CandidateBatch> WaitForLocalCandidatesAsync(Guid roomId, Guid participantId, int since, TimeSpan wait, CancellationToken cancel) =>
         Room(roomId).WaitForLocalCandidatesAsync(participantId, since, wait, cancel);
 
-    /// <summary>For tests and stats: live (source, listener) chains in a room.</summary>
-    internal Task<int> ChainCountAsync(Guid roomId) => Room(roomId).ChainCountAsync();
+    /// <summary>For tests and stats: (source, listener) pairs the room's engine is mixing.</summary>
+    internal Task<int> MixedPairsAsync(Guid roomId) => Room(roomId).MixedPairsAsync();
+
+    /// <summary>For tests and stats: the room's engine-specific counters.</summary>
+    internal Task<IReadOnlyDictionary<string, long>> CountersAsync(Guid roomId) => Room(roomId).CountersAsync();
 
     public void Dispose()
     {

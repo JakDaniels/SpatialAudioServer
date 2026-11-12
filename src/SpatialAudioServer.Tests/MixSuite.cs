@@ -5,9 +5,11 @@ using SpatialAudioServer.Rooms;
 
 namespace SpatialAudioServer.Tests;
 
-/// <summary>End-to-end mixing through real WebRTC: fake clients send tones and check what comes back.</summary>
-[Collection("media")]
-public sealed class MixTests : MediaTestBase
+/// <summary>
+/// End-to-end mixing through real WebRTC: fake clients send tones and check what comes back. Abstract: each mix
+/// engine runs it through a concrete subclass in EngineSuites.cs.
+/// </summary>
+public abstract class MixSuite<TEngine>() : MediaTestBase(TEngine.Name) where TEngine : IEngineUnderTest
 {
     [Fact]
     public async Task Two_participants_hear_each_other_but_not_themselves()
@@ -20,6 +22,8 @@ public sealed class MixTests : MediaTestBase
         AssertHears(measured, Others(clients));
         var details = await Api.GetFromJsonAsync<RoomDetails>($"/api/rooms/{room.Id}", Json.Options);
         Assert.All(details!.Participants, p => Assert.Equal(ParticipantState.Connected, p.State));
+        Assert.Equal(TEngine.Name, details.Engine);
+        Assert.Equal(2, await Media.MixedPairsAsync(room.Id));
     }
 
     [Fact]
@@ -33,5 +37,6 @@ public sealed class MixTests : MediaTestBase
         }
 
         AssertHears(await SettleAndMeasureAsync(clients, Others(clients)), Others(clients));
+        Assert.Equal(12, await Media.MixedPairsAsync(room.Id));
     }
 }

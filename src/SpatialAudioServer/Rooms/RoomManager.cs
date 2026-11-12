@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Options;
 using SpatialAudioServer.Configuration;
 using SpatialAudioServer.Media;
+using SpatialAudioServer.Media.Engines;
 using SpatialAudioServer.Storage;
 
 namespace SpatialAudioServer.Rooms;
@@ -18,6 +19,7 @@ public sealed class RoomManager(
     IRoomMedia media,
     IOptions<LimitOptions> limits,
     IOptions<AuthOptions> auth,
+    IOptions<MediaOptions> mediaOptions,
     TimeProvider time,
     ILogger<RoomManager> log)
 {
@@ -66,7 +68,12 @@ public sealed class RoomManager(
             joinTokens.DeleteAll();
             foreach (var record in rooms.All())
             {
-                _rooms[record.Id] = new Room(record);
+                if (record.Engine is { } engine && !MixEngines.Exists(engine))
+                {
+                    log.LogWarning("Room {RoomId} uses mix engine '{Engine}', which this server does not have; using {Default}",
+                        record.Id, engine, DefaultEngine);
+                }
+                _rooms[record.Id] = new Room(record, DefaultEngine);
             }
             restored = _rooms.Values.Select(r => r.Snapshot()).ToList();
             log.LogInformation("Restored {Rooms} rooms; closed {Sessions} sessions left open by the previous run",
@@ -101,7 +108,7 @@ public sealed class RoomManager(
     public (RoomSnapshot Room, bool Created) EnsureRoom(string externalId, EnsureRoomCommand? command)
     {
         var normalized = ExternalIds.Normalize(externalId);
-        var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata);
+        var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine);
         ValidateCreate(create);
 
         RoomSnapshot snapshot;
@@ -331,6 +338,7 @@ public sealed class RoomManager(
             .Optional("externalId", command.ExternalId, Validation.MaxExternalIdLength)
             .Range("maxParticipants", command.MaxParticipants, 1, limits.Value.MaxParticipantsPerRoom)
             .Metadata("metadata", command.Metadata)
+            .OneOf("engine", command.Engine, MixEngines.Exists, MixEngines.All.Select(e => e.Name))
             .ThrowIfInvalid();
 
     private RoomSnapshot CreateRoomLocked(CreateRoomCommand command)
@@ -342,17 +350,20 @@ public sealed class RoomManager(
         }
         var record = new RoomRecord(
             Guid.NewGuid(), command.Name!.Trim(), command.ExternalId, command.MaxParticipants ?? limit.MaxParticipantsPerRoom,
-            command.Metadata?.ToJsonString(), time.GetUtcNow());
+            command.Metadata?.ToJsonString(), time.GetUtcNow(), command.Engine ?? DefaultEngine);
         rooms.Insert(record);
-        var room = new Room(record);
+        var room = new Room(record, DefaultEngine);
         _rooms[room.Id] = room;
         activity.Event("room.created", room.Id, detail: room.Name);
         return room.Snapshot();
     }
 
+    /// <summary>The configured default engine; an unknown name is a configuration error, caught at start-up.</summary>
+    private string DefaultEngine => mediaOptions.Value.Engine;
+
     private void RoomCreated(RoomSnapshot snapshot)
     {
-        log.LogInformation("Room {RoomId} '{Name}' created", snapshot.Id, snapshot.Name);
+        log.LogInformation("Room {RoomId} '{Name}' created (engine {Engine})", snapshot.Id, snapshot.Name, snapshot.Engine);
         media.RoomCreated(snapshot);
     }
 
@@ -378,7 +389,7 @@ public sealed class RoomManager(
         activity.Event("participant.left", room.Id, participantId, reason);
     }
 
-    private sealed class Room(RoomRecord record)
+    private sealed class Room(RoomRecord record, string defaultEngine)
     {
         public Guid Id { get; } = record.Id;
         public string Name { get; } = record.Name;
@@ -386,10 +397,11 @@ public sealed class RoomManager(
         public int MaxParticipants { get; } = record.MaxParticipants;
         public string? Metadata { get; } = record.MetadataJson;
         public DateTimeOffset CreatedAt { get; } = record.CreatedAt;
+        public string Engine { get; } = record.Engine is { } e && MixEngines.Exists(e) ? e : defaultEngine;
         public Dictionary<Guid, Participant> Participants { get; } = [];
 
         public RoomSnapshot Snapshot() =>
-            new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count);
+            new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine);
 
         public IReadOnlyList<ParticipantSnapshot> ParticipantSnapshots() =>
             Participants.Values.OrderBy(p => p.JoinedAt).Select(p => p.Snapshot()).ToList();

@@ -68,6 +68,11 @@ internal static class Migrations
         DROP INDEX ix_rooms_external_id;
         CREATE UNIQUE INDEX ux_rooms_external_id ON rooms(external_id);
         """,
+
+        // 3: each room's mix engine. NULL (rooms created before engines existed) means the server default.
+        """
+        ALTER TABLE rooms ADD COLUMN engine TEXT;
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;
