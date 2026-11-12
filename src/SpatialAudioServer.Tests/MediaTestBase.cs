@@ -84,6 +84,14 @@ public abstract class MediaTestBase : IDisposable
             }
         }
 
+        // Both directions of trickle ICE must work: on one machine ICE also connects from the client's candidates
+        // alone, which once hid a client that could not read the server's.
+        Assert.All(clients, c =>
+        {
+            Assert.Null(c.IceError);
+            Assert.True(c.RemoteCandidates > 0, $"{c.Name} never received a server candidate.");
+        });
+
         clients.ToList().ForEach(c => c.Meter.Reset());
         await Task.Delay(window ?? TimeSpan.FromSeconds(2));
         return clients.ToDictionary(c => c, c => c.Meter.Presence());
