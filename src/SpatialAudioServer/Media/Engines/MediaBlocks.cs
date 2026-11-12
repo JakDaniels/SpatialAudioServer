@@ -29,7 +29,8 @@ internal static class MediaBlocks
     {
         var bin = Global.ParseBinFromDescription(
             "audioconvert ! capsfilter caps=\"audio/x-raw,format=S16LE,rate=48000,channels=2\" ! " +
-            $"opusenc bitrate={options.OpusBitrate.ToString(CultureInfo.InvariantCulture)} inband-fec=true ! " +
+            $"opusenc bitrate={options.OpusBitrate.ToString(CultureInfo.InvariantCulture)} " +
+            $"complexity={Math.Clamp(options.OpusComplexity, 0, 10).ToString(CultureInfo.InvariantCulture)} inband-fec=true ! " +
             $"rtpopuspay pt={payloadType} ! " +
             $"capsfilter caps=\"{SendCaps(payloadType)}\"",
             ghostUnlinkedPads: true);
