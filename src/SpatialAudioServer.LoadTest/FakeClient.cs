@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Gst;
 using Microsoft.Extensions.Logging;
 using SpatialAudioServer.Media;
@@ -23,7 +25,15 @@ public sealed class FakeClient : IDisposable
     private readonly BusWatcher _bus;
     private readonly ILogger _log;
     private Task? _iceLoop;
+    /// <summary>The server's JSON conventions: camelCase, enums as camelCase strings.</summary>
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    };
+
     private int _receiving;
+    private int _remoteCandidates;
+    private volatile Exception? _iceError;
     private int _disposed;
     private string? _sessionToken;
 
@@ -71,6 +81,12 @@ public sealed class FakeClient : IDisposable
 
     public bool Receiving => Volatile.Read(ref _receiving) == 1;
 
+    /// <summary>Server candidates received and applied so far.</summary>
+    public int RemoteCandidates => Volatile.Read(ref _remoteCandidates);
+
+    /// <summary>Why the candidate exchange stopped early, if it did.</summary>
+    public Exception? IceError => _iceError;
+
     /// <summary>Offers to the server with the participant's join token and keeps trickling ICE until disposed.</summary>
     public async Task ConnectAsync(HttpClient http, Guid participantId, string joinToken, CancellationToken cancel = default)
     {
@@ -95,7 +111,7 @@ public sealed class FakeClient : IDisposable
         {
             throw new HttpRequestException($"Offer failed: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(cancel)}");
         }
-        var answer = (await response.Content.ReadFromJsonAsync<OfferResponse>(cancel))!;
+        var answer = (await response.Content.ReadFromJsonAsync<OfferResponse>(Json, cancel))!;
         _sessionToken = answer.SessionToken;
         await Task.Run(() => _rtc.ApplyRemoteAnswer(answer.Sdp), cancel);
 
@@ -159,10 +175,11 @@ public sealed class FakeClient : IDisposable
                 {
                     return; // participant removed
                 }
-                var remote = (await response.Content.ReadFromJsonAsync<CandidatesResponse>(cancel))!;
+                var remote = (await response.Content.ReadFromJsonAsync<CandidatesResponse>(Json, cancel))!;
                 foreach (var c in remote.Candidates)
                 {
                     _rtc.AddRemoteCandidate(new IceCandidate(c.SdpMLineIndex, c.Candidate!));
+                    Interlocked.Increment(ref _remoteCandidates);
                 }
                 received = remote.Next;
                 if (remote.Complete && local.Complete && remote.State == Rooms.ParticipantState.Connected)
@@ -176,7 +193,9 @@ public sealed class FakeClient : IDisposable
         }
         catch (Exception ex)
         {
-            // Without this the loop would die silently and ICE would just fail later.
+            // Without this the loop would die silently and ICE would just fail later (or, on one machine, still
+            // connect from one-sided candidates and hide the bug).
+            _iceError = ex;
             _log.LogError(ex, "{Name}: ICE candidate exchange stopped", Name);
         }
     }

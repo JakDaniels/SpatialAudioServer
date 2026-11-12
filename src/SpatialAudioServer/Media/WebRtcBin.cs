@@ -172,7 +172,7 @@ public sealed partial class WebRtcBin : IDisposable
         string local, remote;
         lock (_candidates)
         {
-            local = string.Join(", ", _candidates.Select(c => Summarize(c.Candidate)));
+            local = string.Join(", ", _candidates.Where(c => !string.IsNullOrWhiteSpace(c.Candidate)).Select(c => Summarize(c.Candidate)));
         }
         lock (_remoteCandidates)
         {
