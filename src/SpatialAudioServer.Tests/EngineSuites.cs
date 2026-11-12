@@ -15,11 +15,6 @@ public sealed class PairChains : IEngineUnderTest
     public static string Name => "pairchains";
 }
 
-public sealed class PairChainsLite : IEngineUnderTest
-{
-    public static string Name => "pairchains-lite";
-}
-
 public sealed class Matrix : IEngineUnderTest
 {
     public static string Name => "matrix";
@@ -35,12 +30,6 @@ public sealed class PairChainsMix : MixSuite<PairChains>;
 
 [Collection("media")]
 public sealed class PairChainsMixChanges : MixChangeSuite<PairChains>;
-
-[Collection("media")]
-public sealed class PairChainsLiteMix : MixSuite<PairChainsLite>;
-
-[Collection("media")]
-public sealed class PairChainsLiteMixChanges : MixChangeSuite<PairChainsLite>;
 
 [Collection("media")]
 public sealed class MatrixMix : MixSuite<Matrix>;

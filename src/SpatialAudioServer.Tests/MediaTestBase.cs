@@ -45,12 +45,12 @@ public abstract class MediaTestBase : IDisposable
         await (await Api.PostAsJsonAsync("/api/rooms", new { name = "media test", engine = Engine })).Read<RoomSnapshot>();
 
     /// <summary>Adds a participant via the control API and connects a fake client sending <c>Tones[index]</c>.</summary>
-    protected async Task<FakeClient> JoinAsync(Guid roomId, int index, bool talking = true)
+    protected async Task<FakeClient> JoinAsync(Guid roomId, int index, bool talking = true, bool viewerStyle = false)
     {
         var response = await Api.PostAsJsonAsync($"/api/rooms/{roomId}/participants", new { displayName = $"fake{index}" });
         response.EnsureSuccessStatusCode();
         var join = await response.Read<JoinResponse>();
-        var client = new FakeClient($"fake{index}", Tones[index], Tones, talking: talking);
+        var client = new FakeClient($"fake{index}", Tones[index], Tones, talking: talking, viewerStyle: viewerStyle);
         _clients.Add(client);
         await client.ConnectAsync(Signal, join.ParticipantId, join.JoinToken);
         return client;
@@ -86,7 +86,7 @@ public abstract class MediaTestBase : IDisposable
 
         // Both directions of trickle ICE must work: on one machine ICE also connects from the client's candidates
         // alone, which once hid a client that could not read the server's.
-        Assert.All(clients, c =>
+        Assert.All(clients.Where(c => !c.ViewerStyle), c => // viewer-style clients take candidates from the answer only
         {
             Assert.Null(c.IceError);
             Assert.True(c.RemoteCandidates > 0, $"{c.Name} never received a server candidate.");

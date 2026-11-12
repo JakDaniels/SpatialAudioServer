@@ -19,13 +19,18 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   `dotnet run --project src/SpatialAudioServer -- apikey create <label>` makes a control-API key.
 - **Phase 2 (media core) stages A–D done:** mix-minus over real WebRTC, live join/leave/mute, load tool
   (`src/SpatialAudioServer.LoadTest`), and pluggable mix engines (`Media/Engines/`, chosen per room): `pairchains`,
-  `pairchains-lite`, `matrix` (audiointerleave + per-listener audiomixmatrix) and `matrix-shared` (talkers get
-  personal mixes, everyone else shares one encoder). Server Opus defaults: complexity 5, 40 ms frames.
-  `dotnet test src` runs 69 tests, with the end-to-end suites run once per engine.
+  `matrix` (audiointerleave + per-listener audiomixmatrix) and `matrix-shared` (default: talkers get personal
+  mixes, everyone else shares one encoder). Server Opus defaults: complexity 5, 40 ms frames.
+  `dotnet test src` runs 65 tests, with the end-to-end suites run once per engine.
 - GStreamer 1.28.2 source is cloned (git-ignored) in `docs/reference/gstreamer` for reading element internals.
 - Load runs go from a Ubuntu 22.04 box using the committed self-contained tool (`scripts/loadtest-linux-x64/`,
   rebuild with `scripts/build-loadtest.sh`). 32 people / 3 talkers: matrix-shared 49% of 4 cores (meets the
-  < 60% gate), matrix 64%. Next: pick the default engine, then Phase 3 (test web client, STUN/TURN, reconnect).
+  < 60% gate), matrix 64%. Phase 2 done.
+- Firestorm viewer source (git-ignored) is in `docs/reference/phoenix-firestorm`; its WebRTC protocol is summarised
+  in PLAN.md Phase 7 (viewer-style fake clients + `trickle:false` answers cover it in tests).
+- **Phase 3 started:** test web client at `/client/` (join link or API-key test mode), `Media:IceServers`,
+  `GET /signal/{id}/config`. Verified in headless Chrome. Next: server-side drop on prolonged ICE failure, manual
+  Firefox/Chrome LAN test by the user; an intermittent test failure is noted in PLAN.md Phase 3.
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.

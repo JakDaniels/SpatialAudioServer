@@ -25,14 +25,14 @@ public sealed class EngineSelectionTests : IDisposable
 
         Assert.Equal(MixEngines.Default, status.DefaultEngine);
         Assert.Contains(status.Engines, e => e.Name == "pairchains");
-        Assert.Contains(status.Engines, e => e.Name == "pairchains-lite");
+        Assert.Contains(status.Engines, e => e.Name == "matrix");
         Assert.All(status.Engines, e => Assert.False(string.IsNullOrWhiteSpace(e.Description)));
     }
 
     [Fact]
     public async Task A_room_uses_the_requested_engine_or_the_configured_default()
     {
-        using var server = Server(new Dictionary<string, string?> { ["Media:Engine"] = "pairchains-lite" });
+        using var server = Server(new Dictionary<string, string?> { ["Media:Engine"] = "matrix" });
         var client = server.CreateAuthedClient();
 
         var chosen = await (await client.PostAsJsonAsync("/api/rooms", new { name = "A", engine = "pairchains" })).Read<RoomSnapshot>();
@@ -40,7 +40,7 @@ public sealed class EngineSelectionTests : IDisposable
         var ensured = await (await client.PutAsJsonAsync("/api/rooms/by-external/region-c", new { engine = "pairchains" })).Read<RoomSnapshot>();
 
         Assert.Equal("pairchains", chosen.Engine);
-        Assert.Equal("pairchains-lite", defaulted.Engine);
+        Assert.Equal("matrix", defaulted.Engine);
         Assert.Equal("pairchains", ensured.Engine);
         var details = await client.GetFromJsonAsync<RoomDetails>($"/api/rooms/{chosen.Id}", Json.Options);
         Assert.Equal("pairchains", details!.Engine);
@@ -63,7 +63,7 @@ public sealed class EngineSelectionTests : IDisposable
         Guid roomId;
         using (var server = Server())
         {
-            roomId = (await (await server.CreateAuthedClient().PostAsJsonAsync("/api/rooms", new { name = "A", engine = "pairchains-lite" }))
+            roomId = (await (await server.CreateAuthedClient().PostAsJsonAsync("/api/rooms", new { name = "A", engine = "matrix" }))
                 .Read<RoomSnapshot>()).Id;
         }
         // A room stored by an older or newer server whose engine this one lacks.
@@ -73,7 +73,7 @@ public sealed class EngineSelectionTests : IDisposable
         using var restarted = Server();
         var rooms = (await restarted.CreateAuthedClient().GetFromJsonAsync<List<RoomSnapshot>>("/api/rooms", Json.Options))!;
 
-        Assert.Equal("pairchains-lite", rooms.Single(r => r.Id == roomId).Engine);
+        Assert.Equal("matrix", rooms.Single(r => r.Id == roomId).Engine);
         Assert.Equal(MixEngines.Default, rooms.Single(r => r.Name == "Old").Engine);
     }
 

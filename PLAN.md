@@ -359,9 +359,30 @@ tested without GStreamer.
 
      **matrix-shared meets the Phase 2 gate (< 60% of 4 cores at 32 participants).** (The tool's "992 pairs" label
      counts n(n−1) regardless of `--talkers`; with 3 talkers 93 pairs are actually mixed.)
-   Next: choose the default engine (Media:Engine is still pairchains), then Phase 3.
+   **Decided 2026-11-12:** default engine `matrix-shared`; `pairchains-lite` removed. Phase 2 done.
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
+   **Started 2026-11-12:**
+   - **Test web client** at `/client/` (`wwwroot/client/`: `index.html`, `client.js`, `client.css`; no build step;
+     `/` redirects there). Two ways in: a **join link** `?participant=…&token=…[&room=…]` (what an integration hands a
+     user; a click is needed for mic permission/autoplay), or **test mode** with a control-API key kept in
+     localStorage: list/create rooms (engine selectable), join, and "Invite link" (creates another participant and
+     copies its one-time link, valid 5 min). Mic with echo cancellation / noise suppression / auto gain toggles;
+     offer munged to `stereo=1` (Chrome); trickle ICE both ways; mic and mix level meters; mute, volume, leave;
+     live stats (bitrate in/out, codec + channels, loss, jitter, RTT, candidate path); automatic reconnect on
+     failed / prolonged disconnected (new RTCPeerConnection, re-offer with the session token, backoff 1–15 s, 6
+     tries); leaves on page hide. Needs HTTPS off-localhost: `https://<server>:5001/client/`.
+   - Verified in headless Chrome 157 (fake mic, two tabs via join links): connected in ~250 ms, Opus 48 kHz **2 ch**
+     received at 64 kbit/s, no loss, host path; both participants `connected` on the server.
+   - **ICE servers**: `Media:IceServers` (RTCIceServer shape: `urls`, `username`, `credential`). webrtcbin uses the
+     first `stun:` URL and every `turn:`/`turns:` URL; clients get the list from `GET /signal/{id}/config`, which
+     accepts the join token without consuming it (or the session token).
+   - Still to do: server-side drop of participants whose connection stays failed/disconnected (timeout, event
+     logged); TURN tested for real; Firefox + Chrome manual tests on the LAN.
+   - **Open intermittent issue:** 1 failure in ~6 full runs: in `Deleting_a_room_with_connected_participants` (pairchains), in
+     the fresh second room one direction (fake2 → fake3) never came up within 20 s while the other worked; 12/12
+     passes when re-run alone. Not yet diagnosed (candidates: a rare ingress/answer race, or interference from the
+     deleted room's teardown running concurrently).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.
 5. **Hardening.** Limits, input validation, token expiry, rate limiting, graceful shutdown, Dockerfile,
    Windows/Linux run docs, load test using the GStreamer fake-client tool.
@@ -369,6 +390,33 @@ tested without GStreamer.
    interface computing gain/pan per (source, listener) – default policy = constant gain, centre pan.
    Distance/culling policy comes in the later spatial project.
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
+   **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
+   `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**
+   - **Signalling goes through the simulator's capabilities**, which the region module will have to serve/proxy:
+     `ProvisionVoiceAccountRequest` POST (LLSD) `{jsep:{type:"offer", sdp}, channel_type:"local",
+     parcel_local_id?, voice_server_type:"webrtc"}` → `{jsep:{type:"answer", sdp}, viewer_session}`; logout with
+     `{logout:true, viewer_session}`. `VoiceSignalingRequest` POST carries the viewer's ICE candidates in batches
+     (`candidates:[{sdpMid, sdpMLineIndex, candidate}]`, then `candidate:{completed:true}`). There is **no path
+     for server candidates to the viewer**: they must be in the answer. → Our offer endpoint now takes
+     `trickle:false`, which waits (≤ 5 s) for ICE gathering and embeds all candidates + `a=end-of-candidates`.
+   - **The viewer is the offerer** (we answer: fits). It creates an ordered data channel `"SLData"` *before* its
+     audio track, so its offer has `m=application` (possibly first) plus `m=audio`; webrtcbin answers both (needs
+     `sctpenc`/`sctpdec`, now in the start-up check). Our m-line lookup handles any order.
+   - **SDP munging**: the viewer rewrites the Opus rtpmap to `opus/48000/2` (LF only) and appends a second
+     `a=fmtp:<pt> minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxplaybackrate=48000;…` *after the original
+     fmtp line's CR*. GStreamer's SDP parser treats CR as a line end, so it parses as two fmtp lines; our helpers now
+     split on CR and LF too. The viewer accepts stereo from us; it may send stereo (we downmix to mono).
+   - Viewer ICE uses UDP ports 60000–60100 and SL's STUN servers (`stun{1..3}.<grid>.secondlife.io:3478`).
+   - **Data channel (JSON) viewer → server**: positions every ≥ 0.1 s when changed:
+     `{"sp":{x,y,z}, "sh":{x,y,z,w}, "lp":{x,y,z}, "lh":{x,y,z,w}}` = speaker (avatar) position/rotation and
+     listener (camera, tethered to within 50 m of the avatar) position/rotation, region coordinates in **cm** and
+     quaternions ×100, as integers. Also `{"j":{"p":true}}` join (p = primary region), `{"ug":{"<agent>":gain×220}}`
+     per-peer gain, `{"m":{"<agent>":bool}}` per-peer mute. Server positions are meant to be "tethered" to the
+     simulator's authoritative avatar positions (anti-eavesdropping).
+   - **Data channel server → viewer**: object keyed by agent UUID: `j` {p} joined, `l` true left, `p` level 0–128,
+     `v` speaking, `m` moderator-muted, `V` server version string.
+   - Covered by `ViewerCompatibilityTests` (viewer-style fake clients: SLData channel, the munging byte for byte,
+     `trickle:false`, never fetching server candidates) and `SdpTests`. Not yet: handling SLData messages.
 
 ## Risks / things to verify
 

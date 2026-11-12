@@ -175,6 +175,7 @@ internal sealed class RoomPipeline : IDisposable
     private Endpoint BuildEndpoint(ParticipantMedia p)
     {
         var rtc = new WebRtcBin($"webrtc-{MediaBlocks.ShortId(p.Id)}", _options.JitterBufferMs);
+        rtc.ConfigureIceServers(_options.IceServers);
         MediaBlocks.Add(_pipeline, rtc.Element);
         var endpoint = new Endpoint(rtc);
         rtc.IncomingPad += pad => OnIncomingPad(p, endpoint, pad);

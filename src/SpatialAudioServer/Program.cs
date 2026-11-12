@@ -77,6 +77,10 @@ if (cliCommand)
 }
 
 app.UseExceptionHandler();
+// wwwroot: the test web client at /client/ (and later the admin UI). Static, no build step, no auth.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.MapGet("/", () => Results.Redirect("/client/")).ExcludeFromDescription();
 app.UseStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();

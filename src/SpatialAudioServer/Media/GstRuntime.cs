@@ -19,7 +19,8 @@ public sealed class GstRuntime(ILogger<GstRuntime> log)
         "webrtcbin", "nicesrc", "nicesink", "dtlssrtpenc", "dtlssrtpdec", "srtpenc", "srtpdec",
         "rtpopuspay", "rtpopusdepay", "opusenc", "opusdec",
         "audiomixer", "audiotestsrc", "audioconvert", "audioresample", "audioamplify", "audiopanorama",
-        "queue", "tee", "capsfilter", "level",
+        "queue", "tee", "capsfilter", "level", "audiointerleave", "audiomixmatrix", "input-selector",
+        "sctpenc", "sctpdec", // data channels: Second Life viewers always offer one ("SLData")
     ];
 
     private readonly Lock _lock = new();

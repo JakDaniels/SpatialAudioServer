@@ -47,6 +47,26 @@ public sealed class SignalSessions(JoinTokenStore joinTokens, RoomManager rooms)
         (string.IsNullOrEmpty(bearer) ? null : TryAuthorizeSession(participantId, bearer))?.RoomId
         ?? throw new UnauthorizedAccessException("A valid session token is required (from the offer response).");
 
+    /// <summary>
+    /// Authorises a read-only call before or after the first offer: an unused join token (not consumed) or the
+    /// session token. Returns the participant's room.
+    /// </summary>
+    public Guid AuthorizeReadOnly(Guid participantId, string? bearer)
+    {
+        if (!string.IsNullOrEmpty(bearer))
+        {
+            if (TryAuthorizeSession(participantId, bearer) is { } session)
+            {
+                return session.RoomId;
+            }
+            if (joinTokens.Peek(bearer) is { } claim && claim.ParticipantId == participantId)
+            {
+                return claim.RoomId;
+            }
+        }
+        throw new UnauthorizedAccessException("A join token or session token is required.");
+    }
+
     public void End(Guid participantId) => _sessions.TryRemove(participantId, out _);
 
     private Session? TryAuthorizeSession(Guid participantId, string bearer)
