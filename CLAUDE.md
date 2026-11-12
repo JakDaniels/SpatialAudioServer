@@ -17,7 +17,12 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 - **Phase 1 (skeleton) done:** solution `src/SpatialAudioServer.slnx` (server + `SpatialAudioServer.Tests`, all under `src/`).
   `dotnet test src` runs 23 tests; `dotnet run --project src/SpatialAudioServer` serves HTTP 5000 / HTTPS 5001;
   `dotnet run --project src/SpatialAudioServer -- apikey create <label>` makes a control-API key.
-- Next: Phase 2 (media core). Ask the user before starting it.
+- **Phase 2 (media core) stages A–D done:** mix-minus over real WebRTC, live join/leave/mute, load tool
+  (`src/SpatialAudioServer.LoadTest`), and pluggable mix engines (`Media/Engines/`, chosen per room; engines
+  `pairchains` and `pairchains-lite`). `dotnet test src` runs 49 tests, with the end-to-end suites run once per engine.
+  The per-pair topology does not reach 32 people on this CPU (see PLAN.md Phase 2).
+- Next: the user has alternative mixer topologies to add as engines and compare (load tool `--engine a,b`).
+  The 32-person benchmark runs later from a second machine.
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.

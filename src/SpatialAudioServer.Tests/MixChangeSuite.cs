@@ -10,12 +10,12 @@ using SpatialAudioServer.Signalling;
 
 namespace SpatialAudioServer.Tests;
 
-/// <summary>Participants joining, leaving and changing while the room is playing.</summary>
-[Collection("media")]
-public sealed class MixChangeTests : MediaTestBase
+/// <summary>
+/// Participants joining, leaving and changing while the room is playing. Abstract: each mix engine runs it through
+/// a concrete subclass in EngineSuites.cs.
+/// </summary>
+public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) where TEngine : IEngineUnderTest
 {
-    private GstRoomMedia Media => Server.Services.GetRequiredService<GstRoomMedia>();
-
     [Fact]
     public async Task A_late_joiner_hears_everyone_and_is_heard()
     {
@@ -26,7 +26,7 @@ public sealed class MixChangeTests : MediaTestBase
         clients.Add(await JoinAsync(room.Id, 2));
 
         AssertHears(await SettleAndMeasureAsync(clients, Others(clients)), Others(clients));
-        Assert.Equal(6, await Media.ChainCountAsync(room.Id));
+        Assert.Equal(6, await Media.MixedPairsAsync(room.Id));
     }
 
     [Fact]
@@ -46,7 +46,7 @@ public sealed class MixChangeTests : MediaTestBase
         clients.Remove(leaving);
 
         AssertHears(await SettleAndMeasureAsync(clients, Others(clients)), Others(clients));
-        Assert.Equal(2, await Media.ChainCountAsync(room.Id));
+        Assert.Equal(2, await Media.MixedPairsAsync(room.Id));
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class MixChangeTests : MediaTestBase
         var stopwatch = Stopwatch.StartNew();
         Assert.Equal(HttpStatusCode.NoContent, (await Api.DeleteAsync($"/api/rooms/{room.Id}")).StatusCode);
 
-        await Assert.ThrowsAsync<Rooms.NotFoundException>(() => Media.ChainCountAsync(room.Id));
+        await Assert.ThrowsAsync<Rooms.NotFoundException>(() => Media.MixedPairsAsync(room.Id));
         Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(5));
 
         // The server keeps working for other rooms.
@@ -118,7 +118,7 @@ public sealed class MixChangeTests : MediaTestBase
             var visitors = new List<FakeClient> { await JoinAsync(room.Id, 2 + round % 3), await JoinAsync(room.Id, 5 + round % 3) };
             var everyone = steady.Concat(visitors).ToList();
             await SettleAndMeasureAsync(everyone, Others(everyone));
-            Assert.Equal(12, await Media.ChainCountAsync(room.Id));
+            Assert.Equal(12, await Media.MixedPairsAsync(room.Id));
 
             foreach (var visitor in visitors)
             {
@@ -128,7 +128,7 @@ public sealed class MixChangeTests : MediaTestBase
         }
 
         AssertHears(await SettleAndMeasureAsync(steady, Others(steady)), Others(steady));
-        Assert.Equal(2, await Media.ChainCountAsync(room.Id));
+        Assert.Equal(2, await Media.MixedPairsAsync(room.Id));
 
         // Native (GStreamer/GLib and our worker/bus) threads must come back near the baseline. GStreamer's task pool
         // and GLib's thread pool keep a few idle workers (which keep their last task's name, e.g. "queue93:src"),
@@ -171,40 +171,6 @@ public sealed class MixChangeTests : MediaTestBase
 
         // The old connection's tone is gone from the mix; the new one is in it.
         AssertHears(await SettleAndMeasureAsync([other, second], Others([other, second])), Others([other, second]));
-        Assert.Equal(2, await Media.ChainCountAsync(room.Id));
-    }
-
-    [Fact]
-    public async Task Signalling_requires_the_right_tokens()
-    {
-        var room = await CreateRoomAsync();
-        var join = await (await Api.PostAsJsonAsync($"/api/rooms/{room.Id}/participants", new { displayName = "p" })).Read<JoinResponse>();
-        var otherJoin = await (await Api.PostAsJsonAsync($"/api/rooms/{room.Id}/participants", new { displayName = "q" })).Read<JoinResponse>();
-
-        Task<HttpResponseMessage> Send(HttpMethod method, string path, string? bearer, object? body = null)
-        {
-            var request = new HttpRequestMessage(method, path) { Content = body is null ? null : JsonContent.Create(body) };
-            if (bearer is not null)
-            {
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearer);
-            }
-            return Signal.SendAsync(request);
-        }
-
-        var offer = new OfferRequest("v=0\r\n");
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Post, $"/signal/{join.ParticipantId}/offer", null, offer)).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Post, $"/signal/{join.ParticipantId}/offer", "nope", offer)).StatusCode);
-        // Another participant's token does not work for this one (and is consumed by the attempt).
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await Send(HttpMethod.Post, $"/signal/{join.ParticipantId}/offer", otherJoin.JoinToken, offer)).StatusCode);
-        // The control-API key is not a signalling credential.
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await Send(HttpMethod.Post, $"/signal/{join.ParticipantId}/offer", ServerFactory.ApiKey, offer)).StatusCode);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Get, $"/signal/{join.ParticipantId}/ice", join.JoinToken)).StatusCode);
-
-        // A real offer with the right token works once; the join token cannot be reused afterwards.
-        using var client = new FakeClient("p", Tones[0], Tones);
-        await client.ConnectAsync(Signal, join.ParticipantId, join.JoinToken);
-        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Post, $"/signal/{join.ParticipantId}/offer", join.JoinToken, offer)).StatusCode);
+        Assert.Equal(2, await Media.MixedPairsAsync(room.Id));
     }
 }

@@ -43,6 +43,15 @@ internal sealed class Validation
         return this;
     }
 
+    public Validation OneOf(string field, string? value, Func<string, bool> exists, IEnumerable<string> allowed)
+    {
+        if (value is not null && !exists(value))
+        {
+            Add(field, $"must be one of: {string.Join(", ", allowed)}");
+        }
+        return this;
+    }
+
     public Validation Position(string field, Vec3? value)
     {
         if (value is not null && !(double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z)))

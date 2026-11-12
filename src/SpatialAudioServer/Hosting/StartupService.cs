@@ -22,6 +22,12 @@ internal sealed class StartupService(
     public Task StartAsync(CancellationToken cancellationToken)
     {
         log.LogInformation("Database {Path}, schema version {Version}", database.Path, database.SchemaVersion);
+        if (!Media.Engines.MixEngines.Exists(media.Value.Engine))
+        {
+            throw new InvalidOperationException(
+                $"Media:Engine '{media.Value.Engine}' is not a mix engine. Available: " +
+                string.Join(", ", Media.Engines.MixEngines.All.Select(e => e.Name)) + ".");
+        }
 
         if (media.Value.Enabled)
         {

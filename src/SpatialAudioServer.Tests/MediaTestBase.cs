@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using SpatialAudioServer.Api;
+using Microsoft.Extensions.DependencyInjection;
 using SpatialAudioServer.LoadTest;
+using SpatialAudioServer.Media;
 using SpatialAudioServer.Rooms;
 
 namespace SpatialAudioServer.Tests;
@@ -9,7 +11,10 @@ namespace SpatialAudioServer.Tests;
 [CollectionDefinition("media", DisableParallelization = true)]
 public sealed class MediaCollection;
 
-/// <summary>A real server with GStreamer, plus fake clients that join rooms through the HTTP APIs.</summary>
+/// <summary>
+/// A real server with GStreamer, plus fake clients that join rooms through the HTTP APIs. Rooms are created with
+/// <see cref="Engine"/>, so the same tests run against every mix engine (see EngineSuites.cs).
+/// </summary>
 public abstract class MediaTestBase : IDisposable
 {
     /// <summary>Exact Goertzel bins at 20 ms, 200 Hz apart. Index i is participant i's tone.</summary>
@@ -18,21 +23,26 @@ public abstract class MediaTestBase : IDisposable
     private readonly TempDir _dir = new();
     private readonly List<FakeClient> _clients = [];
 
-    protected MediaTestBase()
+    protected MediaTestBase(string engine)
     {
+        Engine = engine;
         Server = new ServerFactory(_dir.File("server.db"), new Dictionary<string, string?> { ["Media:Enabled"] = "true" });
         Api = Server.CreateAuthedClient();
         Signal = Server.CreateClient();
     }
 
+    protected string Engine { get; }
+
     protected ServerFactory Server { get; }
+
+    protected GstRoomMedia Media => Server.Services.GetRequiredService<GstRoomMedia>();
 
     protected HttpClient Api { get; }
 
     protected HttpClient Signal { get; }
 
     protected async Task<RoomSnapshot> CreateRoomAsync() =>
-        await (await Api.PostAsJsonAsync("/api/rooms", new { name = "media test" })).Read<RoomSnapshot>();
+        await (await Api.PostAsJsonAsync("/api/rooms", new { name = "media test", engine = Engine })).Read<RoomSnapshot>();
 
     /// <summary>Adds a participant via the control API and connects a fake client sending <c>Tones[index]</c>.</summary>
     protected async Task<FakeClient> JoinAsync(Guid roomId, int index)
