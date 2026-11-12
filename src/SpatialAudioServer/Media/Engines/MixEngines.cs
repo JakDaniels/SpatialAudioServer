@@ -26,6 +26,11 @@ public static class MixEngines
                 "One audiointerleave per room (a fixed channel slot per participant) → tee → per listener queue → " +
                 "audiomixmatrix (slots × stereo gain matrix; own slot zeroed) → opusenc. No per-pair elements.",
                 ctx => new MatrixEngine(ctx)),
+            [SharedMatrixEngine.Name] = (
+                "Like matrix, but only current talkers (voice activity, up to Media:ActiveSpeakers) are mixed: everyone " +
+                "else hears one shared mix from one encoder, each talker a personal mix-minus. Encoders = talkers + 1. " +
+                "The shared mix is not spatial (centred).",
+                ctx => new SharedMatrixEngine(ctx)),
         };
 
     public static IReadOnlyList<MixEngineInfo> All { get; } =

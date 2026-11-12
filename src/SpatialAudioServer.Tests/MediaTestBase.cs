@@ -45,12 +45,12 @@ public abstract class MediaTestBase : IDisposable
         await (await Api.PostAsJsonAsync("/api/rooms", new { name = "media test", engine = Engine })).Read<RoomSnapshot>();
 
     /// <summary>Adds a participant via the control API and connects a fake client sending <c>Tones[index]</c>.</summary>
-    protected async Task<FakeClient> JoinAsync(Guid roomId, int index)
+    protected async Task<FakeClient> JoinAsync(Guid roomId, int index, bool talking = true)
     {
         var response = await Api.PostAsJsonAsync($"/api/rooms/{roomId}/participants", new { displayName = $"fake{index}" });
         response.EnsureSuccessStatusCode();
         var join = await response.Read<JoinResponse>();
-        var client = new FakeClient($"fake{index}", Tones[index], Tones);
+        var client = new FakeClient($"fake{index}", Tones[index], Tones, talking: talking);
         _clients.Add(client);
         await client.ConnectAsync(Signal, join.ParticipantId, join.JoinToken);
         return client;

@@ -78,9 +78,10 @@ public static class LoadTestProgram
     private static async Task<RunResult> RunAsync(HttpClient http, Options options, string engine, ILoggerFactory logs)
     {
         var n = options.Participants;
-        var volume = Math.Min(0.1, 0.6 / Math.Max(1, n - 1)); // keep the sum of n-1 tones under full scale
+        var talkers = Math.Min(options.Talkers ?? n, n);
+        var volume = Math.Min(0.1, 0.6 / Math.Max(1, talkers)); // keep the sum of the tones heard under full scale
         var tones = Enumerable.Range(0, n).Select(i => 300.0 + 50 * i).ToArray(); // exact Goertzel bins at 20 ms
-        Console.WriteLine($"Server {options.Server}, engine {engine}: {options.Rooms} room(s) x {n} participants, tone volume {volume:F3}");
+        Console.WriteLine($"Server {options.Server}, engine {engine}: {options.Rooms} room(s) x {n} participants ({talkers} talking), tone volume {volume:F3}");
 
         var rooms = new List<Guid>();
         var clients = new List<(FakeClient Client, int Room)>();
@@ -93,7 +94,8 @@ public static class LoadTestProgram
                 for (var i = 0; i < n; i++)
                 {
                     var join = await Post<JoinResponse>(http, $"api/rooms/{room.Id}/participants", new { displayName = $"load-{r}-{i}" });
-                    var client = new FakeClient($"r{r}p{i}", tones[i], tones, options.JitterBufferMs, logs.CreateLogger("fake"), volume);
+                    var client = new FakeClient($"r{r}p{i}", tones[i], tones, options.JitterBufferMs, logs.CreateLogger("fake"), volume,
+                        talking: i < talkers);
                     clients.Add((client, r));
                     await client.ConnectAsync(http, join.ParticipantId, join.JoinToken);
                 }
@@ -161,7 +163,8 @@ public static class LoadTestProgram
         (FakeClient Client, int Room) me, List<(FakeClient Client, int Room)> all)
     {
         var presence = me.Client.Meter.Presence();
-        var others = all.Where(o => o.Room == me.Room && o.Client != me.Client).Select(o => o.Client.ToneHz).ToList();
+        // Expected: every other talker in the same room.
+        var others = all.Where(o => o.Room == me.Room && o.Client != me.Client && o.Client.Talking).Select(o => o.Client.ToneHz).ToList();
         if (others.Count == 0)
         {
             return (1, 1, presence[me.Client.ToneHz], 0);
@@ -187,14 +190,15 @@ public static class LoadTestProgram
 
     private sealed record Options(
         System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure,
-        IReadOnlyList<string> Engines)
+        IReadOnlyList<string> Engines, int? Talkers)
     {
         public const string Usage =
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
-            "                                   [--duration 20] [--jitter-ms 100] [--insecure] [--engine a,b,...]\n" +
+            "                                   [--duration 20] [--jitter-ms 100] [--insecure] [--engine a,b,...] [--talkers K]\n" +
             "  The API key can also come from SAS_API_KEY. --insecure accepts the server's self-signed certificate.\n" +
             "  --engine runs the same load against each named mix engine in turn and prints a comparison\n" +
-            "  (default: the server's default engine; GET /api/status lists them).";
+            "  (default: the server's default engine; GET /api/status lists them).\n" +
+            "  --talkers K: only the first K clients in each room send their tone (default: all); the rest send silence.";
 
         public static Options Parse(string[] args)
         {
@@ -205,6 +209,7 @@ public static class LoadTestProgram
             uint jitter = 100;
             var insecure = false;
             var engines = new List<string>();
+            int? talkers = null;
             for (var i = 0; i < args.Length; i++)
             {
                 string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -217,6 +222,7 @@ public static class LoadTestProgram
                     case "--duration": duration = TimeSpan.FromSeconds(double.Parse(Value(), CultureInfo.InvariantCulture)); break;
                     case "--jitter-ms": jitter = uint.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--insecure": insecure = true; break;
+                    case "--talkers": talkers = int.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--engine": engines.AddRange(Value().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)); break;
                     default: throw new ArgumentException($"Unknown argument {args[i]}.");
                 }
@@ -229,7 +235,11 @@ public static class LoadTestProgram
             {
                 throw new ArgumentException("--participants must be 1–32 and --rooms at least 1.");
             }
-            return new Options(server, key, participants, rooms, duration, jitter, insecure, engines);
+            if (talkers is < 0)
+            {
+                throw new ArgumentException("--talkers must be 0 or more.");
+            }
+            return new Options(server, key, participants, rooms, duration, jitter, insecure, engines, talkers);
         }
     }
 }

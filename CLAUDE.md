@@ -19,11 +19,12 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   `dotnet run --project src/SpatialAudioServer -- apikey create <label>` makes a control-API key.
 - **Phase 2 (media core) stages A–D done:** mix-minus over real WebRTC, live join/leave/mute, load tool
   (`src/SpatialAudioServer.LoadTest`), and pluggable mix engines (`Media/Engines/`, chosen per room): `pairchains`,
-  `pairchains-lite` and `matrix` (audiointerleave + per-listener audiomixmatrix, the cheapest so far).
-  `dotnet test src` runs 58 tests, with the end-to-end suites run once per engine.
+  `pairchains-lite`, `matrix` (audiointerleave + per-listener audiomixmatrix) and `matrix-shared` (talkers get
+  personal mixes, everyone else shares one encoder). Server Opus defaults: complexity 5, 40 ms frames.
+  `dotnet test src` runs 69 tests, with the end-to-end suites run once per engine.
 - GStreamer 1.28.2 source is cloned (git-ignored) in `docs/reference/gstreamer` for reading element internals.
-- Next: the 32-person benchmark from a second machine (`--engine matrix,pairchains-lite`); more engines as the user
-  suggests them.
+- Load runs go from a Ubuntu 22.04 box using the committed self-contained tool (`scripts/loadtest-linux-x64/`,
+  rebuild with `scripts/build-loadtest.sh`). Next: 32-person `--talkers 3 --engine matrix-shared,matrix` there.
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.

@@ -25,15 +25,30 @@ internal static class MediaBlocks
     }
 
     /// <summary>Raw stereo in → S16 stereo 48 kHz → Opus → RTP with the negotiated payload type out.</summary>
-    public static Bin OpusEncoder(string name, int payloadType, MediaOptions options)
+    public static Bin OpusEncoder(string name, int payloadType, MediaOptions options) =>
+        ParseBin(name, $"{EncodeDescription(options)} ! {PayDescription(payloadType)}");
+
+    /// <summary>Raw stereo in → Opus frames out (no RTP), so one encoder's output can be shared by several payloaders.</summary>
+    public static Bin OpusEncodeOnly(string name, MediaOptions options) => ParseBin(name, EncodeDescription(options));
+
+    /// <summary>Opus frames in → RTP with the negotiated payload type out.</summary>
+    public static Bin OpusPayloader(string name, int payloadType) => ParseBin(name, PayDescription(payloadType));
+
+    private static string EncodeDescription(MediaOptions options) =>
+        "audioconvert ! capsfilter caps=\"audio/x-raw,format=S16LE,rate=48000,channels=2\" ! " +
+        $"opusenc bitrate={options.OpusBitrate.ToString(CultureInfo.InvariantCulture)} " +
+        $"complexity={Math.Clamp(options.OpusComplexity, 0, 10).ToString(CultureInfo.InvariantCulture)} " +
+        $"frame-size={FrameSize(options)} inband-fec=true";
+
+    private static string PayDescription(int payloadType) =>
+        $"rtpopuspay pt={payloadType} ! capsfilter caps=\"{SendCaps(payloadType)}\"";
+
+    private static string FrameSize(MediaOptions options) =>
+        (MediaOptions.OpusFrameSizes.Contains(options.OpusFrameMs) ? options.OpusFrameMs : 20).ToString(CultureInfo.InvariantCulture);
+
+    private static Bin ParseBin(string name, string description)
     {
-        var bin = Global.ParseBinFromDescription(
-            "audioconvert ! capsfilter caps=\"audio/x-raw,format=S16LE,rate=48000,channels=2\" ! " +
-            $"opusenc bitrate={options.OpusBitrate.ToString(CultureInfo.InvariantCulture)} " +
-            $"complexity={Math.Clamp(options.OpusComplexity, 0, 10).ToString(CultureInfo.InvariantCulture)} inband-fec=true ! " +
-            $"rtpopuspay pt={payloadType} ! " +
-            $"capsfilter caps=\"{SendCaps(payloadType)}\"",
-            ghostUnlinkedPads: true);
+        var bin = Global.ParseBinFromDescription(description, ghostUnlinkedPads: true);
         bin.SetName(name);
         return bin;
     }
