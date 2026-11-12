@@ -13,12 +13,12 @@ internal static class MediaBlocks
     public static string SendCaps(int payloadType) =>
         $"application/x-rtp,media=audio,encoding-name=OPUS,payload={payloadType},clock-rate=48000";
 
-    /// <summary>Opus RTP in → raw mono 48 kHz out (sink and src ghost pads).</summary>
-    public static Bin OpusDecoder(string name)
+    /// <summary>Opus RTP in → raw mono 48 kHz out (sink and src ghost pads), in <paramref name="format"/> if given.</summary>
+    public static Bin OpusDecoder(string name, string? format = null)
     {
         var bin = Global.ParseBinFromDescription(
             "queue ! rtpopusdepay ! opusdec plc=true ! audioconvert ! audioresample ! " +
-            "capsfilter caps=\"audio/x-raw,rate=48000,channels=1\"",
+            $"capsfilter caps=\"audio/x-raw,{(format is null ? "" : $"format={format},layout=interleaved,")}rate=48000,channels=1\"",
             ghostUnlinkedPads: true);
         bin.SetName(name);
         return bin;

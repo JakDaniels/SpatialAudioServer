@@ -63,9 +63,13 @@ internal interface IMixEngine : IDisposable
 }
 
 /// <summary>What an engine is given to work with. One per room.</summary>
-internal sealed class MixEngineContext(Guid roomId, Pipeline pipeline, RoomWorker worker, MediaOptions options, ILogger log)
+internal sealed class MixEngineContext(
+    Guid roomId, int maxParticipants, Pipeline pipeline, RoomWorker worker, MediaOptions options, ILogger log)
 {
     public Guid RoomId { get; } = roomId;
+
+    /// <summary>The room's participant limit (fixed for its life): engines may size fixed resources by it.</summary>
+    public int MaxParticipants { get; } = maxParticipants;
 
     /// <summary>The room's pipeline, already PLAYING. Add elements to it and sync their state.</summary>
     public Pipeline Pipeline { get; } = pipeline;

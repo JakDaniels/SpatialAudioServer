@@ -14,7 +14,7 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
 
     public void RoomCreated(RoomSnapshot room)
     {
-        var pipeline = new RoomPipeline(room.Id, room.Engine, options.Value, log);
+        var pipeline = new RoomPipeline(room, options.Value, log);
         pipeline.StateChanged += (pid, state) => ParticipantStateChanged?.Invoke(room.Id, pid, state);
         if (!_rooms.TryAdd(room.Id, pipeline))
         {

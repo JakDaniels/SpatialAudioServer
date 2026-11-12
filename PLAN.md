@@ -294,7 +294,24 @@ tested without GStreamer.
 
      Dropping the per-chain queue threads saves ~40% at 16 (context switching grows with threads), but cost is
      still per pair: extrapolating lite to 32 people (992 pairs) gives ~5 cores, still over the gate.
-   Next: the user's alternative topologies as further engines; compare before the 32-person benchmark.
+   - **`matrix` engine (user's design, 2026-11-12):** one `audiointerleave` per room → `tee` → per listener
+     `queue` → `audiomixmatrix` (2 × slots gain matrix, own slot off) → Opus encoder. No per-pair elements; per-pair
+     gain/pan are matrix coefficients. Constraints found in the 1.28 sources (`docs/reference/gstreamer`, git-ignored):
+     - audiointerleave's channel count = its sink pads, and releasing one renumbers the rest; audiomixmatrix in
+       manual mode needs the exact input channel count and reads out of bounds on a width change. So all slot pads
+       (room `maxParticipants` + 1; slot 0 = silence keep-alive) are requested up front and never released. A
+       participant takes a free slot when audio arrives and frees it on leave.
+     - `channel-positions-from-input=false` keeps every position NONE, so slot k is channel k (by default pads
+       with and without caps sort differently and channels shuffle).
+     - The `matrix` setter frees/rebuilds tables without a lock → applied from a buffer probe on the matrix sink
+       pad (streaming thread). The sparse/dense mixer is chosen at caps time by density (≥ 50% non-zero = dense), and
+       crossing that line later would silence the sparse one → "off" is 1e-9 (−180 dB), so it is always dense.
+     Same machine, 16 people, 15–20 s: matrix 90–123% of one core / ~190 threads; pairchains-lite 114–127% / ~204;
+     pairchains ~205–212% / 445. 24 people on matrix: 186% (with the tool using another 173%, so the box was ~90%
+     busy and this is inflated). The remaining cost looks per-participant (decode, encode, SRTP, jitterbuffer), not
+     per-pair. One cold-server 16-person matrix run failed the 2% self/leak check (later runs: 0.0–0.2%); watch for
+     it in the second-machine benchmark.
+   Next: the 32-person benchmark from a second machine (matrix is the candidate); more engines if wanted.
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.

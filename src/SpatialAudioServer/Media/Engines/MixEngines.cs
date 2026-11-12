@@ -22,6 +22,10 @@ public static class MixEngines
                 "Like pairchains without the per-chain queue and audioamplify: tee → audiopanorama → audiomixer pad volume. " +
                 "Threads grow with participants instead of pairs.",
                 ctx => new PairChainsEngine(ctx, PairChainsEngine.Variant.Lite)),
+            [MatrixEngine.Name] = (
+                "One audiointerleave per room (a fixed channel slot per participant) → tee → per listener queue → " +
+                "audiomixmatrix (slots × stereo gain matrix; own slot zeroed) → opusenc. No per-pair elements.",
+                ctx => new MatrixEngine(ctx)),
         };
 
     public static IReadOnlyList<MixEngineInfo> All { get; } =
