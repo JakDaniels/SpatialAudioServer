@@ -39,10 +39,9 @@ S=http://10.2.2.235:5000                    # the server
 # Smoke test: 2 people. It should print RESULT: PASS within about a minute.
 ./SpatialAudioServer.LoadTest --server $S --participants 2 --duration 10
 
-# Compare engines at increasing sizes.
-./SpatialAudioServer.LoadTest --server $S --participants 16 --engine matrix,pairchains-lite,pairchains
-./SpatialAudioServer.LoadTest --server $S --participants 24 --engine matrix,pairchains-lite
-./SpatialAudioServer.LoadTest --server $S --participants 32 --engine matrix,pairchains-lite
+# Compare engines at increasing sizes (everyone talking).
+./SpatialAudioServer.LoadTest --server $S --participants 16 --engine matrix,pairchains
+./SpatialAudioServer.LoadTest --server $S --participants 32 --engine matrix
 ```
 
 Realistic talk patterns (needed for `matrix-shared`, which only mixes the current talkers, at most

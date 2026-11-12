@@ -27,6 +27,7 @@ public sealed partial class WebRtcBin : IDisposable
     private readonly List<ulong> _handlers = [];
     private readonly List<IceCandidate> _candidates = [];
     private readonly List<string> _remoteCandidates = []; // for Diagnostics
+    private WebRTCDataChannel? _dataChannel; // kept alive while the connection is
     private TaskCompletionSource _candidatesChanged = NewSignal();
     private bool _gatheringComplete;
     private bool _disposed;
@@ -121,11 +122,57 @@ public sealed partial class WebRtcBin : IDisposable
         return sdp.AsText();
     }
 
+    /// <summary>
+    /// SDP lines, ending at CR, LF or CRLF. Firestorm's offer munging leaves a bare CR inside a line (it appends a second
+    /// <c>a=fmtp</c> after the original line's CR), and GStreamer's SDP parser also treats CR as a line end.
+    /// </summary>
+    public static IEnumerable<string> SdpLines(string sdp) => sdp.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>
+    /// Adds the gathered candidates to an answer's media sections (and <c>a=end-of-candidates</c> if gathering is
+    /// complete), for clients that do not trickle: Second Life viewers only ever receive the answer SDP.
+    /// </summary>
+    public static string EmbedCandidates(string sdp, IReadOnlyList<IceCandidate> candidates, bool complete)
+    {
+        var output = new System.Text.StringBuilder();
+        var section = -1;
+        void Flush()
+        {
+            if (section < 0)
+            {
+                return;
+            }
+            foreach (var c in candidates.Where(c => c.SdpMLineIndex == section && !string.IsNullOrWhiteSpace(c.Candidate)))
+            {
+                output.Append(c.Candidate.StartsWith("a=", StringComparison.Ordinal) ? c.Candidate : "a=" + c.Candidate).Append("\r\n");
+            }
+            if (complete)
+            {
+                output.Append("a=end-of-candidates\r\n");
+            }
+        }
+        foreach (var line in SdpLines(sdp))
+        {
+            if (line.StartsWith("m=", StringComparison.Ordinal))
+            {
+                Flush();
+                section++;
+            }
+            if (line.StartsWith("a=candidate:", StringComparison.Ordinal) || line == "a=end-of-candidates")
+            {
+                continue; // replaced by the full set below
+            }
+            output.Append(line).Append("\r\n");
+        }
+        Flush();
+        return output.ToString();
+    }
+
     /// <summary>Index of the first <c>m=audio</c> line in an SDP, or null.</summary>
     public static int? FirstAudioMLine(string sdp)
     {
         var index = 0;
-        foreach (var line in sdp.Split('\n'))
+        foreach (var line in SdpLines(sdp))
         {
             if (line.StartsWith("m=", StringComparison.Ordinal))
             {
@@ -146,6 +193,45 @@ public sealed partial class WebRtcBin : IDisposable
         using var sdp = offer.GetSdp();
         Apply("set-local-description", offer);
         return sdp.AsText();
+    }
+
+    /// <summary>
+    /// Points webrtcbin at the configured STUN/TURN servers: the first <c>stun:</c> URL, and every <c>turn:</c> /
+    /// <c>turns:</c> URL with the entry's credentials.
+    /// </summary>
+    public void ConfigureIceServers(IEnumerable<Configuration.IceServerConfig> servers)
+    {
+        var stunSet = false;
+        foreach (var server in servers)
+        {
+            foreach (var url in server.Urls)
+            {
+                if (!stunSet && url.StartsWith("stun:", StringComparison.OrdinalIgnoreCase))
+                {
+                    Element.SetProperty("stun-server", "stun://" + HostPort(url["stun:".Length..]));
+                    stunSet = true;
+                }
+                else if (url.StartsWith("turn:", StringComparison.OrdinalIgnoreCase) || url.StartsWith("turns:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var scheme = url[..url.IndexOf(':')].ToLowerInvariant();
+                    var credentials = server.Username is null ? "" :
+                        $"{System.Uri.EscapeDataString(server.Username)}:{System.Uri.EscapeDataString(server.Credential ?? "")}@";
+                    Element.EmitSignal("add-turn-server", $"{scheme}://{credentials}{HostPort(url[(scheme.Length + 1)..])}");
+                }
+            }
+        }
+
+        // "host:port?transport=udp" → "host:port" (webrtcbin's TURN URIs take no query).
+        static string HostPort(string rest) => rest.Split('?')[0].TrimStart('/');
+    }
+
+    /// <summary>Creates an ordered data channel (before the offer, so it is negotiated with it).</summary>
+    public void CreateDataChannel(string label)
+    {
+        using var options = Structure.NewFromString("options, ordered=(boolean)true")
+            ?? throw new InvalidOperationException("Bad data channel options.");
+        _dataChannel = Element.EmitSignal<WebRTCDataChannel>("create-data-channel", label, options)
+            ?? throw new InvalidOperationException("webrtcbin did not create the data channel.");
     }
 
     public void ApplyRemoteAnswer(string answerSdp) => SetDescription("set-remote-description", WebRTCSDPType.Answer, answerSdp);

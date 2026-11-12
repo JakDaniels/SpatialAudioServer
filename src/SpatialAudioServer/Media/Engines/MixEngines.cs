@@ -10,18 +10,14 @@ public sealed record MixEngineInfo(string Name, string Description);
 /// </summary>
 public static class MixEngines
 {
-    public const string Default = PairChainsEngine.Name;
+    public const string Default = SharedMatrixEngine.Name;
 
     private static readonly Dictionary<string, (string Description, Func<MixEngineContext, IMixEngine> Create)> Registry =
         new(StringComparer.Ordinal)
         {
             [PairChainsEngine.Name] = (
                 "Per (source, listener) chain: tee → queue → audioamplify → audiopanorama → listener audiomixer → opusenc.",
-                ctx => new PairChainsEngine(ctx, PairChainsEngine.Variant.Queued)),
-            [PairChainsEngine.LiteName] = (
-                "Like pairchains without the per-chain queue and audioamplify: tee → audiopanorama → audiomixer pad volume. " +
-                "Threads grow with participants instead of pairs.",
-                ctx => new PairChainsEngine(ctx, PairChainsEngine.Variant.Lite)),
+                ctx => new PairChainsEngine(ctx)),
             [MatrixEngine.Name] = (
                 "One audiointerleave per room (a fixed channel slot per participant) → tee → per listener queue → " +
                 "audiomixmatrix (slots × stereo gain matrix; own slot zeroed) → opusenc. No per-pair elements.",

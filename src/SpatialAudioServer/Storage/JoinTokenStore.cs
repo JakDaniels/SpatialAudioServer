@@ -39,6 +39,17 @@ public sealed class JoinTokenStore(Database database, TimeProvider time)
         return reader.Read() ? new JoinTokenClaim(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1))) : null;
     }
 
+    /// <summary>Who the token was issued to, if it is still redeemable; does not use it up.</summary>
+    public JoinTokenClaim? Peek(string token)
+    {
+        using var connection = database.Open();
+        using var command = connection.Command(
+            "SELECT participant_id, room_id FROM join_tokens WHERE token_hash = $hash AND used_at IS NULL AND expires_at > $now",
+            ("$now", ToDb(time.GetUtcNow())), ("$hash", Secrets.Hash(token)));
+        using var reader = command.ExecuteReader();
+        return reader.Read() ? new JoinTokenClaim(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1))) : null;
+    }
+
     public void DeleteForParticipant(Guid participantId)
     {
         using var connection = database.Open();

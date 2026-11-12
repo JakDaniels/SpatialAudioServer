@@ -41,9 +41,10 @@ public sealed class FakeClient : IDisposable
 
     public FakeClient(
         string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100, ILogger? log = null, double volume = 0.1,
-        bool talking = true)
+        bool talking = true, bool viewerStyle = false)
     {
         _volume = volume;
+        ViewerStyle = viewerStyle;
         Name = name;
         ToneHz = toneHz;
         Meter = new ToneMeter(listenFor) { Threshold = volume / 5 };
@@ -56,7 +57,9 @@ public sealed class FakeClient : IDisposable
             $"audiotestsrc name=tone is-live=true wave=sine freq={toneHz.ToString(CultureInfo.InvariantCulture)} " +
             $"volume={(talking ? volume : 0).ToString(CultureInfo.InvariantCulture)} ! " +
             "audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! opusenc ! rtpopuspay pt=111 ! " +
-            "capsfilter caps=\"application/x-rtp,media=audio,encoding-name=OPUS,payload=111,clock-rate=48000\"",
+            "capsfilter caps=\"application/x-rtp,media=audio,encoding-name=OPUS,payload=111,clock-rate=48000" +
+            // A viewer's offer has an Opus a=fmtp line (which its munging then duplicates); caps fields become fmtp.
+            (viewerStyle ? ",useinbandfec=(string)1" : "") + "\"",
             ghostUnlinkedPads: true);
         _tone = send.GetByName("tone")!;
         Talking = talking;
@@ -97,6 +100,15 @@ public sealed class FakeClient : IDisposable
         Talking = talking;
     }
 
+    /// <summary>
+    /// Behaves like a Second Life viewer (Firestorm's llwebrtc): an ordered "SLData" data channel created before
+    /// the offer, the viewer's SDP munging, a non-trickle answer, and server candidates never fetched.
+    /// </summary>
+    public bool ViewerStyle { get; }
+
+    /// <summary>The server's answer SDP (once connected).</summary>
+    public string? AnswerSdp { get; private set; }
+
     /// <summary>Server candidates received and applied so far.</summary>
     public int RemoteCandidates => Volatile.Read(ref _remoteCandidates);
 
@@ -116,10 +128,14 @@ public sealed class FakeClient : IDisposable
             throw new TimeoutException("webrtcbin never asked for negotiation.");
         }
 
+        if (ViewerStyle)
+        {
+            _rtc.CreateDataChannel("SLData");
+        }
         var offer = await Task.Run(_rtc.CreateOffer, cancel);
         using var request = new HttpRequestMessage(HttpMethod.Post, $"signal/{participantId}/offer")
         {
-            Content = JsonContent.Create(new OfferRequest(offer)),
+            Content = JsonContent.Create(ViewerStyle ? new OfferRequest(MungeLikeViewer(offer), Trickle: false) : new OfferRequest(offer)),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", joinToken);
         using var response = await http.SendAsync(request, cancel);
@@ -129,6 +145,7 @@ public sealed class FakeClient : IDisposable
         }
         var answer = (await response.Content.ReadFromJsonAsync<OfferResponse>(Json, cancel))!;
         _sessionToken = answer.SessionToken;
+        AnswerSdp = answer.Sdp;
         await Task.Run(() => _rtc.ApplyRemoteAnswer(answer.Sdp), cancel);
 
         _iceLoop = Task.Run(() => TrickleAsync(http, _stop.Token), CancellationToken.None);
@@ -184,6 +201,17 @@ public sealed class FakeClient : IDisposable
                     sent = local.Next;
                 }
 
+                if (ViewerStyle)
+                {
+                    // A viewer only sends its candidates (VoiceSignalingRequest); the server's came in the answer.
+                    if (local.Complete)
+                    {
+                        return;
+                    }
+                    await Task.Delay(100, cancel);
+                    continue;
+                }
+
                 using var get = new HttpRequestMessage(HttpMethod.Get, $"signal/{ParticipantId}/ice?since={received}&waitMs=500");
                 get.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _sessionToken);
                 using var response = await http.SendAsync(get, cancel);
@@ -214,6 +242,35 @@ public sealed class FakeClient : IDisposable
             _iceError = ex;
             _log.LogError(ex, "{Name}: ICE candidate exchange stopped", Name);
         }
+    }
+
+    /// <summary>
+    /// Firestorm's offer munging (indra/llwebrtc/llwebrtc.cpp, OnSuccess), reproduced byte for byte: the Opus rtpmap
+    /// is rewritten with a bare LF, and the original fmtp line (still ending in CR) is followed by a second fmtp line.
+    /// </summary>
+    public static string MungeLikeViewer(string sdp)
+    {
+        var output = new System.Text.StringBuilder();
+        var opusPayload = "";
+        foreach (var line in sdp.Split('\n'))
+        {
+            var rtpmap = System.Text.RegularExpressions.Regex.Match(line, @"^a=rtpmap:(\d+) opus/(\d+)/2");
+            if (rtpmap.Success)
+            {
+                opusPayload = rtpmap.Groups[1].Value;
+                output.Append("a=rtpmap:").Append(opusPayload).Append(" opus/48000/2\n");
+            }
+            else if (opusPayload.Length > 0 && line.StartsWith("a=fmtp:" + opusPayload, StringComparison.Ordinal))
+            {
+                output.Append(line).Append("a=fmtp:").Append(opusPayload)
+                    .Append(" minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxplaybackrate=48000;sprop-maxplaybackrate=48000;sprop-maxcapturerate=48000\n");
+            }
+            else if (line.Length > 0)
+            {
+                output.Append(line).Append('\n');
+            }
+        }
+        return output.ToString();
     }
 
     private void OnIncomingPad(Pad pad)

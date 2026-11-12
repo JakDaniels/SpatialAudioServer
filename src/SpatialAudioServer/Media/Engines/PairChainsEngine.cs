@@ -9,23 +9,15 @@ namespace SpatialAudioServer.Media.Engines;
 /// The first topology: one GStreamer chain per (source, listener) pair, so every pair has its own gain and pan.
 /// <code>
 /// source (per participant):    webrtcbin src → OpusDecoder (mono 48k) → tee
-/// chain (per source≠listener): tee → [queue (leaky) → audioamplify] → audiopanorama → listener audiomixer pad
+/// chain (per source≠listener): tee → queue (leaky) → audioamplify → audiopanorama → listener audiomixer pad
 /// listener (per participant):  silence + chains → audiomixer → OpusEncoder → webrtcbin sink
 /// </code>
-/// <see cref="Variant.Queued"/> has the bracketed elements: a queue gives every chain its own thread, so a stalled
-/// listener cannot hold up a source. <see cref="Variant.Lite"/> drops them: gain is the mixer pad's volume and the
-/// source's decoder thread pushes straight through every chain (threads ∝ participants, not pairs).
+/// The queue gives every chain its own thread, so a stalled listener cannot hold up a source. (A variant without the
+/// queues, "pairchains-lite", collapsed at 32 people and was removed.)
 /// </summary>
-internal sealed class PairChainsEngine(MixEngineContext context, PairChainsEngine.Variant variant) : IMixEngine
+internal sealed class PairChainsEngine(MixEngineContext context) : IMixEngine
 {
     public const string Name = "pairchains";
-    public const string LiteName = "pairchains-lite";
-
-    public enum Variant
-    {
-        Queued,
-        Lite,
-    }
 
     private readonly ConcurrentDictionary<Guid, Member> _members = new(); // written on the worker; read by AttachSource
     private readonly Dictionary<(Guid Source, Guid Listener), Chain> _chains = []; // worker only
@@ -179,10 +171,9 @@ internal sealed class PairChainsEngine(MixEngineContext context, PairChainsEngin
             return;
         }
 
-        var description = variant == Variant.Queued
-            ? $"queue max-size-buffers=0 max-size-bytes=0 max-size-time={(ulong)context.Options.ChainQueueMs * 1_000_000} leaky=downstream ! " +
-              "audioamplify name=amp ! audiopanorama name=pan"
-            : "audiopanorama name=pan";
+        var description =
+            $"queue max-size-buffers=0 max-size-bytes=0 max-size-time={(ulong)context.Options.ChainQueueMs * 1_000_000} leaky=downstream ! " +
+            "audioamplify name=amp ! audiopanorama name=pan";
         var bin = Global.ParseBinFromDescription(description, ghostUnlinkedPads: true);
         bin.SetName($"chain-{ShortId(source.Id)}-{ShortId(listener.Id)}");
         var chain = new Chain(source.Id, listener.Id, bin, sourcePart.Tee, listenerPart.Mixer);
@@ -247,17 +238,7 @@ internal sealed class PairChainsEngine(MixEngineContext context, PairChainsEngin
         public Pad? TeePad { get; set; }
         public Pad? MixerPad { get; set; }
 
-        public void SetGain(float gain)
-        {
-            if (Bin.GetByName("amp") is { } amp)
-            {
-                amp.SetProperty("amplification", gain);
-            }
-            else
-            {
-                MixerPad?.SetProperty("volume", (double)gain);
-            }
-        }
+        public void SetGain(float gain) => Bin.GetByName("amp")!.SetProperty("amplification", gain);
 
         public void SetPan(float pan) => Bin.GetByName("pan")!.SetProperty("panorama", pan);
     }

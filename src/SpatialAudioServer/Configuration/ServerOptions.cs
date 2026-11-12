@@ -99,6 +99,23 @@ public sealed class MediaOptions
     /// <summary>Mix engine for rooms created without one (see MixEngines; listed by GET /api/status).</summary>
     public string Engine { get; set; } = Media.Engines.MixEngines.Default;
 
+    /// <summary>
+    /// STUN/TURN servers, in RTCIceServer form (<c>urls</c> like "stun:host:3478", "turn:host:3478?transport=udp",
+    /// "turns:host:5349"). The server's webrtcbin uses the first STUN URL and every TURN URL; clients get the whole
+    /// list from <c>GET /signal/{participantId}/config</c>. Empty (the default) is fine on a LAN.
+    /// </summary>
+    public List<IceServerConfig> IceServers { get; set; } = [];
+
     /// <summary>Per-(source, listener) chain queue size; older audio is dropped beyond this.</summary>
     public uint ChainQueueMs { get; set; } = 200;
+}
+
+/// <summary>One STUN/TURN server entry, shaped like the browser's RTCIceServer.</summary>
+public sealed class IceServerConfig
+{
+    public List<string> Urls { get; set; } = [];
+
+    public string? Username { get; set; }
+
+    public string? Credential { get; set; }
 }
