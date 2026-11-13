@@ -33,6 +33,13 @@ internal sealed class StartupService(
             throw new InvalidOperationException(
                 $"Media:OpusFrameMs must be one of {string.Join(", ", MediaOptions.OpusFrameSizes)} (is {media.Value.OpusFrameMs}).");
         }
+        var spatial = media.Value.Spatial;
+        if (spatial.ReferenceDistance <= 0 || spatial.MaxRange < spatial.ReferenceDistance
+            || spatial.ClusterGainStepDb <= 0 || spatial.ClusterPanSteps < 1)
+        {
+            throw new InvalidOperationException(
+                "Media:Spatial needs ReferenceDistance > 0, MaxRange ≥ ReferenceDistance, ClusterGainStepDb > 0 and ClusterPanSteps ≥ 1.");
+        }
         if (media.Value.DeadConnectionTimeout < TimeSpan.Zero)
         {
             throw new InvalidOperationException(

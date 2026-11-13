@@ -41,12 +41,15 @@ internal sealed class RoomPipeline : IDisposable
             throw new InvalidOperationException($"Room {roomId} pipeline refused to go to PLAYING.");
         }
         _bus = new BusWatcher(_pipeline, $"room-{roomId.ToString()[..8]}", log);
-        _engine = MixEngines.Create(room.Engine, new MixEngineContext(roomId, room.MaxParticipants, _pipeline, _worker, options, log));
+        Spatial = room.Spatial;
+        _engine = MixEngines.Create(room.Engine, new MixEngineContext(roomId, room.MaxParticipants, _pipeline, _worker, options, log, room.Spatial));
     }
 
     public Guid RoomId { get; }
 
     public string EngineName { get; }
+
+    public bool Spatial { get; }
 
     /// <summary>Raised on webrtcbin's thread when a participant's connection state changes.</summary>
     public event Action<Guid, ParticipantState>? StateChanged;
@@ -55,6 +58,9 @@ internal sealed class RoomPipeline : IDisposable
     public Task<int> MixedPairsAsync() => _worker.InvokeAsync(() => _engine.MixedPairs);
 
     public Task<IReadOnlyDictionary<string, long>> CountersAsync() => _worker.InvokeAsync(() => _engine.Counters);
+
+    public Task<RoomMediaStats> StatsAsync() =>
+        _worker.InvokeAsync(() => new RoomMediaStats(EngineName, Spatial, _engine.MixedPairs, _engine.Counters));
 
     public void AddParticipant(ParticipantSnapshot participant) => _worker.Post(() =>
     {

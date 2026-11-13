@@ -238,14 +238,17 @@ internal sealed class MatrixMixer
 
     public IEnumerable<Element> Elements => [Queue, Matrix];
 
+    /// <summary>Sets the same gain per input channel on both output channels (centred).</summary>
+    public void SetGains(double[] gains, bool running = true) => SetGains(gains, gains, running);
+
     /// <summary>
-    /// Sets the per-channel gains (both output channels; pan comes with the spatial policy). Before the element
-    /// runs this applies directly; afterwards it is applied on the streaming thread before the next buffer, and
-    /// updates arriving before then collapse into the latest.
+    /// Sets the per-input-channel gains for the left and right outputs. Before the element runs this applies
+    /// directly; afterwards it is applied on the streaming thread before the next buffer, and updates arriving before
+    /// then collapse into the latest.
     /// </summary>
-    public void SetGains(double[] gains, bool running = true)
+    public void SetGains(double[] left, double[] right, bool running = true)
     {
-        var matrix = Serialize(gains);
+        var matrix = Serialize(left, right);
         if (!running)
         {
             Global.UtilSetObjectArg(Matrix, "matrix", matrix);
@@ -268,10 +271,25 @@ internal sealed class MatrixMixer
     }
 
     /// <summary>A 2 × channels matrix in GStreamer's serialised form, the same gains on both rows.</summary>
-    public static string Serialize(double[] gains)
+    public static string Serialize(double[] gains) => Serialize(gains, gains);
+
+    /// <summary>A 2 × channels matrix in GStreamer's serialised form: row 0 = left output, row 1 = right.</summary>
+    public static string Serialize(double[] left, double[] right)
     {
-        var row = "<" + string.Join(", ", gains.Select(g =>
+        static string Row(double[] gains) => "<" + string.Join(", ", gains.Select(g =>
             "(double)" + Math.Max(g, Off).ToString("R", System.Globalization.CultureInfo.InvariantCulture))) + ">";
-        return $"<{row}, {row}>";
+        return $"<{Row(left)}, {Row(right)}>";
+    }
+
+    /// <summary>Left/right gain rows for a set of renderings by input slot.</summary>
+    public static (double[] Left, double[] Right) Rows(int channels, IEnumerable<(int Slot, Spatial.Rendering Rendering)> sources)
+    {
+        var left = new double[channels];
+        var right = new double[channels];
+        foreach (var (slot, rendering) in sources)
+        {
+            (left[slot], right[slot]) = rendering.Stereo();
+        }
+        return (left, right);
     }
 }

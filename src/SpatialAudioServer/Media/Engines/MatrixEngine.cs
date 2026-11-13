@@ -7,8 +7,8 @@ namespace SpatialAudioServer.Media.Engines;
 
 /// <summary>
 /// Matrix mixing: the room's sources are interleaved into one multichannel stream (<see cref="RoomInterleave"/>), and
-/// each listener's stereo mix is a gain matrix over it. No per-pair elements; per-pair gain (and later pan) are
-/// matrix coefficients. One Opus encoder per listener.
+/// each listener's stereo mix is a gain matrix over it. No per-pair elements; per-pair gain and pan (spatial rooms:
+/// from positions, see <see cref="Spatial.ISpatialPolicy"/>) are matrix coefficients. One Opus encoder per listener.
 /// <code>
 /// room:      RoomInterleave (silence + one slot per source) → tee
 /// listener:  tee → MatrixMixer (queue → audiomixmatrix; own slot off) → OpusEncoder → webrtcbin sink
@@ -41,13 +41,13 @@ internal sealed class MatrixEngine(MixEngineContext context) : IMixEngine
     };
 
     public void ParticipantAdded(ParticipantSnapshot participant) =>
-        _members.TryAdd(participant.Id, new Member(participant.Id) { Gain = Gain(participant) });
+        _members.TryAdd(participant.Id, new Member(participant));
 
     public void ParticipantUpdated(ParticipantSnapshot participant)
     {
         if (_members.TryGetValue(participant.Id, out var member))
         {
-            member.Gain = Gain(participant);
+            member.Snapshot = participant;
             UpdateMatrices();
         }
     }
@@ -62,7 +62,8 @@ internal sealed class MatrixEngine(MixEngineContext context) : IMixEngine
         member.Listener = listener;
         try
         {
-            listener.Mixer.SetGains(GainsFor(member), running: false);
+            var (left, right) = GainsFor(member);
+            listener.Mixer.SetGains(left, right, running: false);
             listener.Mixer.AddTo(Pipeline);
             Add(Pipeline, listener.Encoder);
             Link(listener.Mixer.Src, listener.Encoder.GetStaticPad("sink"), "matrix → encoder");
@@ -137,35 +138,32 @@ internal sealed class MatrixEngine(MixEngineContext context) : IMixEngine
         _room.Dispose();
     }
 
-    private static float Gain(ParticipantSnapshot p) => p.Muted ? 0f : (float)p.Gain;
-
     /// <summary>Worker: recomputes every listener's matrix.</summary>
     private void UpdateMatrices()
     {
         foreach (var member in _members.Values)
         {
-            member.Listener?.Mixer.SetGains(GainsFor(member));
-        }
-    }
-
-    /// <summary>Each other connected source at its gain; everything else (own slot, free slots, silence) off.</summary>
-    private double[] GainsFor(Member listener)
-    {
-        var gains = new double[_room.Channels];
-        foreach (var source in _members.Values)
-        {
-            if (source.Id != listener.Id && source.Source is { Slot: > 0 } part)
+            if (member.Listener is { } listener)
             {
-                gains[part.Slot] = source.Gain;
+                var (left, right) = GainsFor(member);
+                listener.Mixer.SetGains(left, right);
             }
         }
-        return gains;
     }
 
-    private sealed class Member(Guid id)
+    /// <summary>
+    /// Each other connected source as this listener hears it (gain, and position in spatial rooms); everything else
+    /// (own slot, free slots, silence) off.
+    /// </summary>
+    private (double[] Left, double[] Right) GainsFor(Member listener) =>
+        MatrixMixer.Rows(_room.Channels, _members.Values
+            .Where(source => source.Id != listener.Id && source.Source is { Slot: > 0 })
+            .Select(source => (source.Source!.Slot, context.Render(source.Snapshot, listener.Snapshot))));
+
+    private sealed class Member(ParticipantSnapshot snapshot)
     {
-        public Guid Id { get; } = id;
-        public float Gain { get; set; } = 1f;
+        public Guid Id { get; } = snapshot.Id;
+        public ParticipantSnapshot Snapshot { get; set; } = snapshot;
         public ListenerPart? Listener { get; set; }
 
         /// <summary>Set by AttachSource (streaming thread); read and changed on the worker.</summary>

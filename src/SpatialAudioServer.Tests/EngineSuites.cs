@@ -2,7 +2,10 @@ using SpatialAudioServer.Media.Engines;
 
 namespace SpatialAudioServer.Tests;
 
-/// <summary>Names a mix engine for the shared suites (<see cref="MixSuite{TEngine}"/>, <see cref="MixChangeSuite{TEngine}"/>).</summary>
+/// <summary>
+/// Names a mix engine for the shared suites (<see cref="MixSuite{TEngine}"/>, <see cref="MixChangeSuite{TEngine}"/>,
+/// <see cref="SpatialSuite{TEngine}"/>).
+/// </summary>
 public interface IEngineUnderTest
 {
     static abstract string Name { get; }
@@ -43,11 +46,21 @@ public sealed class MatrixSharedMix : MixSuite<MatrixShared>;
 [Collection("media")]
 public sealed class MatrixSharedMixChanges : MixChangeSuite<MatrixShared>;
 
+[Collection("media")]
+public sealed class PairChainsSpatial : SpatialSuite<PairChains>;
+
+[Collection("media")]
+public sealed class MatrixSpatial : SpatialSuite<Matrix>;
+
+[Collection("media")]
+public sealed class MatrixSharedSpatial : SpatialSuite<MatrixShared>;
+
 public sealed class EngineCoverageTests
 {
     [Theory]
     [InlineData(typeof(MixSuite<>))]
     [InlineData(typeof(MixChangeSuite<>))]
+    [InlineData(typeof(SpatialSuite<>))]
     public void Every_registered_engine_runs_the_suite(Type suite)
     {
         var covered = typeof(EngineCoverageTests).Assembly.GetTypes()

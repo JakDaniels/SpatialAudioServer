@@ -108,7 +108,7 @@ public sealed class RoomManager(
     public (RoomSnapshot Room, bool Created) EnsureRoom(string externalId, EnsureRoomCommand? command)
     {
         var normalized = ExternalIds.Normalize(externalId);
-        var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine);
+        var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine, command?.Spatial);
         ValidateCreate(create);
 
         RoomSnapshot snapshot;
@@ -386,7 +386,8 @@ public sealed class RoomManager(
         }
         var record = new RoomRecord(
             Guid.NewGuid(), command.Name!.Trim(), command.ExternalId, command.MaxParticipants ?? limit.MaxParticipantsPerRoom,
-            command.Metadata?.ToJsonString(), time.GetUtcNow(), command.Engine ?? DefaultEngine);
+            command.Metadata?.ToJsonString(), time.GetUtcNow(), command.Engine ?? DefaultEngine,
+            command.Spatial ?? false);
         rooms.Insert(record);
         var room = new Room(record, DefaultEngine);
         _rooms[room.Id] = room;
@@ -399,7 +400,8 @@ public sealed class RoomManager(
 
     private void RoomCreated(RoomSnapshot snapshot)
     {
-        log.LogInformation("Room {RoomId} '{Name}' created (engine {Engine})", snapshot.Id, snapshot.Name, snapshot.Engine);
+        log.LogInformation("Room {RoomId} '{Name}' created (engine {Engine}{Spatial})", snapshot.Id, snapshot.Name, snapshot.Engine,
+            snapshot.Spatial ? ", spatial" : "");
         media.RoomCreated(snapshot);
     }
 
@@ -434,10 +436,11 @@ public sealed class RoomManager(
         public string? Metadata { get; } = record.MetadataJson;
         public DateTimeOffset CreatedAt { get; } = record.CreatedAt;
         public string Engine { get; } = record.Engine is { } e && MixEngines.Exists(e) ? e : defaultEngine;
+        public bool Spatial { get; } = record.Spatial;
         public Dictionary<Guid, Participant> Participants { get; } = [];
 
         public RoomSnapshot Snapshot() =>
-            new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine);
+            new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine, Spatial);
 
         public IReadOnlyList<ParticipantSnapshot> ParticipantSnapshots() =>
             Participants.Values.OrderBy(p => p.JoinedAt).Select(p => p.Snapshot()).ToList();

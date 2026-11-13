@@ -73,6 +73,11 @@ internal static class Migrations
         """
         ALTER TABLE rooms ADD COLUMN engine TEXT;
         """,
+
+        // 4: spatial rooms mix by participant position (off for rooms created before).
+        """
+        ALTER TABLE rooms ADD COLUMN spatial INTEGER NOT NULL DEFAULT 0;
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;

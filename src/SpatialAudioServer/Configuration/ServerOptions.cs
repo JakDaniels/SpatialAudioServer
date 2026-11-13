@@ -114,6 +114,9 @@ public sealed class MediaOptions
     /// </summary>
     public List<IceServerConfig> IceServers { get; set; } = [];
 
+    /// <summary>Distance model and cluster grid for spatial rooms.</summary>
+    public Media.Spatial.SpatialOptions Spatial { get; set; } = new();
+
     /// <summary>Per-(source, listener) chain queue size; older audio is dropped beyond this.</summary>
     public uint ChainQueueMs { get; set; } = 200;
 }

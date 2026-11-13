@@ -64,8 +64,16 @@ internal interface IMixEngine : IDisposable
 
 /// <summary>What an engine is given to work with. One per room.</summary>
 internal sealed class MixEngineContext(
-    Guid roomId, int maxParticipants, Pipeline pipeline, RoomWorker worker, MediaOptions options, ILogger log)
+    Guid roomId, int maxParticipants, Pipeline pipeline, RoomWorker worker, MediaOptions options, ILogger log, bool spatial = false)
 {
+    /// <summary>The room's spatial policy, or null for a non-spatial room (everyone centred at their gain).</summary>
+    public Spatial.ISpatialPolicy? Spatial { get; } = spatial ? new Spatial.InverseDistancePolicy(options.Spatial) : null;
+
+    /// <summary>How <paramref name="source"/> sounds to <paramref name="listener"/>, including the source's gain/mute.</summary>
+    public Spatial.Rendering Render(ParticipantSnapshot source, ParticipantSnapshot listener) =>
+        (Spatial?.Render(source.Position, listener.Position, listener.Orientation) ?? Media.Spatial.Rendering.Centre)
+            .Scale(source.Muted ? 0 : source.Gain);
+
     public Guid RoomId { get; } = roomId;
 
     /// <summary>The room's participant limit (fixed for its life): engines may size fixed resources by it.</summary>

@@ -43,13 +43,13 @@ public sealed class FakeClient : IDisposable
 
     public FakeClient(
         string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100, ILogger? log = null, double volume = 0.1,
-        bool talking = true, bool viewerStyle = false, AudioClip? clip = null, int clipOffsetBytes = 0)
+        bool talking = true, bool viewerStyle = false, AudioClip? clip = null, int clipOffsetBytes = 0, double? threshold = null)
     {
         _volume = volume;
         ViewerStyle = viewerStyle;
         Name = name;
         ToneHz = toneHz;
-        Meter = new ToneMeter(listenFor) { Threshold = volume / 5 };
+        Meter = new ToneMeter(listenFor) { Threshold = threshold ?? volume / 5 };
         _pipeline = Pipeline.New($"fake-{name}");
         _rtc = new WebRtcBin("webrtc", jitterBufferMs);
         _rtc.NegotiationNeeded += _negotiationNeeded.Set;
