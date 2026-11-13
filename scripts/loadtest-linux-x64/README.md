@@ -81,11 +81,10 @@ R=1806b6ef-...                              # room ID: shown under the room name
 - `--audio` takes any file GStreamer can decode (WAV, OGG/Opus/Vorbis, FLAC, MP3). It is decoded once at start-up
   and looped. Several files are handed out round-robin. Clients that share a file start at different points in it,
   so they don't speak in unison.
-- `--audio flite` needs no file. GStreamer's speech test source (`flitetestsrc`) gives each client its own voice,
-  saying its number and a channel name: `bot-0` says "zero, front left", `bot-1` "one, front right", and so on. They
-  take turns, like a conversation. `flite-together` has them all speak at once. There are 8 distinct voices; from
-  `bot-8` on they repeat. It needs the flite plugin: check with `gst-inspect-1.0 flitetestsrc`. On Ubuntu that plugin
-  is in `gstreamer1.0-plugins-bad`.
+- `--audio flite` needs no file. Each bot says its number, and with `--spatial` where it stands: "Bot 1. North, on
+  your left." The bots take turns, like a conversation; `flite-together` has them all speak at once. Speech comes
+  from libflite, the library behind GStreamer's flite plugin, in four rotating voices. Any number of bots works. The
+  library ships with `gstreamer1.0-plugins-bad` (package `libflite1`); check with `gst-inspect-1.0 flitetestsrc`.
 - Without `--audio`, each client sends a tone (300 Hz, 350 Hz, …).
 - `--talkers K` keeps all but the first K silent: they are in the room, but don't speak.
 - `--volume` scales what they send. The default is 1.0 for files and 0.1 for tones.
@@ -101,10 +100,12 @@ R=1806b6ef-...                              # room ID: shown under the room name
    ./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio flite --spatial
    ```
 
-   `bot-0` ("zero") is ahead of you, `bot-1` on your left, `bot-2` behind, and `bot-3` on your right. `--radius M`
+   Each bot says where it is: `bot-0` is ahead of you, `bot-1` on your left, `bot-2` behind, and `bot-3` on your
+   right. With 8 bots, the diagonals are filled in too. `--radius M`
    changes the circle's size (default 5 m). Within 10 m everyone is at full volume; farther out, the level falls.
-3. Turn with the **Facing** slider and the voices move round you. Stereo can't tell front from back, so "zero" and
-   "two" both sound centred.
+3. Turn with the **Facing** slider and the voices move round you. The compass direction each bot says stays true;
+   "on your left" assumes you face east. Stereo can't tell front from back, so bots ahead and behind both sound
+   centred.
 
 Invite-link guests have no position, so they hear everyone centred at full volume.
 

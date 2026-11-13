@@ -379,9 +379,10 @@ tested without GStreamer.
      accepts the join token without consuming it (or the session token).
    - **Listening-test bots**: the load tool's room mode (`--room ID`) adds fake participants to an existing room
      until Ctrl+C, then removes only them. `--audio` loops decoded files (appsrc → clocksync, 20 ms buffers, each
-     client at its own offset). `--audio flite` / `flite-together` uses `flitetestsrc` (plugins-bad) rendered with
-     one channel per bot, cut to exactly one cycle, so each bot says its own number, either taking turns or all at
-     once. The browser client shows the room ID once joined. Covered by `AudioClipTests` (a sine clip through a real
+     client at its own offset). `--audio flite` / `flite-together` synthesises a phrase per bot with libflite
+     (P/Invoke to the library behind GStreamer's flite plugin; 4 rotating voices): its number, and with `--spatial`
+     (bots in a circle round the browser client at the centre) where it stands, e.g. "Bot 1. North, on your left";
+     taking turns or all at once. The browser client shows the room ID once joined. Covered by `AudioClipTests` (a sine clip through a real
      room checks decode, resample, loop and pacing).
    - **Dead connections**: a participant whose connection has been failed/disconnected for
      `Media:DeadConnectionTimeout` (default 10 s, 0 = off) is removed by `DeadConnectionSweeper` (reason

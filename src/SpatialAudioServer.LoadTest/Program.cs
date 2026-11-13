@@ -99,10 +99,14 @@ public static class LoadTestProgram
             if (file.ToLowerInvariant() is "flite" or "flite-together")
             {
                 var together = file.Equals("flite-together", StringComparison.OrdinalIgnoreCase);
-                var voices = AudioClip.Speech(n, together);
+                // One phrase per bot: its number, and with --spatial where it stands (see the circle below).
+                var phrases = Enumerable.Range(0, n)
+                    .Select(i => options.Spatial ? $"Bot {i}. {Spoken(2 * Math.PI * i / n)}." : $"Bot {i}.")
+                    .ToList();
+                var voices = AudioClip.Speech(phrases, together);
                 clips.AddRange(voices);
                 Console.WriteLine($"Audio: {voices.Count} flite voices {(together ? "speaking together" : "taking turns")}, " +
-                    $"a {voices[0].Length.TotalSeconds:F1} s cycle (each says its number: {options.Name}-0 says \"zero\", …)");
+                    $"a {voices[0].Length.TotalSeconds:F1} s cycle, e.g. {voices[^1].Path}");
                 continue;
             }
             var clip = AudioClip.Load(file);
@@ -192,6 +196,17 @@ public static class LoadTestProgram
                 client.Dispose();
             }
         }
+    }
+
+    /// <summary>What a bot at this angle (anticlockwise from east) says about where it is: compass, then relative to a
+    /// listener facing east (the browser client's starting direction).</summary>
+    private static string Spoken(double angle)
+    {
+        string[] compass = ["East", "North-east", "North", "North-west", "West", "South-west", "South", "South-east"];
+        string[] relative = ["ahead of you", "ahead, to your left", "on your left", "behind, to your left", "behind you",
+            "behind, to your right", "on your right", "ahead, to your right"];
+        var octant = (int)Math.Round(angle / (Math.PI / 4)) % 8;
+        return $"{compass[octant]}, {relative[octant]}";
     }
 
     /// <summary>Where a bot at this angle (anticlockwise from east) is for a listener facing east.</summary>
