@@ -103,7 +103,7 @@ public static class LoadTestProgram
                 var together = file.Equals("flite-together", StringComparison.OrdinalIgnoreCase);
                 // One phrase per bot: its number, and with --spatial where it stands (see the circle below).
                 var phrases = Enumerable.Range(0, n)
-                    .Select(i => options.Spatial ? $"Bot {i}. {Spoken(2 * Math.PI * i / n)}." : $"Bot {i}.")
+                    .Select(i => options.Spatial ? $"{SpokenName(options, i)}. {Spoken(2 * Math.PI * i / n)}." : $"{SpokenName(options, i)}.")
                     .ToList();
                 var voices = AudioClip.Speech(phrases, together);
                 clips.AddRange(voices);
@@ -140,8 +140,8 @@ public static class LoadTestProgram
         {
             for (var i = 0; i < n && !stop.IsCancellationRequested; i++)
             {
-                var name = $"{options.Name}-{i}"; // from 0, matching what the flite voices say
-                // --spatial: a circle round the centre (where the browser client stands), bot-0 straight ahead (east)
+                var name = BotName(options, i); // what the flite voices say too
+                // --spatial: a circle round the centre (where the browser client stands), Bot 1 straight ahead (east)
                 // and the rest spaced anticlockwise, i.e. towards the listener's left first.
                 var angle = 2 * Math.PI * i / n;
                 var position = options.Spatial
@@ -221,6 +221,15 @@ public static class LoadTestProgram
             }
         }
     }
+
+    /// <summary>The display name: "Bot 1", "Bot 2", … (counted from 1).</summary>
+    private static string BotName(Options options, int index) => $"{options.Name} {index + 1}";
+
+    /// <summary>
+    /// The same name as flite should say it: "Bot, 1". Without the comma flite runs "Bot" and the number together
+    /// (a 20 ms gap); the comma gives a 100 ms pause, which sounded best (2026-11-13).
+    /// </summary>
+    private static string SpokenName(Options options, int index) => $"{options.Name}, {index + 1}";
 
     /// <summary>What a bot at this angle (anticlockwise from east) says about where it is: compass, then relative to a
     /// listener facing east (the browser client's starting direction).</summary>
@@ -425,11 +434,11 @@ public static class LoadTestProgram
             "  Adds participants to an existing room (e.g. one you are in with the browser client) and keeps them there\n" +
             "  until Ctrl+C or --duration, then removes them; the room is left alone. They send a tone each, or loop the\n" +
             "  --audio files (any format GStreamer decodes; shared round-robin, each client starting at a different point).\n" +
-            "  --audio flite: synthesised speech instead of a file (flitetestsrc): bot-0 says \"zero, …\", bot-1 \"one, …\"\n" +
-            "  and so on (up to 8 voices), taking turns. --audio flite-together: the same, all speaking at once.\n" +
+            "  --audio flite: synthesised speech instead of a file: each bot says its name (\"Bot 1\", \"Bot 2\", …; --name\n" +
+            "  changes \"Bot\"), and with --spatial where it stands; taking turns. --audio flite-together: all at once.\n" +
             "  --volume scales what they send (default 1.0 for audio files, 0.1 for tones).\n" +
             "  --spatial (spatial rooms): bots stand in a circle of --radius metres (default 5) round the centre, where the\n" +
-            "  browser client puts you: bot-0 ahead (east), the rest spaced anticlockwise.";
+            "  browser client puts you: Bot 1 ahead (east), the rest spaced anticlockwise.";
 
         public static Options Parse(string[] args)
         {
@@ -444,7 +453,7 @@ public static class LoadTestProgram
             Guid? room = null;
             var audio = new List<string>();
             double? volume = null;
-            var name = "bot";
+            var name = "Bot";
             var durationSet = false;
             var spatial = false;
             var radius = 5.0;
