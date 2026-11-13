@@ -189,7 +189,11 @@ public static class LoadTestProgram
         var talkers = Math.Min(options.Talkers ?? n, n);
         var volume = Math.Min(0.1, 0.6 / Math.Max(1, talkers)); // keep the sum of the tones heard under full scale
         var tones = Enumerable.Range(0, n).Select(i => 300.0 + 50 * i).ToArray(); // exact Goertzel bins at 20 ms
-        Console.WriteLine($"Server {options.Server}, engine {engine}: {options.Rooms} room(s) x {n} participants ({talkers} talking), tone volume {volume:F3}");
+        Console.WriteLine($"Server {options.Server}, engine {engine}{(options.Spatial ? ", spatial" : "")}: {options.Rooms} room(s) x {n} " +
+            $"participants ({talkers} talking), tone volume {volume:F3}");
+        // Spatial: everyone somewhere in a 30 m square facing anywhere (few listeners share a rendering, so close to
+        // the worst case for clustering), all within range; distant talkers are quieter, so the meter listens lower.
+        var random = new Random(1234);
 
         var rooms = new List<Guid>();
         var clients = new List<(FakeClient Client, int Room)>();
@@ -197,13 +201,22 @@ public static class LoadTestProgram
         {
             for (var r = 0; r < options.Rooms; r++)
             {
-                var room = await Post<RoomSnapshot>(http, "api/rooms", new { name = $"loadtest-{engine}-{r}", maxParticipants = n, engine });
+                var room = await Post<RoomSnapshot>(http, "api/rooms",
+                    new { name = $"loadtest-{engine}-{r}", maxParticipants = n, engine, spatial = options.Spatial });
                 rooms.Add(room.Id);
                 for (var i = 0; i < n; i++)
                 {
-                    var join = await Post<JoinResponse>(http, $"api/rooms/{room.Id}/participants", new { displayName = $"load-{r}-{i}" });
+                    var yaw = random.NextDouble() * Math.PI; // half-angle for the quaternion about z
+                    var join = await Post<JoinResponse>(http, $"api/rooms/{room.Id}/participants", options.Spatial
+                        ? new
+                        {
+                            displayName = $"load-{r}-{i}",
+                            position = (object)new Vec3(random.NextDouble() * 30, random.NextDouble() * 30, 22),
+                            orientation = (object)new Quat(0, 0, Math.Sin(yaw), Math.Cos(yaw)),
+                        }
+                        : new { displayName = $"load-{r}-{i}", position = (object)null!, orientation = (object)null! });
                     var client = new FakeClient($"r{r}p{i}", tones[i], tones, options.JitterBufferMs, logs.CreateLogger("fake"), volume,
-                        talking: i < talkers);
+                        talking: i < talkers, threshold: options.Spatial ? volume / 10 : null); // codec artefacts reach ~volume/20
                     clients.Add((client, r));
                     await client.ConnectAsync(http, join.ParticipantId, join.JoinToken);
                 }
@@ -240,11 +253,27 @@ public static class LoadTestProgram
             Console.WriteLine($"server CPU        {serverCpu * 100:F0}% of one core = {serverCpu * 100 / after.Process.ProcessorCount:F0}% of {after.Process.ProcessorCount} cores");
             Console.WriteLine($"server memory     {after.Process.WorkingSetBytes / 1048576.0:F0} MB, {after.Process.Threads} threads");
             Console.WriteLine($"load tool CPU     {selfCpu / elapsed * 100:F0}% of one core (shares the machine if run on the server)");
+            if (await MediaStats(http, rooms[0]) is { } stats)
+            {
+                Console.WriteLine($"room 0 media      {string.Join(", ", stats.Counters.Select(c => $"{c.Key} {c.Value}"))}");
+            }
             Console.WriteLine($"heard (others)    min {scores.Min(s => s.HeardFraction):P1}, mean {scores.Average(s => s.MeanPresence):P1} of frames");
             Console.WriteLine($"heard (self)      max {scores.Max(s => s.SelfPresence):P1} of frames (must be ~0: mix-minus)");
             Console.WriteLine($"leaked (other rooms) max {scores.Max(s => s.ForeignPresence):P1}");
 
             var ok = scores.All(s => s.HeardFraction >= 0.99 && s.SelfPresence < 0.02 && s.ForeignPresence < 0.02);
+            if (!ok)
+            {
+                // Who failed and what they heard: tone → presence (and mean L/R amplitude).
+                foreach (var (client, room) in clients.Where((c, i) =>
+                    scores[i] is var s && !(s.HeardFraction >= 0.99 && s.SelfPresence < 0.02 && s.ForeignPresence < 0.02)))
+                {
+                    var levels = client.Meter.Levels();
+                    Console.WriteLine($"  {client.Name} ({client.ToneHz} Hz, {(client.Talking ? "talking" : "silent")}) hears " +
+                        string.Join(", ", client.Meter.Presence().Where(p => p.Value > 0.02)
+                            .Select(p => $"{p.Key}:{p.Value:P0} (L {levels[p.Key].Left:F3} R {levels[p.Key].Right:F3})")));
+                }
+            }
             Console.WriteLine(ok ? "RESULT: PASS" : "RESULT: FAIL");
             return new RunResult(engine, ok, serverCpu, after.Process.ProcessorCount, after.Process.WorkingSetBytes, after.Process.Threads,
                 scores.Min(s => s.HeardFraction));
@@ -293,13 +322,20 @@ public static class LoadTestProgram
         return (await response.Content.ReadFromJsonAsync<T>(Json))!;
     }
 
+    /// <summary>The room's engine counters (encoders, clusters…), or null from a server without the endpoint.</summary>
+    private static async Task<RoomMediaStats?> MediaStats(HttpClient http, Guid roomId)
+    {
+        using var response = await http.GetAsync($"api/rooms/{roomId}/media");
+        return response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<RoomMediaStats>(Json) : null;
+    }
+
     private static async Task<StatusResponse> Status(HttpClient http) =>
         (await http.GetFromJsonAsync<StatusResponse>("api/status", Json))!;
 
     private sealed record Options(
         System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure,
         IReadOnlyList<string> Engines, int? Talkers, Guid? Room, IReadOnlyList<string> AudioFiles, double? Volume, string Name,
-        bool DurationSet)
+        bool DurationSet, bool Spatial)
     {
         public const string Usage =
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
@@ -308,6 +344,7 @@ public static class LoadTestProgram
             "  --engine runs the same load against each named mix engine in turn and prints a comparison\n" +
             "  (default: the server's default engine; GET /api/status lists them).\n" +
             "  --talkers K: only the first K clients in each room send their tone (default: all); the rest send silence.\n" +
+            "  --spatial: spatial rooms, everyone placed at random in a 30 m square facing a random way.\n" +
             "\n" +
             "Room mode (listening tests): SpatialAudioServer.LoadTest --api-key KEY --room ROOM_ID [--participants 4]\n" +
             "                                   [--audio speech.wav[,other.ogg...]] [--talkers K] [--volume 1.0] [--name bot]\n" +
@@ -334,6 +371,7 @@ public static class LoadTestProgram
             double? volume = null;
             var name = "bot";
             var durationSet = false;
+            var spatial = false;
             for (var i = 0; i < args.Length; i++)
             {
                 string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -348,6 +386,7 @@ public static class LoadTestProgram
                     case "--audio": audio.AddRange(Value().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)); break;
                     case "--volume": volume = double.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--name": name = Value(); break;
+                    case "--spatial": spatial = true; break;
                     case "--jitter-ms": jitter = uint.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--insecure": insecure = true; break;
                     case "--talkers": talkers = int.Parse(Value(), CultureInfo.InvariantCulture); break;
@@ -380,7 +419,7 @@ public static class LoadTestProgram
                 throw new ArgumentException("--volume must be between 0 and 10.");
             }
             return new Options(server, key, participants, rooms, duration, jitter, insecure, engines, talkers, room, audio, volume, name,
-                durationSet);
+                durationSet, spatial);
         }
     }
 }

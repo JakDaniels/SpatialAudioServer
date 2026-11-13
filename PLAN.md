@@ -399,9 +399,36 @@ tested without GStreamer.
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.
 5. **Hardening.** Limits, input validation, token expiry, rate limiting, graceful shutdown, Dockerfile,
    Windows/Linux run docs, load test using the GStreamer fake-client tool.
-6. **Spatial hooks (prep, not full spatial).** Position/orientation stored and exposed; a `SpatialPolicy`
-   interface computing gain/pan per (source, listener) – default policy = constant gain, centre pan.
-   Distance/culling policy comes in the later spatial project.
+6. **Spatial (brought forward 2026-11-13, first version done).** Decided: a per-room `spatial` flag (create/ensure,
+   default off, stored: migration 4, shown in room details); `matrix-shared` clusters listeners by rendering; an
+   inverse, SL-like distance model.
+   - `ISpatialPolicy` → `InverseDistancePolicy` (`Media/Spatial/`): full volume within `Media:Spatial:ReferenceDistance`
+     (10 m), then reference/distance, silent beyond `MaxRange` (60 m). Pan = sine of the horizontal angle from the
+     listener's facing (SL axes: x east, y north, z up; identity faces +x), so front and back are both centred.
+     Elevation only counts towards distance. No position on either side = centred, full volume. The participant's
+     gain/mute multiplies in (`MixEngineContext.Render`).
+   - Stereo law (`Rendering.Stereo`): constant power with the centre at unity on both sides, capped at 1 (centre
+     1/1, hard left 1/0), so a centred source is exactly as loud as in a non-spatial room.
+   - Engines: `matrix` puts L/R rows in each listener's audiomixmatrix. `pairchains` sets audioamplify + audiopanorama
+     (switched to `method=simple`: the default psychoacoustic law had every centred source at half level).
+   - `matrix-shared` now has **clusters** instead of one shared branch: listeners hearing the talkers the same way
+     (quantised to `ClusterGainStepDb` 3 dB and `ClusterPanSteps` 8 per side) share a mix + encoder; non-spatial
+     rooms always have exactly one. Clusters are re-keyed in place when all their listeners agree (no switch),
+     otherwise listeners move (link new branch, switch the selector on its first frame, drop the old). Empty
+     clusters go after 1 s. Positions are applied on the 100 ms tick. A bug found by the load tool (a listener moved
+     away and straight back could leave its cluster looking empty and removed under it) is fixed by deriving each
+     cluster's listeners from the members' links.
+   - `GET /api/rooms/{id}/media`: engine, spatial, mixed pairs and counters (`clusters`, `encoders`, `talkers`…).
+     Load tool `--spatial`: everyone at random in a 30 m square facing a random way; prints the room's counters.
+   - Tests: policy/pan law/quantiser units, the flag through the API and a restart, `SpatialSuite` per engine
+     (hard left/right by facing, distance ratio, out of range, turning round, moving in range, unplaced = centred),
+     and `SpatialClusterTests` (shared and split clusters, regrouping when a listener turns).
+   - **Finding: clustering saves little in a scattered crowd.** Offline simulation of 32 people, 3 talkers, random
+     positions and facing (29 listeners): clusters ≈ 29 at the default grid, 26 at 6 dB / 2 pan steps, 21 even at
+     10 dB / left-centre-right. Facing the same way helps somewhat (13–28). So a spatial room costs about one encoder
+     per listener (the `matrix` engine's cost) however it is clustered. Local 32-person run: clusters 29, encoders 32.
+     Options to decide: accept it (spatial rooms cost ~matrix, measure on the 22.04 box), cheaper encoding for
+     spatial rooms, or client-side spatialisation for web clients (forward the ≤ 4 talker streams unmixed).
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
    **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
    `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**

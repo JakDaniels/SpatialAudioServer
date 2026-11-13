@@ -1,9 +1,10 @@
 namespace SpatialAudioServer.LoadTest;
 
 /// <summary>
-/// Measures which test tones are present in received audio. Each 20 ms frame (960 samples at 48 kHz, left channel)
-/// is run through a Goertzel filter per frequency; a tone counts as present in a frame when its amplitude exceeds
-/// <see cref="Threshold"/>. Frequencies should be multiples of 50 Hz (exact Goertzel bins at N=960).
+/// Measures which test tones are present in received audio, and how loud on each side. Each 20 ms frame (960 samples
+/// at 48 kHz) of each channel is run through a Goertzel filter per frequency; a tone counts as present in a frame
+/// when its amplitude on either channel exceeds <see cref="Threshold"/>. Frequencies should be multiples of 50 Hz
+/// (exact Goertzel bins at N=960).
 /// </summary>
 public sealed class ToneMeter(IReadOnlyList<double> frequencies)
 {
@@ -15,7 +16,11 @@ public sealed class ToneMeter(IReadOnlyList<double> frequencies)
 
     private readonly Lock _lock = new();
     private readonly double[] _frame = new double[FrameSamples];
+    private readonly double[] _right = new double[FrameSamples];
     private readonly long[] _present = new long[frequencies.Count];
+    private readonly double[] _sumLeft = new double[frequencies.Count];
+    private readonly double[] _sumRight = new double[frequencies.Count];
+    private int _channels = 1;
     private int _filled;
     private long _frames;
 
@@ -26,8 +31,10 @@ public sealed class ToneMeter(IReadOnlyList<double> frequencies)
     {
         lock (_lock)
         {
+            _channels = channels;
             for (var i = 0; i < interleaved.Length; i += channels)
             {
+                _right[_filled] = channels > 1 ? interleaved[i + 1] / 32768.0 : 0;
                 _frame[_filled++] = interleaved[i] / 32768.0;
                 if (_filled == FrameSamples)
                 {
@@ -48,6 +55,16 @@ public sealed class ToneMeter(IReadOnlyList<double> frequencies)
         }
     }
 
+    /// <summary>Mean amplitude of each frequency on the left and right channels since the last <see cref="Reset"/>.</summary>
+    public IReadOnlyDictionary<double, (double Left, double Right)> Levels()
+    {
+        lock (_lock)
+        {
+            return Frequencies.Select((f, i) => (f, i)).ToDictionary(x => x.f,
+                x => _frames == 0 ? (0.0, 0.0) : (_sumLeft[x.i] / _frames, _sumRight[x.i] / _frames));
+        }
+    }
+
     public long Frames
     {
         get
@@ -64,6 +81,8 @@ public sealed class ToneMeter(IReadOnlyList<double> frequencies)
         lock (_lock)
         {
             Array.Clear(_present);
+            Array.Clear(_sumLeft);
+            Array.Clear(_sumRight);
             _frames = 0;
         }
     }
@@ -73,7 +92,11 @@ public sealed class ToneMeter(IReadOnlyList<double> frequencies)
         _frames++;
         for (var f = 0; f < Frequencies.Count; f++)
         {
-            if (Amplitude(_frame, Frequencies[f]) >= Threshold)
+            var left = Amplitude(_frame, Frequencies[f]);
+            var right = _channels > 1 ? Amplitude(_right, Frequencies[f]) : left;
+            _sumLeft[f] += left;
+            _sumRight[f] += right;
+            if (Math.Max(left, right) >= Threshold)
             {
                 _present[f]++;
             }

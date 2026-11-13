@@ -29,7 +29,14 @@ public interface IRoomMedia
     void AddRemoteCandidates(Guid roomId, Guid participantId, IReadOnlyList<IceCandidate> candidates);
 
     Task<CandidateBatch> WaitForLocalCandidatesAsync(Guid roomId, Guid participantId, int since, TimeSpan wait, CancellationToken cancel);
+
+    /// <summary>The room's mixing statistics (engine counters such as encoders and clusters), or null without media.</summary>
+    Task<RoomMediaStats?> StatsAsync(Guid roomId);
 }
+
+/// <param name="MixedPairs">(source, listener) pairs being mixed.</param>
+/// <param name="Counters">Engine-specific: e.g. encoders, talkers, clusters (matrix-shared), chains (pairchains).</param>
+public sealed record RoomMediaStats(string Engine, bool Spatial, int MixedPairs, IReadOnlyDictionary<string, long> Counters);
 
 /// <summary>Media is disabled (Media:Enabled=false): lifecycle calls do nothing, signalling is unavailable.</summary>
 public sealed class NullRoomMedia : IRoomMedia
@@ -67,6 +74,8 @@ public sealed class NullRoomMedia : IRoomMedia
 
     public Task<CandidateBatch> WaitForLocalCandidatesAsync(Guid roomId, Guid participantId, int since, TimeSpan wait, CancellationToken cancel) =>
         throw new MediaUnavailableException();
+
+    public Task<RoomMediaStats?> StatsAsync(Guid roomId) => Task.FromResult<RoomMediaStats?>(null);
 }
 
 public sealed class MediaUnavailableException() : Exception("Media is disabled on this server (Media:Enabled=false).");

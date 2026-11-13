@@ -34,7 +34,7 @@ internal sealed class PairChainsEngine(MixEngineContext context) : IMixEngine
     };
 
     public void ParticipantAdded(ParticipantSnapshot participant) =>
-        _members.TryAdd(participant.Id, new Member(participant.Id) { Gain = Gain(participant) });
+        _members.TryAdd(participant.Id, new Member(participant));
 
     public void ParticipantUpdated(ParticipantSnapshot participant)
     {
@@ -42,10 +42,10 @@ internal sealed class PairChainsEngine(MixEngineContext context) : IMixEngine
         {
             return;
         }
-        member.Gain = Gain(participant);
-        foreach (var chain in _chains.Values.Where(c => c.Source == participant.Id))
+        member.Snapshot = participant;
+        foreach (var chain in _chains.Values.Where(c => c.Source == participant.Id || c.Listener == participant.Id))
         {
-            chain.SetGain(member.Gain);
+            chain.Apply(context.Render(_members[chain.Source].Snapshot, _members[chain.Listener].Snapshot));
         }
     }
 
@@ -149,8 +149,6 @@ internal sealed class PairChainsEngine(MixEngineContext context) : IMixEngine
         _members.Clear();
     }
 
-    private static float Gain(ParticipantSnapshot p) => p.Muted ? 0f : (float)p.Gain;
-
     private void ReleaseListener(Member member)
     {
         if (member.Listener is { } listener)
@@ -173,15 +171,16 @@ internal sealed class PairChainsEngine(MixEngineContext context) : IMixEngine
 
         var description =
             $"queue max-size-buffers=0 max-size-bytes=0 max-size-time={(ulong)context.Options.ChainQueueMs * 1_000_000} leaky=downstream ! " +
-            "audioamplify name=amp ! audiopanorama name=pan";
+            // method=simple: a centred mono source stays at unity on both sides (the default psychoacoustic law
+            // halves it), matching Rendering.Stereo at the centre and hard sides.
+            "audioamplify name=amp ! audiopanorama name=pan method=simple";
         var bin = Global.ParseBinFromDescription(description, ghostUnlinkedPads: true);
         bin.SetName($"chain-{ShortId(source.Id)}-{ShortId(listener.Id)}");
         var chain = new Chain(source.Id, listener.Id, bin, sourcePart.Tee, listenerPart.Mixer);
 
         Add(Pipeline, bin);
         chain.MixerPad = listenerPart.Mixer.RequestPadSimple("sink_%u") ?? throw new InvalidOperationException("No mixer pad.");
-        chain.SetGain(source.Gain);
-        chain.SetPan(0f); // centre until the spatial policy (Phase 6) supplies one
+        chain.Apply(context.Render(source.Snapshot, listener.Snapshot)); // audiopanorama's own pan law, not Rendering.Stereo
         Link(bin.GetStaticPad("src"), chain.MixerPad, "chain → mixer");
         bin.SyncStateWithParent();
         chain.TeePad = sourcePart.Tee.RequestPadSimple("src_%u") ?? throw new InvalidOperationException("No tee pad.");
@@ -208,10 +207,10 @@ internal sealed class PairChainsEngine(MixEngineContext context) : IMixEngine
         Pipeline.Remove(chain.Bin);
     }
 
-    private sealed class Member(Guid id)
+    private sealed class Member(ParticipantSnapshot snapshot)
     {
-        public Guid Id { get; } = id;
-        public float Gain { get; set; } = 1f;
+        public Guid Id { get; } = snapshot.Id;
+        public ParticipantSnapshot Snapshot { get; set; } = snapshot;
         public ListenerPart? Listener { get; set; }
 
         /// <summary>Set by AttachSource (streaming thread), read and cleared on the worker.</summary>
@@ -238,8 +237,10 @@ internal sealed class PairChainsEngine(MixEngineContext context) : IMixEngine
         public Pad? TeePad { get; set; }
         public Pad? MixerPad { get; set; }
 
-        public void SetGain(float gain) => Bin.GetByName("amp")!.SetProperty("amplification", gain);
-
-        public void SetPan(float pan) => Bin.GetByName("pan")!.SetProperty("panorama", pan);
+        public void Apply(Spatial.Rendering rendering)
+        {
+            Bin.GetByName("amp")!.SetProperty("amplification", (float)rendering.Gain);
+            Bin.GetByName("pan")!.SetProperty("panorama", (float)Math.Clamp(rendering.Pan, -1, 1));
+        }
     }
 }

@@ -46,13 +46,16 @@ public abstract class MediaTestBase : IDisposable
 
     protected HttpClient Signal { get; }
 
-    protected async Task<RoomSnapshot> CreateRoomAsync() =>
-        await (await Api.PostAsJsonAsync("/api/rooms", new { name = "media test", engine = Engine })).Read<RoomSnapshot>();
+    protected async Task<RoomSnapshot> CreateRoomAsync(bool spatial = false) =>
+        await (await Api.PostAsJsonAsync("/api/rooms", new { name = "media test", engine = Engine, spatial })).Read<RoomSnapshot>();
 
     /// <summary>Adds a participant via the control API and connects a fake client sending <c>Tones[index]</c>.</summary>
-    protected async Task<FakeClient> JoinAsync(Guid roomId, int index, bool talking = true, bool viewerStyle = false, AudioClip? clip = null)
+    protected async Task<FakeClient> JoinAsync(
+        Guid roomId, int index, bool talking = true, bool viewerStyle = false, AudioClip? clip = null, Vec3? position = null,
+        Quat? orientation = null)
     {
-        var response = await Api.PostAsJsonAsync($"/api/rooms/{roomId}/participants", new { displayName = $"fake{index}" });
+        var response = await Api.PostAsJsonAsync($"/api/rooms/{roomId}/participants",
+            new { displayName = $"fake{index}", position, orientation });
         response.EnsureSuccessStatusCode();
         var join = await response.Read<JoinResponse>();
         var client = new FakeClient($"fake{index}", Tones[index], Tones, talking: talking, viewerStyle: viewerStyle, clip: clip);

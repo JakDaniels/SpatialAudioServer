@@ -52,6 +52,8 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
     public Task<CandidateBatch> WaitForLocalCandidatesAsync(Guid roomId, Guid participantId, int since, TimeSpan wait, CancellationToken cancel) =>
         Room(roomId).WaitForLocalCandidatesAsync(participantId, since, wait, cancel);
 
+    public async Task<RoomMediaStats?> StatsAsync(Guid roomId) => await Room(roomId).StatsAsync();
+
     /// <summary>For tests and stats: (source, listener) pairs the room's engine is mixing.</summary>
     internal Task<int> MixedPairsAsync(Guid roomId) => Room(roomId).MixedPairsAsync();
 

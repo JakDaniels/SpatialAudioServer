@@ -51,6 +51,15 @@ Realistic talk patterns (needed for `matrix-shared`, which only mixes the curren
 ./SpatialAudioServer.LoadTest --server $S --participants 32 --talkers 3 --engine matrix-shared,matrix
 ```
 
+Spatial rooms (positions matter; `matrix-shared` then needs one cluster per distinct rendering):
+
+```bash
+./SpatialAudioServer.LoadTest --server $S --participants 32 --talkers 3 --spatial --engine matrix-shared,matrix
+```
+
+`--spatial` places everyone at random in a 30 m square, facing a random way. Each run also prints the room's
+engine counters (`clusters`, `encoders`, …) from `GET /api/rooms/{id}/media`.
+
 Other options: `--rooms R` (R rooms of N people each), `--duration S` (measuring window, default 20 s),
 `--jitter-ms`, and `--insecure` (when using `https://…:5001` with the self-signed certificate).
 The exit code is 0 when every run passes.

@@ -26,7 +26,8 @@ public sealed record RoomSnapshot(
     JsonObject? Metadata,
     DateTimeOffset CreatedAt,
     int ParticipantCount,
-    string Engine);
+    string Engine,
+    bool Spatial = false);
 
 public sealed record ParticipantSnapshot(
     Guid Id,
@@ -42,10 +43,12 @@ public sealed record ParticipantSnapshot(
     ParticipantState State);
 
 /// <param name="Engine">Mix engine name (see <c>GET /api/status</c>); null uses the server default (Media:Engine).</param>
-public sealed record CreateRoomCommand(string? Name, string? ExternalId, int? MaxParticipants, JsonObject? Metadata, string? Engine = null);
+/// <param name="Spatial">Mix by participant position (distance and direction); fixed for the room's life. Default off.</param>
+public sealed record CreateRoomCommand(
+    string? Name, string? ExternalId, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null);
 
 /// <summary>Body of get-or-create by external id. Only used when the room is created; name defaults to the external id.</summary>
-public sealed record EnsureRoomCommand(string? Name, int? MaxParticipants, JsonObject? Metadata, string? Engine = null);
+public sealed record EnsureRoomCommand(string? Name, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null);
 
 public sealed record AddParticipantCommand(
     string? DisplayName, string? ExternalId, Vec3? Position, Quat? Orientation, JsonObject? Metadata);
