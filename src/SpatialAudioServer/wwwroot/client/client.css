@@ -60,6 +60,8 @@ code { background: var(--code); padding: 0 .25rem; border-radius: 3px; }
 .new-room { grid-column: 1 / -1; }
 .row { display: flex; gap: .5rem; }
 .row input { flex: 1; min-width: 0; }
+.row .check { display: inline-flex; align-items: center; gap: .3rem; color: var(--text); white-space: nowrap; }
+.row .check input { flex: none; }
 
 input, select, button {
   font: inherit;

@@ -116,6 +116,12 @@ public static class LoadTestProgram
         Console.WriteLine($"Joining room \"{info.GetProperty("name").GetString()}\" ({roomId}) on {options.Server} with {n} " +
             $"participant(s), {talkers} talking ({(clips.Count > 0 ? "audio" : "tones")}) at volume {volume:F2}");
 
+        var roomSpatial = info.TryGetProperty("spatial", out var flag) && flag.GetBoolean();
+        if (options.Spatial && !roomSpatial)
+        {
+            Console.WriteLine("Note: the room is not spatial, so positions are ignored (create it with Spatial ticked).");
+        }
+
         using var stop = new CancellationTokenSource();
         ConsoleCancelEventHandler onCancel = (_, e) =>
         {
@@ -129,7 +135,13 @@ public static class LoadTestProgram
             for (var i = 0; i < n && !stop.IsCancellationRequested; i++)
             {
                 var name = $"{options.Name}-{i}"; // from 0, matching what the flite voices say
-                var join = await Post<JoinResponse>(http, $"api/rooms/{roomId}/participants", new { displayName = name });
+                // --spatial: a circle round the centre (where the browser client stands), bot-0 straight ahead (east)
+                // and the rest spaced anticlockwise, i.e. towards the listener's left first.
+                var angle = 2 * Math.PI * i / n;
+                var position = options.Spatial
+                    ? new Vec3(Math.Round(options.Radius * Math.Cos(angle), 3), Math.Round(options.Radius * Math.Sin(angle), 3), 0)
+                    : null;
+                var join = await Post<JoinResponse>(http, $"api/rooms/{roomId}/participants", new { displayName = name, position });
                 // Each client of a shared clip starts at a different point so they don't speak in unison.
                 var clip = clips.Count > 0 ? clips[i % clips.Count] : null;
                 var sharing = clips.Count > 0 ? (n + clips.Count - 1) / clips.Count : 1;
@@ -138,7 +150,8 @@ public static class LoadTestProgram
                     talking: i < talkers, clip: clip, clipOffsetBytes: offset);
                 clients.Add(client);
                 await client.ConnectAsync(http, join.ParticipantId, join.JoinToken);
-                Console.WriteLine($"  {name} joined ({join.ParticipantId}){(i < talkers ? "" : ", silent")}");
+                Console.WriteLine($"  {name} joined ({join.ParticipantId}){(i < talkers ? "" : ", silent")}" +
+                    (position is null ? "" : $", {options.Radius:0.#} m {Direction(angle)}"));
             }
 
             Console.WriteLine(options.DurationSet
@@ -179,6 +192,15 @@ public static class LoadTestProgram
                 client.Dispose();
             }
         }
+    }
+
+    /// <summary>Where a bot at this angle (anticlockwise from east) is for a listener facing east.</summary>
+    private static string Direction(double angle)
+    {
+        var degrees = (int)Math.Round(angle * 180 / Math.PI) % 360;
+        string[] names = ["ahead (east)", "ahead-left (north-east)", "left (north)", "behind-left (north-west)", "behind (west)",
+            "behind-right (south-west)", "right (south)", "ahead-right (south-east)"];
+        return degrees % 45 == 0 ? names[degrees / 45] : $"at {degrees}° anticlockwise from ahead";
     }
 
     private sealed record RunResult(string Engine, bool Pass, double CpuCores, int Cores, long MemoryBytes, int Threads, double HeardMin);
@@ -335,7 +357,7 @@ public static class LoadTestProgram
     private sealed record Options(
         System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure,
         IReadOnlyList<string> Engines, int? Talkers, Guid? Room, IReadOnlyList<string> AudioFiles, double? Volume, string Name,
-        bool DurationSet, bool Spatial)
+        bool DurationSet, bool Spatial, double Radius)
     {
         public const string Usage =
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
@@ -354,7 +376,9 @@ public static class LoadTestProgram
             "  --audio files (any format GStreamer decodes; shared round-robin, each client starting at a different point).\n" +
             "  --audio flite: synthesised speech instead of a file (flitetestsrc): bot-0 says \"zero, …\", bot-1 \"one, …\"\n" +
             "  and so on (up to 8 voices), taking turns. --audio flite-together: the same, all speaking at once.\n" +
-            "  --volume scales what they send (default 1.0 for audio files, 0.1 for tones).";
+            "  --volume scales what they send (default 1.0 for audio files, 0.1 for tones).\n" +
+            "  --spatial (spatial rooms): bots stand in a circle of --radius metres (default 5) round the centre, where the\n" +
+            "  browser client puts you: bot-0 ahead (east), the rest spaced anticlockwise.";
 
         public static Options Parse(string[] args)
         {
@@ -372,6 +396,7 @@ public static class LoadTestProgram
             var name = "bot";
             var durationSet = false;
             var spatial = false;
+            var radius = 5.0;
             for (var i = 0; i < args.Length; i++)
             {
                 string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -387,6 +412,7 @@ public static class LoadTestProgram
                     case "--volume": volume = double.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--name": name = Value(); break;
                     case "--spatial": spatial = true; break;
+                    case "--radius": radius = double.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--jitter-ms": jitter = uint.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--insecure": insecure = true; break;
                     case "--talkers": talkers = int.Parse(Value(), CultureInfo.InvariantCulture); break;
@@ -419,7 +445,7 @@ public static class LoadTestProgram
                 throw new ArgumentException("--volume must be between 0 and 10.");
             }
             return new Options(server, key, participants, rooms, duration, jitter, insecure, engines, talkers, room, audio, volume, name,
-                durationSet, spatial);
+                durationSet, spatial, radius);
         }
     }
 }
