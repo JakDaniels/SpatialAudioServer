@@ -40,6 +40,7 @@ builder.Services.AddSingleton<SignalSessions>();
 builder.Services.AddSingleton<RoomManager>();
 builder.Services.AddSingleton<ApiKeyValidator>();
 builder.Services.AddHostedService<StartupService>();
+builder.Services.AddHostedService<DeadConnectionSweeper>();
 
 builder.Services.AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(

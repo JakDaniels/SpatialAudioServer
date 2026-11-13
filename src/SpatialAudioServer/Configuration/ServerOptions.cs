@@ -96,6 +96,14 @@ public sealed class MediaOptions
     /// <summary>matrix-shared: how long a talker stays active after their last voiced buffer.</summary>
     public int VadHangoverMs { get; set; } = 800;
 
+    /// <summary>
+    /// A participant whose WebRTC connection has been failed or disconnected this long is removed (logged as
+    /// participant.left, reason "connection-lost"). The server only sees "failed" ~27 s after a client vanishes (ICE
+    /// consent freshness), by which time a live client has noticed and is re-offering (which resets the clock), so
+    /// this can be short. Zero disables it.
+    /// </summary>
+    public TimeSpan DeadConnectionTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
     /// <summary>Mix engine for rooms created without one (see MixEngines; listed by GET /api/status).</summary>
     public string Engine { get; set; } = Media.Engines.MixEngines.Default;
 

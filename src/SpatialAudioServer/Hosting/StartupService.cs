@@ -33,6 +33,11 @@ internal sealed class StartupService(
             throw new InvalidOperationException(
                 $"Media:OpusFrameMs must be one of {string.Join(", ", MediaOptions.OpusFrameSizes)} (is {media.Value.OpusFrameMs}).");
         }
+        if (media.Value.DeadConnectionTimeout < TimeSpan.Zero)
+        {
+            throw new InvalidOperationException(
+                $"Media:DeadConnectionTimeout must not be negative (is {media.Value.DeadConnectionTimeout}); 0 disables it.");
+        }
 
         if (media.Value.Enabled)
         {
