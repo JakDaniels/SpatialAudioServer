@@ -343,7 +343,7 @@ async function loadEvents(older) {
       <td>${escapeHtml(e.kind)}</td>
       <td>${e.roomId ? escapeHtml(state.roomNames.get(e.roomId) ?? short(e.roomId)) : ""}</td>
       <td class="id">${short(e.participantId)}</td>
-      <td class="detail">${escapeHtml(e.detail ?? "")}</td>
+      <td class="detail">${escapeHtml(eventDetail(e))}</td>
     </tr>`).join("");
   const body = $("events").tBodies[0];
   if (older) {
@@ -353,6 +353,13 @@ async function loadEvents(older) {
   }
   if (events.length > 0) state.oldestEvent = events[events.length - 1].id;
   $("olderEvents").disabled = events.length < 100;
+}
+
+/** "Simon: left"; just "Simon" when the detail is the name itself (joined), the detail alone without a participant. */
+function eventDetail(e) {
+  const name = e.participantName;
+  if (!name) return e.detail ?? "";
+  return e.detail && e.detail !== name ? `${name}: ${e.detail}` : name;
 }
 
 async function olderEvents() {
