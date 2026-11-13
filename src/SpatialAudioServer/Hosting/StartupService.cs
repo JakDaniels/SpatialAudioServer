@@ -10,6 +10,10 @@ namespace SpatialAudioServer.Hosting;
 /// Runs before the server accepts requests: migrates the database, starts GStreamer (failing start-up if it is
 /// unusable), restores persisted rooms and warns when no API key exists.
 /// </summary>
+/// <summary>Command-line switches that are not configuration (see Program.cs).</summary>
+/// <param name="DeleteExistingRooms">Delete every stored room at start-up (testing).</param>
+public sealed record StartupFlags(bool DeleteExistingRooms);
+
 internal sealed class StartupService(
     Database database,
     GstRuntime gst,
@@ -17,6 +21,9 @@ internal sealed class StartupService(
     ApiKeyStore apiKeys,
     IOptions<MediaOptions> media,
     IOptions<AuthOptions> auth,
+    StartupFlags flags,
+    RoomStore roomStore,
+    ActivityLog activity,
     ILogger<StartupService> log) : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
@@ -59,6 +66,18 @@ internal sealed class StartupService(
         else
         {
             log.LogWarning("Media is disabled (Media:Enabled=false); GStreamer is not loaded");
+        }
+
+        if (flags.DeleteExistingRooms)
+        {
+            // Before Restore, so the deleted rooms never get media pipelines.
+            var stored = roomStore.All();
+            foreach (var room in stored)
+            {
+                roomStore.Delete(room.Id);
+                activity.Event("room.deleted", room.Id, detail: $"{room.Name} (--delete-existing-rooms)");
+            }
+            log.LogWarning("--delete-existing-rooms: deleted {Count} stored rooms", stored.Count);
         }
 
         rooms.Restore();
