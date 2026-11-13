@@ -92,6 +92,22 @@ R=1806b6ef-...                              # room ID: shown under the room name
 - `--name` sets the display-name prefix. The default is `bot`, which gives `bot-0`, `bot-1`, ….
 - `--engine` can't be combined with `--room`: the room already has its engine.
 
+**Hearing spatial audio.**
+1. In the browser client, tick **Spatial** when you create the room, then join it. You stand at the centre
+   (0, 0, 0), facing east.
+2. Add bots in a circle around you:
+
+   ```bash
+   ./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio flite --spatial
+   ```
+
+   `bot-0` ("zero") is ahead of you, `bot-1` on your left, `bot-2` behind, and `bot-3` on your right. `--radius M`
+   changes the circle's size (default 5 m). Within 10 m everyone is at full volume; farther out, the level falls.
+3. Turn with the **Facing** slider and the voices move round you. Stereo can't tell front from back, so "zero" and
+   "two" both sound centred.
+
+Invite-link guests have no position, so they hear everyone centred at full volume.
+
 **Reading the output.** "server CPU" is measured on the server over the measuring window. A run passes when:
 
 - every client hears each other client's tone in more than half the frames;

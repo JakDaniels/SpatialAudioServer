@@ -67,7 +67,8 @@ async function loadRooms() {
     $("room").innerHTML = rooms.length === 0
       ? `<option value="">No rooms yet: create one</option>`
       : rooms.map(r => `<option value="${r.id}"${r.id === remembered ? " selected" : ""}>` +
-          `${escapeHtml(r.name)} (${r.participantCount} in, ${r.engine})</option>`).join("");
+          `${escapeHtml(r.name)} (${r.participantCount} in, ${r.engine}${r.spatial ? ", spatial" : ""})</option>`).join("");
+    knownRooms = new Map(rooms.map(r => [r.id, r]));
     log(`${rooms.length} room(s); server ${status.version}, GStreamer ${status.gstreamer.version ?? "off"}`);
   } catch (e) {
     log(`error: ${e.message}`);
@@ -79,28 +80,68 @@ async function createRoom() {
   const name = $("newRoomName").value.trim();
   if (!name) { $("newRoomName").focus(); return; }
   try {
-    const room = await request("POST", "/api/rooms", { apiKey: apiKey(), body: { name, engine: $("newRoomEngine").value } });
+    const room = await request("POST", "/api/rooms", {
+      apiKey: apiKey(), body: { name, engine: $("newRoomEngine").value, spatial: $("newRoomSpatial").checked },
+    });
     store(ROOM_STORE, room.id);
     $("newRoomName").value = "";
-    log(`created room ${room.name} (${room.engine})`);
+    log(`created room ${room.name} (${room.engine}${room.spatial ? ", spatial" : ""})`);
     await loadRooms();
   } catch (e) { log(`error: ${e.message}`); }
 }
 
-async function addParticipant(displayName) {
+// Rooms from the last listing, by id (test mode).
+let knownRooms = new Map();
+
+// Spatial rooms: the tester stands at the centre (0, 0, 0). SL axes: x east, y north, z up; facing is the turn
+// left from east, as a rotation about z.
+function facingQuaternion(degrees) {
+  const half = degrees * Math.PI / 360;
+  return { x: 0, y: 0, z: Math.sin(half), w: Math.cos(half) };
+}
+
+function facingName(degrees) {
+  const names = { 0: "east", 45: "north-east", 90: "north", 135: "north-west", 180: "west", "-180": "west",
+    "-45": "south-east", "-90": "south", "-135": "south-west" };
+  return names[degrees] ?? `${degrees}°`;
+}
+
+async function addParticipant(displayName, placed = false) {
   const roomId = $("room").value;
   if (!roomId) throw new Error("Pick or create a room first.");
   store(ROOM_STORE, roomId);
-  const join = await request("POST", `/api/rooms/${roomId}/participants`, { apiKey: apiKey(), body: { displayName } });
-  return { ...join, roomId, roomName: $("room").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") ?? "" };
+  const spatial = knownRooms.get(roomId)?.spatial === true;
+  const body = spatial && placed
+    ? { displayName, position: { x: 0, y: 0, z: 0 }, orientation: facingQuaternion(Number($("facing").value)) }
+    : { displayName };
+  const join = await request("POST", `/api/rooms/${roomId}/participants`, { apiKey: apiKey(), body });
+  return { ...join, roomId, spatial, roomName: $("room").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") ?? "" };
+}
+
+// Spatial test mode: turning sends the new orientation through the control API (debounced).
+let facingTimer = null;
+function onFacing() {
+  const degrees = Number($("facing").value);
+  $("facingLabel").textContent = facingName(degrees);
+  clearTimeout(facingTimer);
+  facingTimer = setTimeout(async () => {
+    if (!call?.roomId || call.closed) return;
+    try {
+      await request("PATCH", `/api/rooms/${call.roomId}/participants/${call.participantId}`,
+        { apiKey: apiKey(), body: { orientation: facingQuaternion(degrees) } });
+      log(`now facing ${facingName(degrees)}`);
+    } catch (e) { log(`error turning: ${e.message}`); }
+  }, 150);
 }
 
 async function joinFromSetup() {
   const name = $("displayName").value.trim() || "Tester";
   store(NAME_STORE, name);
   try {
-    const join = await addParticipant(name);
+    const join = await addParticipant(name, true);
     $("setup").hidden = true;
+    $("facingControl").hidden = !join.spatial;
+    if (join.spatial) log("spatial room: you are at (0, 0, 0); use Facing to turn");
     await startCall(join.participantId, join.joinToken, join.roomName, name, join.roomId);
   } catch (e) { log(`error: ${e.message}`); }
 }
@@ -128,7 +169,7 @@ async function startCall(participantId, joinToken, roomName, displayName, roomId
   $("whoami").textContent = `${displayName ?? "Participant"} · ${participantId}` + (roomId ? ` · room ${roomId}` : "");
   if (roomId) log(`room ID ${roomId} (the load tool's --room)`);
   call = {
-    participantId, joinToken, sessionToken: null, pc: null, stream: null, iceServers: [],
+    participantId, roomId, joinToken, sessionToken: null, pc: null, stream: null, iceServers: [],
     epoch: 0, reconnects: 0, closed: false, audio: null, statsTimer: null, lastStats: null,
   };
   try {
@@ -372,6 +413,7 @@ $("leave").onclick = leave;
 $("join").onclick = joinFromSetup;
 $("invite").onclick = invite;
 $("createRoom").onclick = createRoom;
+$("facing").oninput = onFacing;
 $("refreshRooms").onclick = loadRooms;
 $("apiKey").onchange = loadRooms;
 

@@ -28,6 +28,7 @@
         <span class="row">
           <input id="newRoomName" maxlength="200" placeholder="Room name">
           <select id="newRoomEngine" title="Mix engine"></select>
+          <label class="check" title="Mix by position: distance and direction"><input id="newRoomSpatial" type="checkbox"> Spatial</label>
           <button id="createRoom" type="button">Create</button>
         </span>
       </label>
@@ -58,6 +59,8 @@
       <button id="start" class="primary" type="button" hidden>Join</button>
       <button id="mute" type="button" aria-pressed="false">Mute mic</button>
       <label class="volume">Volume <input id="volume" type="range" min="0" max="1" step="0.05" value="1"></label>
+      <label class="volume" id="facingControl" hidden title="Spatial room: you stand at the centre (0, 0, 0); turn to hear voices move">
+        Facing <input id="facing" type="range" min="-180" max="180" step="15" value="0"> <span id="facingLabel">east</span></label>
       <button id="leave" class="danger" type="button">Leave</button>
     </div>
 
