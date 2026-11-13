@@ -164,19 +164,36 @@ public static class LoadTestProgram
                 ? $"Running for {options.Duration.TotalSeconds:F0} s (Ctrl+C to leave early)"
                 : "Running until Ctrl+C");
             var until = options.DurationSet ? DateTime.UtcNow + options.Duration : DateTime.MaxValue;
-            while (!stop.IsCancellationRequested && DateTime.UtcNow < until)
+            var reported = new HashSet<FakeClient>();
+            for (var tick = 1; !stop.IsCancellationRequested && DateTime.UtcNow < until; tick++)
             {
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(10), stop.Token);
+                    await Task.Delay(TimeSpan.FromSeconds(1), stop.Token);
                 }
                 catch (OperationCanceledException)
                 {
                     break;
                 }
-                var failed = clients.Where(c => c.IceError is not null).Select(c => c.Name).ToList();
-                Console.WriteLine($"  {clients.Count(c => c.Receiving)}/{clients.Count} receiving audio" +
-                    (failed.Count > 0 ? $"; ICE exchange failed: {string.Join(", ", failed)}" : ""));
+                foreach (var gone in clients.Where(c => c.Removed && reported.Add(c)))
+                {
+                    Console.WriteLine($"  {gone.Name} was removed by the server");
+                }
+                if (clients.All(c => c.Removed))
+                {
+                    using var check = await http.GetAsync($"api/rooms/{roomId}");
+                    Console.WriteLine(check.StatusCode == System.Net.HttpStatusCode.NotFound
+                        ? "The room was deleted; exiting."
+                        : "Every bot was removed from the room; exiting.");
+                    return 0;
+                }
+                if (tick % 10 == 0)
+                {
+                    var active = clients.Where(c => !c.Removed).ToList();
+                    var failed = active.Where(c => c.IceError is not null).Select(c => c.Name).ToList();
+                    Console.WriteLine($"  {active.Count(c => c.AudioFlowing)}/{active.Count} receiving audio" +
+                        (failed.Count > 0 ? $"; ICE exchange failed: {string.Join(", ", failed)}" : ""));
+                }
             }
             return 0;
         }
@@ -186,6 +203,11 @@ public static class LoadTestProgram
             Console.WriteLine("Leaving…");
             foreach (var client in clients)
             {
+                if (client.Removed)
+                {
+                    client.Dispose(); // already gone on the server
+                    continue;
+                }
                 try
                 {
                     await client.LeaveAsync(http);

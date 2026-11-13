@@ -35,6 +35,8 @@ public sealed class FakeClient : IDisposable
     private readonly double _volume;
     private readonly Element _tone;
     private int _receiving;
+    private long _lastAudio = long.MinValue / 2; // TickCount64 of the last decoded buffer received
+    private volatile bool _removed;
     private int _remoteCandidates;
     private volatile Exception? _iceError;
     private int _disposed;
@@ -102,6 +104,15 @@ public sealed class FakeClient : IDisposable
     public Guid ParticipantId { get; private set; }
 
     public bool Receiving => Volatile.Read(ref _receiving) == 1;
+
+    /// <summary>Audio from the server arrived within the last 2 seconds.</summary>
+    public bool AudioFlowing => Environment.TickCount64 - Volatile.Read(ref _lastAudio) < 2000;
+
+    /// <summary>
+    /// The server no longer knows this participant (kicked, or the room deleted): its signalling poll got 401/404.
+    /// Viewer-style clients don't poll, so they never notice.
+    /// </summary>
+    public bool Removed => _removed;
 
     /// <summary>Whether the client is sending its tone (otherwise silence). Can change while connected.</summary>
     public bool Talking { get; private set; }
@@ -234,6 +245,8 @@ public sealed class FakeClient : IDisposable
                 using var response = await http.SendAsync(get, cancel);
                 if (!response.IsSuccessStatusCode)
                 {
+                    _removed = response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Unauthorized
+                        or System.Net.HttpStatusCode.Gone;
                     return; // participant removed
                 }
                 var remote = (await response.Content.ReadFromJsonAsync<CandidatesResponse>(Json, cancel))!;
@@ -346,6 +359,7 @@ public sealed class FakeClient : IDisposable
             {
                 using var map = buffer.Map(MapFlags.Read);
                 Meter.Add(MemoryMarshal.Cast<byte, short>(map.Span), channels: 2);
+                Volatile.Write(ref _lastAudio, Environment.TickCount64);
             }
             return PadProbeReturn.Ok;
         });
