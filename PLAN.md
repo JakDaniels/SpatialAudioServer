@@ -377,6 +377,12 @@ tested without GStreamer.
    - **ICE servers**: `Media:IceServers` (RTCIceServer shape: `urls`, `username`, `credential`). webrtcbin uses the
      first `stun:` URL and every `turn:`/`turns:` URL; clients get the list from `GET /signal/{id}/config`, which
      accepts the join token without consuming it (or the session token).
+   - **Listening-test bots**: the load tool's room mode (`--room ID`) adds fake participants to an existing room
+     until Ctrl+C, then removes only them. `--audio` loops decoded files (appsrc → clocksync, 20 ms buffers, each
+     client at its own offset). `--audio flite` / `flite-together` uses `flitetestsrc` (plugins-bad) rendered with
+     one channel per bot, cut to exactly one cycle, so each bot says its own number, either taking turns or all at
+     once. The browser client shows the room ID once joined. Covered by `AudioClipTests` (a sine clip through a real
+     room checks decode, resample, loop and pacing).
    - Still to do: server-side drop of participants whose connection stays failed/disconnected (timeout, event
      logged); TURN tested for real; Firefox + Chrome manual tests on the LAN.
    - **Open intermittent issue:** 1 failure in ~6 full runs: in `Deleting_a_room_with_connected_participants` (pairchains), in

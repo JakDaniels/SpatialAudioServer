@@ -92,7 +92,7 @@ async function addParticipant(displayName) {
   if (!roomId) throw new Error("Pick or create a room first.");
   store(ROOM_STORE, roomId);
   const join = await request("POST", `/api/rooms/${roomId}/participants`, { apiKey: apiKey(), body: { displayName } });
-  return { ...join, roomName: $("room").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") ?? "" };
+  return { ...join, roomId, roomName: $("room").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") ?? "" };
 }
 
 async function joinFromSetup() {
@@ -101,7 +101,7 @@ async function joinFromSetup() {
   try {
     const join = await addParticipant(name);
     $("setup").hidden = true;
-    await startCall(join.participantId, join.joinToken, join.roomName, name);
+    await startCall(join.participantId, join.joinToken, join.roomName, name, join.roomId);
   } catch (e) { log(`error: ${e.message}`); }
 }
 
@@ -121,11 +121,12 @@ async function invite() {
 
 let call = null;
 
-async function startCall(participantId, joinToken, roomName, displayName) {
+async function startCall(participantId, joinToken, roomName, displayName, roomId) {
   $("call").hidden = false;
   $("start").hidden = true;
   $("roomTitle").textContent = roomName ? `Room: ${roomName}` : "In the room";
-  $("whoami").textContent = `${displayName ?? "Participant"} · ${participantId}`;
+  $("whoami").textContent = `${displayName ?? "Participant"} · ${participantId}` + (roomId ? ` · room ${roomId}` : "");
+  if (roomId) log(`room ID ${roomId} (the load tool's --room)`);
   call = {
     participantId, joinToken, sessionToken: null, pc: null, stream: null, iceServers: [],
     epoch: 0, reconnects: 0, closed: false, audio: null, statsTimer: null, lastStats: null,

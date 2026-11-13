@@ -4,6 +4,10 @@
     <ProjectReference Include="..\SpatialAudioServer\SpatialAudioServer.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="GstSharp.Net.App" Version="1.28.17" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>

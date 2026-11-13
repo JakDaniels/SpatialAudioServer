@@ -49,6 +49,11 @@ public static class LoadTestProgram
         using var http = new HttpClient(handler) { BaseAddress = options.Server, Timeout = TimeSpan.FromSeconds(60) };
         http.DefaultRequestHeaders.Add("X-Api-Key", options.ApiKey);
 
+        if (options.Room is { } roomId)
+        {
+            return await JoinRoomAsync(http, options, roomId, logs);
+        }
+
         var engines = options.Engines.Count > 0 ? options.Engines : [(await Status(http)).DefaultEngine];
         var results = new List<RunResult>();
         foreach (var engine in engines)
@@ -71,6 +76,109 @@ public static class LoadTestProgram
             }
         }
         return results.All(r => r.Pass) ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Room mode: adds fake speakers to an existing room (for listening tests in a browser) and keeps them there until
+    /// Ctrl+C or --duration. Only its own participants are removed on exit; the room stays.
+    /// </summary>
+    private static async Task<int> JoinRoomAsync(HttpClient http, Options options, Guid roomId, ILoggerFactory logs)
+    {
+        using var room = await http.GetAsync($"api/rooms/{roomId}");
+        if (!room.IsSuccessStatusCode)
+        {
+            Console.Error.WriteLine($"Room {roomId}: {(int)room.StatusCode} {await room.Content.ReadAsStringAsync()}");
+            return 2;
+        }
+        var info = await room.Content.ReadFromJsonAsync<JsonElement>(Json);
+
+        var clips = new List<AudioClip>();
+        var n = options.Participants;
+        foreach (var file in options.AudioFiles)
+        {
+            if (file.ToLowerInvariant() is "flite" or "flite-together")
+            {
+                var together = file.Equals("flite-together", StringComparison.OrdinalIgnoreCase);
+                var voices = AudioClip.Speech(n, together);
+                clips.AddRange(voices);
+                Console.WriteLine($"Audio: {voices.Count} flite voices {(together ? "speaking together" : "taking turns")}, " +
+                    $"a {voices[0].Length.TotalSeconds:F1} s cycle (each says its number: {options.Name}-0 says \"zero\", …)");
+                continue;
+            }
+            var clip = AudioClip.Load(file);
+            clips.Add(clip);
+            Console.WriteLine($"Audio {clip.Path}: {clip.Length.TotalSeconds:F1} s");
+        }
+
+        var talkers = Math.Min(options.Talkers ?? n, n);
+        var volume = options.Volume ?? (clips.Count > 0 ? 1.0 : 0.1);
+        var tones = Enumerable.Range(0, n).Select(i => 300.0 + 50 * i).ToArray();
+        Console.WriteLine($"Joining room \"{info.GetProperty("name").GetString()}\" ({roomId}) on {options.Server} with {n} " +
+            $"participant(s), {talkers} talking ({(clips.Count > 0 ? "audio" : "tones")}) at volume {volume:F2}");
+
+        using var stop = new CancellationTokenSource();
+        ConsoleCancelEventHandler onCancel = (_, e) =>
+        {
+            e.Cancel = true;
+            stop.Cancel();
+        };
+        Console.CancelKeyPress += onCancel;
+        var clients = new List<FakeClient>();
+        try
+        {
+            for (var i = 0; i < n && !stop.IsCancellationRequested; i++)
+            {
+                var name = $"{options.Name}-{i}"; // from 0, matching what the flite voices say
+                var join = await Post<JoinResponse>(http, $"api/rooms/{roomId}/participants", new { displayName = name });
+                // Each client of a shared clip starts at a different point so they don't speak in unison.
+                var clip = clips.Count > 0 ? clips[i % clips.Count] : null;
+                var sharing = clips.Count > 0 ? (n + clips.Count - 1) / clips.Count : 1;
+                var offset = clip is null ? 0 : (int)((long)clip.Pcm.Length * (i / Math.Max(1, clips.Count)) / sharing);
+                var client = new FakeClient(name, tones[i], tones, options.JitterBufferMs, logs.CreateLogger("fake"), volume,
+                    talking: i < talkers, clip: clip, clipOffsetBytes: offset);
+                clients.Add(client);
+                await client.ConnectAsync(http, join.ParticipantId, join.JoinToken);
+                Console.WriteLine($"  {name} joined ({join.ParticipantId}){(i < talkers ? "" : ", silent")}");
+            }
+
+            Console.WriteLine(options.DurationSet
+                ? $"Running for {options.Duration.TotalSeconds:F0} s (Ctrl+C to leave early)"
+                : "Running until Ctrl+C");
+            var until = options.DurationSet ? DateTime.UtcNow + options.Duration : DateTime.MaxValue;
+            while (!stop.IsCancellationRequested && DateTime.UtcNow < until)
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(10), stop.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                var failed = clients.Where(c => c.IceError is not null).Select(c => c.Name).ToList();
+                Console.WriteLine($"  {clients.Count(c => c.Receiving)}/{clients.Count} receiving audio" +
+                    (failed.Count > 0 ? $"; ICE exchange failed: {string.Join(", ", failed)}" : ""));
+            }
+            return 0;
+        }
+        finally
+        {
+            Console.CancelKeyPress -= onCancel;
+            Console.WriteLine("Leaving…");
+            foreach (var client in clients)
+            {
+                try
+                {
+                    await client.LeaveAsync(http);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  {client.Name}: leave failed ({ex.Message}); removing it via the control API");
+                    await http.DeleteAsync($"api/rooms/{roomId}/participants/{client.ParticipantId}");
+                }
+                client.Dispose();
+            }
+        }
     }
 
     private sealed record RunResult(string Engine, bool Pass, double CpuCores, int Cores, long MemoryBytes, int Threads, double HeardMin);
@@ -190,7 +298,8 @@ public static class LoadTestProgram
 
     private sealed record Options(
         System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure,
-        IReadOnlyList<string> Engines, int? Talkers)
+        IReadOnlyList<string> Engines, int? Talkers, Guid? Room, IReadOnlyList<string> AudioFiles, double? Volume, string Name,
+        bool DurationSet)
     {
         public const string Usage =
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
@@ -198,7 +307,17 @@ public static class LoadTestProgram
             "  The API key can also come from SAS_API_KEY. --insecure accepts the server's self-signed certificate.\n" +
             "  --engine runs the same load against each named mix engine in turn and prints a comparison\n" +
             "  (default: the server's default engine; GET /api/status lists them).\n" +
-            "  --talkers K: only the first K clients in each room send their tone (default: all); the rest send silence.";
+            "  --talkers K: only the first K clients in each room send their tone (default: all); the rest send silence.\n" +
+            "\n" +
+            "Room mode (listening tests): SpatialAudioServer.LoadTest --api-key KEY --room ROOM_ID [--participants 4]\n" +
+            "                                   [--audio speech.wav[,other.ogg...]] [--talkers K] [--volume 1.0] [--name bot]\n" +
+            "                                   [--duration SECONDS]\n" +
+            "  Adds participants to an existing room (e.g. one you are in with the browser client) and keeps them there\n" +
+            "  until Ctrl+C or --duration, then removes them; the room is left alone. They send a tone each, or loop the\n" +
+            "  --audio files (any format GStreamer decodes; shared round-robin, each client starting at a different point).\n" +
+            "  --audio flite: synthesised speech instead of a file (flitetestsrc): bot-0 says \"zero, …\", bot-1 \"one, …\"\n" +
+            "  and so on (up to 8 voices), taking turns. --audio flite-together: the same, all speaking at once.\n" +
+            "  --volume scales what they send (default 1.0 for audio files, 0.1 for tones).";
 
         public static Options Parse(string[] args)
         {
@@ -210,6 +329,11 @@ public static class LoadTestProgram
             var insecure = false;
             var engines = new List<string>();
             int? talkers = null;
+            Guid? room = null;
+            var audio = new List<string>();
+            double? volume = null;
+            var name = "bot";
+            var durationSet = false;
             for (var i = 0; i < args.Length; i++)
             {
                 string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -219,7 +343,11 @@ public static class LoadTestProgram
                     case "--api-key": key = Value(); break;
                     case "--participants": participants = int.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--rooms": rooms = int.Parse(Value(), CultureInfo.InvariantCulture); break;
-                    case "--duration": duration = TimeSpan.FromSeconds(double.Parse(Value(), CultureInfo.InvariantCulture)); break;
+                    case "--duration": duration = TimeSpan.FromSeconds(double.Parse(Value(), CultureInfo.InvariantCulture)); durationSet = true; break;
+                    case "--room": room = Guid.TryParse(Value(), out var id) ? id : throw new ArgumentException("--room needs a room ID (a UUID)."); break;
+                    case "--audio": audio.AddRange(Value().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)); break;
+                    case "--volume": volume = double.Parse(Value(), CultureInfo.InvariantCulture); break;
+                    case "--name": name = Value(); break;
                     case "--jitter-ms": jitter = uint.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--insecure": insecure = true; break;
                     case "--talkers": talkers = int.Parse(Value(), CultureInfo.InvariantCulture); break;
@@ -239,7 +367,20 @@ public static class LoadTestProgram
             {
                 throw new ArgumentException("--talkers must be 0 or more.");
             }
-            return new Options(server, key, participants, rooms, duration, jitter, insecure, engines, talkers);
+            if (audio.Count > 0 && room is null)
+            {
+                throw new ArgumentException("--audio needs --room: the load test measures tones, so it can't use audio files.");
+            }
+            if (room is not null && engines.Count > 0)
+            {
+                throw new ArgumentException("--engine can't be used with --room: the room already has its engine.");
+            }
+            if (volume is < 0 or > 10)
+            {
+                throw new ArgumentException("--volume must be between 0 and 10.");
+            }
+            return new Options(server, key, participants, rooms, duration, jitter, insecure, engines, talkers, room, audio, volume, name,
+                durationSet);
         }
     }
 }

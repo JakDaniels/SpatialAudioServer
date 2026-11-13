@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Gst;
+using Gst.App;
 using Microsoft.Extensions.Logging;
 using SpatialAudioServer.Media;
 using SpatialAudioServer.Signalling;
@@ -38,10 +39,11 @@ public sealed class FakeClient : IDisposable
     private volatile Exception? _iceError;
     private int _disposed;
     private string? _sessionToken;
+    private readonly Thread? _clipPump;
 
     public FakeClient(
         string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100, ILogger? log = null, double volume = 0.1,
-        bool talking = true, bool viewerStyle = false)
+        bool talking = true, bool viewerStyle = false, AudioClip? clip = null, int clipOffsetBytes = 0)
     {
         _volume = volume;
         ViewerStyle = viewerStyle;
@@ -53,15 +55,25 @@ public sealed class FakeClient : IDisposable
         _rtc.NegotiationNeeded += _negotiationNeeded.Set;
         _rtc.IncomingPad += OnIncomingPad;
 
+        // The "tone" element has a volume property either way: the tone generator, or a volume element after the clip.
+        var source = clip is null
+            ? $"audiotestsrc name=tone is-live=true wave=sine freq={toneHz.ToString(CultureInfo.InvariantCulture)} " +
+              $"volume={(talking ? volume : 0).ToString(CultureInfo.InvariantCulture)}"
+            : $"appsrc name=clip format=time is-live=true block=true max-time=100000000 caps=\"{AudioClip.Caps}\" ! clocksync ! " +
+              $"volume name=tone volume={(talking ? volume : 0).ToString(CultureInfo.InvariantCulture)}";
         var send = Global.ParseBinFromDescription(
-            $"audiotestsrc name=tone is-live=true wave=sine freq={toneHz.ToString(CultureInfo.InvariantCulture)} " +
-            $"volume={(talking ? volume : 0).ToString(CultureInfo.InvariantCulture)} ! " +
+            source + " ! " +
             "audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! opusenc ! rtpopuspay pt=111 ! " +
             "capsfilter caps=\"application/x-rtp,media=audio,encoding-name=OPUS,payload=111,clock-rate=48000" +
             // A viewer's offer has an Opus a=fmtp line (which its munging then duplicates); caps fields become fmtp.
             (viewerStyle ? ",useinbandfec=(string)1" : "") + "\"",
             ghostUnlinkedPads: true);
         _tone = send.GetByName("tone")!;
+        if (clip is not null)
+        {
+            var appsrc = send.GetByName("clip") as AppSrc ?? throw new InvalidOperationException("appsrc has no AppSrc wrapper.");
+            _clipPump = new Thread(() => PumpClip(appsrc, clip, clipOffsetBytes)) { IsBackground = true, Name = $"clip-{name}" };
+        }
         Talking = talking;
         _pipeline.Add(_rtc.Element);
         _pipeline.Add(send);
@@ -123,6 +135,7 @@ public sealed class FakeClient : IDisposable
         {
             throw new InvalidOperationException("Fake client pipeline refused to play.");
         }
+        _clipPump?.Start();
         if (!_negotiationNeeded.Wait(TimeSpan.FromSeconds(5), cancel))
         {
             throw new TimeoutException("webrtcbin never asked for negotiation.");
@@ -173,7 +186,11 @@ public sealed class FakeClient : IDisposable
         catch (AggregateException)
         {
         }
-        _pipeline.SetState(State.Null);
+        _pipeline.SetState(State.Null); // unblocks the clip pump's push (it returns Flushing)
+        if (_clipPump is { IsAlive: true })
+        {
+            _clipPump.Join(TimeSpan.FromSeconds(2));
+        }
         _bus.Dispose();
         _rtc.Dispose();
         _pipeline.Dispose();
@@ -271,6 +288,45 @@ public sealed class FakeClient : IDisposable
             }
         }
         return output.ToString();
+    }
+
+    /// <summary>
+    /// Feeds the clip to appsrc in 20 ms buffers, looping, until the pipeline stops. appsrc blocks when 100 ms are
+    /// queued, so this thread runs at the rate the send path consumes. clocksync makes that real time explicitly
+    /// (measured: the send path already paces without it, but that depends on webrtcbin internals).
+    /// </summary>
+    private void PumpClip(AppSrc appsrc, AudioClip clip, int offset)
+    {
+        const int chunkBytes = AudioClip.Rate / 50 * 2;
+        var chunk = new byte[chunkBytes];
+        var pcm = clip.Pcm;
+        var position = (offset & ~1) % pcm.Length;
+        long ms = 0;
+        try
+        {
+            while (!_stop.IsCancellationRequested)
+            {
+                for (var filled = 0; filled < chunkBytes;)
+                {
+                    var n = Math.Min(chunkBytes - filled, pcm.Length - position);
+                    pcm.AsSpan(position, n).CopyTo(chunk.AsSpan(filled));
+                    filled += n;
+                    position = (position + n) % pcm.Length;
+                }
+                var buffer = Gst.Buffer.NewMemdup(chunk);
+                buffer.SetPts(ClockTime.FromMilliseconds(ms));
+                buffer.SetDuration(ClockTime.FromMilliseconds(20));
+                ms += 20;
+                if (appsrc.PushBuffer(buffer) != FlowReturn.Ok)
+                {
+                    return; // flushing: the pipeline is stopping
+                }
+            }
+        }
+        catch (Exception ex) when (Volatile.Read(ref _disposed) == 0)
+        {
+            _log.LogError(ex, "{Name}: audio clip pump stopped", Name);
+        }
     }
 
     private void OnIncomingPad(Pad pad)
