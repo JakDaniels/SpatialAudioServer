@@ -240,6 +240,7 @@ public sealed class RoomManager(
                 Metadata = command.Metadata?.ToJsonString(),
                 JoinedAt = time.GetUtcNow(),
             };
+            participant.StateSince = participant.JoinedAt;
             var (token, expires) = joinTokens.Issue(participant.Id, roomId, auth.Value.JoinTokenLifetime);
             activity.SessionStarted(participant.Id, roomId, participant.ExternalId, participant.DisplayName, participant.JoinedAt);
             activity.Event("participant.joined", roomId, participant.Id, participant.DisplayName);
@@ -324,12 +325,47 @@ public sealed class RoomManager(
                 return;
             }
             participant.State = state;
+            participant.StateSince = time.GetUtcNow();
             if (state is ParticipantState.Connected or ParticipantState.Disconnected or ParticipantState.Failed)
             {
                 activity.Event($"participant.{state.ToString().ToLowerInvariant()}", roomId, participantId);
             }
         }
         log.LogInformation("Participant {ParticipantId} in room {RoomId} is {State}", participantId, roomId, state);
+    }
+
+    /// <summary>
+    /// Removes participants whose connection has been failed or disconnected for at least <paramref name="timeout"/>
+    /// (a client that went away without leaving). Returns how many were removed.
+    /// </summary>
+    public int DropDeadConnections(TimeSpan timeout)
+    {
+        List<(Guid Room, Guid Participant, ParticipantState State, TimeSpan For)> dead;
+        var now = time.GetUtcNow();
+        lock (_lock)
+        {
+            dead = _rooms.Values
+                .SelectMany(r => r.Participants.Values)
+                .Where(p => p.State is ParticipantState.Failed or ParticipantState.Disconnected && now - p.StateSince >= timeout)
+                .Select(p => (p.RoomId, p.Id, p.State, now - p.StateSince))
+                .ToList();
+        }
+        var removed = 0;
+        foreach (var (roomId, participantId, state, duration) in dead)
+        {
+            try
+            {
+                log.LogWarning("Participant {ParticipantId} in room {RoomId} has been {State} for {Seconds:F0} s; removing it",
+                    participantId, roomId, state, duration.TotalSeconds);
+                RemoveParticipant(roomId, participantId, "connection-lost");
+                removed++;
+            }
+            catch (NotFoundException)
+            {
+                // Left or was removed since the scan.
+            }
+        }
+        return removed;
     }
 
     private void ValidateCreate(CreateRoomCommand command) =>
@@ -420,6 +456,8 @@ public sealed class RoomManager(
         public bool Muted { get; set; }
         public double Gain { get; set; } = 1.0;
         public ParticipantState State { get; set; } = ParticipantState.AwaitingSignal;
+        /// <summary>When <see cref="State"/> last changed (set to the join time at creation).</summary>
+        public DateTimeOffset StateSince { get; set; }
 
         public ParticipantSnapshot Snapshot() =>
             new(Id, RoomId, DisplayName, ExternalId, Position, Orientation, Muted, Gain, ParseMetadata(Metadata), JoinedAt, State);

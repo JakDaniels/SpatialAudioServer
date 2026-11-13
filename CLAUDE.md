@@ -30,7 +30,7 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   in PLAN.md Phase 7 (viewer-style fake clients + `trickle:false` answers cover it in tests).
 - **Phase 3 started:** test web client at `/client/` (join link or API-key test mode), `Media:IceServers`,
   `GET /signal/{id}/config`. Verified in headless Chrome. Load tool room mode (`--room ID --audio file|flite|flite-together`)
-  adds talking bots to a room you are in from the browser. Next: server-side drop on prolonged ICE failure, manual
+  adds talking bots to a room you are in from the browser. Dead connections are dropped after `Media:DeadConnectionTimeout` (~27 s detection + 10 s). Next: manual
   Firefox/Chrome LAN test by the user; an intermittent test failure is noted in PLAN.md Phase 3.
 
 ## Key decisions (summary; PLAN.md is authoritative)

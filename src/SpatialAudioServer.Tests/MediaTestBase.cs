@@ -23,10 +23,15 @@ public abstract class MediaTestBase : IDisposable
     private readonly TempDir _dir = new();
     private readonly List<FakeClient> _clients = [];
 
-    protected MediaTestBase(string engine)
+    protected MediaTestBase(string engine, IDictionary<string, string?>? settings = null)
     {
         Engine = engine;
-        Server = new ServerFactory(_dir.File("server.db"), new Dictionary<string, string?> { ["Media:Enabled"] = "true" });
+        var config = new Dictionary<string, string?> { ["Media:Enabled"] = "true" };
+        foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
+        {
+            config[key] = value;
+        }
+        Server = new ServerFactory(_dir.File("server.db"), config);
         Api = Server.CreateAuthedClient();
         Signal = Server.CreateClient();
     }

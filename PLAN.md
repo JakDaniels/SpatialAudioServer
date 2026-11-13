@@ -383,9 +383,16 @@ tested without GStreamer.
      one channel per bot, cut to exactly one cycle, so each bot says its own number, either taking turns or all at
      once. The browser client shows the room ID once joined. Covered by `AudioClipTests` (a sine clip through a real
      room checks decode, resample, loop and pacing).
-   - Still to do: server-side drop of participants whose connection stays failed/disconnected (timeout, event
-     logged); TURN tested for real; Firefox + Chrome manual tests on the LAN.
-   - **Open intermittent issue:** 1 failure in ~6 full runs: in `Deleting_a_room_with_connected_participants` (pairchains), in
+   - **Dead connections**: a participant whose connection has been failed/disconnected for
+     `Media:DeadConnectionTimeout` (default 10 s, 0 = off) is removed by `DeadConnectionSweeper` (reason
+     `connection-lost` in the event log; the web client's next reconnect gets 404 and ends the call). Measured: when a
+     client vanishes, the server's webrtcbin reports `failed` (no `disconnected` first) after ~27 s, when ICE
+     consent freshness lapses (RFC 7675; libnice's 30 s, not configurable). So removal comes ~27 s + timeout after
+     the client goes. A re-offer resets the clock (state goes back to connecting); a replaced endpoint's late state
+     reports are ignored.
+   - Still to do: TURN tested for real; Firefox + Chrome manual tests on the LAN.
+   - **Parked (pairchains only):** the user expects pairchains won't be efficient enough, so its issues are parked;
+     it stays in the engine suites for comparison. Intermittent issue: 1 failure in ~6 full runs: in `Deleting_a_room_with_connected_participants` (pairchains), in
      the fresh second room one direction (fake2 → fake3) never came up within 20 s while the other worked; 12/12
      passes when re-run alone. Not yet diagnosed (candidates: a rare ingress/answer race, or interference from the
      deleted room's teardown running concurrently).

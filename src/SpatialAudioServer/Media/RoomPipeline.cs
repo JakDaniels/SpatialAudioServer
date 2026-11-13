@@ -181,6 +181,10 @@ internal sealed class RoomPipeline : IDisposable
         rtc.IncomingPad += pad => OnIncomingPad(p, endpoint, pad);
         rtc.ConnectionStateChanged += state =>
         {
+            if (endpoint.Removed)
+            {
+                return; // a replaced endpoint (re-offer) must not report over its successor, e.g. a late "closed"
+            }
             if (state == WebRTCPeerConnectionState.Failed)
             {
                 _log.LogWarning("Room {RoomId}: participant {ParticipantId} connection failed: {Diagnostics}",
