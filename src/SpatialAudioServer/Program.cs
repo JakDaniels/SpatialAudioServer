@@ -8,10 +8,15 @@ using SpatialAudioServer.Rooms;
 using SpatialAudioServer.Signalling;
 using SpatialAudioServer.Storage;
 
-// SpatialAudioServer                      run the server
-// SpatialAudioServer apikey <command>     manage stored control-API keys (create <label> | list | revoke <id>)
+// SpatialAudioServer                          run the server
+// SpatialAudioServer --delete-existing-rooms  run it, deleting every stored room first (testing: a clean, idle server)
+// SpatialAudioServer apikey <command>         manage stored control-API keys (create <label> | list | revoke <id>)
 var cliCommand = args is ["apikey", ..];
+const string DeleteRoomsFlag = "--delete-existing-rooms";
+var deleteRooms = !cliCommand && args.Contains(DeleteRoomsFlag);
+args = [.. args.Where(a => a != DeleteRoomsFlag)]; // not a configuration switch: keep it away from the config parser
 var builder = WebApplication.CreateBuilder(cliCommand ? [] : args);
+builder.Services.AddSingleton(new StartupFlags(deleteRooms));
 
 builder.Services.Configure<ServerOptions>(builder.Configuration.GetSection(ServerOptions.Section));
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.Section));

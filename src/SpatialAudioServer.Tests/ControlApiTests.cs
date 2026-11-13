@@ -201,3 +201,36 @@ public sealed class ControlApiTests : IDisposable
         Assert.Equal(HttpStatusCode.Unauthorized, (await server.CreateAuthedClient(key).GetAsync("/api/status")).StatusCode);
     }
 }
+
+/// <summary>The --delete-existing-rooms start-up switch (testing: start with a clean, idle server).</summary>
+public sealed class DeleteExistingRoomsTests : IDisposable
+{
+    private readonly TempDir _dir = new();
+
+    public void Dispose() => _dir.Dispose();
+
+    [Fact]
+    public async Task Stored_rooms_are_deleted_at_start_up_when_asked()
+    {
+        using (var server = new ServerFactory(_dir.File("server.db")))
+        {
+            var api = server.CreateAuthedClient();
+            await api.PostAsJsonAsync("/api/rooms", new { name = "one" });
+            await api.PostAsJsonAsync("/api/rooms", new { name = "two" });
+        }
+
+        using (var kept = new ServerFactory(_dir.File("server.db")))
+        {
+            Assert.Equal(2, (await kept.CreateAuthedClient().GetFromJsonAsync<List<RoomSnapshot>>("/api/rooms", Json.Options))!.Count);
+        }
+
+        using var cleaned = new ServerFactory(_dir.File("server.db")).WithWebHostBuilder(b =>
+            b.ConfigureServices(s => s.AddSingleton(new StartupFlags(DeleteExistingRooms: true))));
+        var client = cleaned.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Api-Key", ServerFactory.ApiKey);
+        Assert.Empty((await client.GetFromJsonAsync<List<RoomSnapshot>>("/api/rooms", Json.Options))!);
+        Assert.Empty(cleaned.Services.GetRequiredService<RoomStore>().All()); // gone from the database, not just hidden
+        Assert.Equal(2, cleaned.Services.GetRequiredService<ActivityLog>().RecentEvents()
+            .Count(e => e.Kind == "room.deleted" && e.Detail!.Contains("--delete-existing-rooms")));
+    }
+}
