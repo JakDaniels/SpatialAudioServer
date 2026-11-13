@@ -175,6 +175,17 @@ public sealed class FakeClient : IDisposable
         _iceLoop = Task.Run(() => TrickleAsync(http, _stop.Token), CancellationToken.None);
     }
 
+    /// <summary>Sets its own listener orientation through signalling (session token), as the web client's Facing does.</summary>
+    public async Task SetListenerOrientationAsync(HttpClient http, Rooms.Quat orientation)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"signal/{ParticipantId}/pose")
+        {
+            Content = JsonContent.Create(new { listenerOrientation = orientation }),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _sessionToken);
+        (await http.SendAsync(request)).EnsureSuccessStatusCode();
+    }
+
     /// <summary>Leaves through the signalling API (the server removes the participant).</summary>
     public async Task LeaveAsync(HttpClient http)
     {

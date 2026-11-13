@@ -4,7 +4,7 @@ namespace SpatialAudioServer.Storage;
 
 public sealed record RoomRecord(
     Guid Id, string Name, string? ExternalId, int MaxParticipants, string? MetadataJson, DateTimeOffset CreatedAt, string? Engine = null,
-    bool Spatial = false);
+    bool Spatial = false, string? ClientPose = null);
 
 /// <summary>Room definitions. Rooms persist until deleted and are restored (empty) at start-up.</summary>
 public sealed class RoomStore(Database database)
@@ -13,11 +13,11 @@ public sealed class RoomStore(Database database)
     {
         using var connection = database.Open();
         using var command = connection.Command(
-            "INSERT INTO rooms (id, name, external_id, max_participants, metadata, created_at, engine, spatial) " +
-            "VALUES ($id, $name, $external, $max, $metadata, $created, $engine, $spatial)",
+            "INSERT INTO rooms (id, name, external_id, max_participants, metadata, created_at, engine, spatial, client_pose) " +
+            "VALUES ($id, $name, $external, $max, $metadata, $created, $engine, $spatial, $pose)",
             ("$id", room.Id.ToString()), ("$name", room.Name), ("$external", room.ExternalId),
             ("$max", room.MaxParticipants), ("$metadata", room.MetadataJson), ("$created", ToDb(room.CreatedAt)), ("$engine", room.Engine),
-            ("$spatial", room.Spatial ? 1 : 0));
+            ("$spatial", room.Spatial ? 1 : 0), ("$pose", room.ClientPose));
         command.ExecuteNonQuery();
     }
 
@@ -32,7 +32,7 @@ public sealed class RoomStore(Database database)
     {
         using var connection = database.Open();
         using var command = connection.Command(
-            "SELECT id, name, external_id, max_participants, metadata, created_at, engine, spatial FROM rooms ORDER BY created_at");
+            "SELECT id, name, external_id, max_participants, metadata, created_at, engine, spatial, client_pose FROM rooms ORDER BY created_at");
         using var reader = command.ExecuteReader();
         var rooms = new List<RoomRecord>();
         while (reader.Read())
@@ -40,7 +40,7 @@ public sealed class RoomStore(Database database)
             rooms.Add(new RoomRecord(
                 Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetNullableString(2),
                 reader.GetInt32(3), reader.GetNullableString(4), FromDb(reader.GetString(5)), reader.GetNullableString(6),
-                reader.GetInt32(7) != 0));
+                reader.GetInt32(7) != 0, reader.GetNullableString(8)));
         }
         return rooms;
     }

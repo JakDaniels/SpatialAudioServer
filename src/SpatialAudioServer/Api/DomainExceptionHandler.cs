@@ -16,6 +16,8 @@ internal sealed class DomainExceptionHandler(IProblemDetailsService problems) : 
             LimitExceededException => new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Limit reached", Detail = exception.Message },
             ConflictException => new ProblemDetails { Status = StatusCodes.Status409Conflict, Title = "Conflict", Detail = exception.Message },
             Media.MediaUnavailableException => new ProblemDetails { Status = StatusCodes.Status503ServiceUnavailable, Title = "Media unavailable", Detail = exception.Message },
+            ForbiddenException => new ProblemDetails { Status = StatusCodes.Status403Forbidden, Title = "Forbidden", Detail = exception.Message },
+            RateLimitedException => new ProblemDetails { Status = StatusCodes.Status429TooManyRequests, Title = "Too many requests", Detail = exception.Message },
             UnauthorizedAccessException => new ProblemDetails { Status = StatusCodes.Status401Unauthorized, Title = "Unauthorized", Detail = exception.Message },
             ArgumentException => new ProblemDetails { Status = StatusCodes.Status400BadRequest, Title = "Bad request", Detail = exception.Message },
             _ => null,
