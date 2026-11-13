@@ -40,6 +40,10 @@ public sealed class GuestNameRuleTests : IDisposable
         var activity = server.Services.GetRequiredService<ActivityLog>();
         Assert.Contains(activity.RecentEvents(), e => e.Kind == "participant.renamed" && e.Detail == "Guest → Alice");
         Assert.Contains(activity.Sessions(room.Id), s => s.ParticipantId == guest.ParticipantId && s.DisplayName == "Alice");
+        // Events carry the participant's latest name, even ones from before the rename.
+        var joined = activity.RecentEvents(roomId: room.Id).Single(e => e.Kind == "participant.joined" && e.ParticipantId == guest.ParticipantId);
+        Assert.Equal("Alice", joined.ParticipantName);
+        Assert.Null(activity.RecentEvents(roomId: room.Id).Single(e => e.Kind == "room.created").ParticipantName);
     }
 
     [Fact]

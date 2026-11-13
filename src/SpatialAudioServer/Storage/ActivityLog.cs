@@ -2,7 +2,9 @@ using static SpatialAudioServer.Storage.StoreHelpers;
 
 namespace SpatialAudioServer.Storage;
 
-public sealed record EventRecord(long Id, DateTimeOffset At, string Kind, Guid? RoomId, Guid? ParticipantId, string? Detail);
+/// <param name="ParticipantName">The participant's (latest) display name from its session, when the event has one.</param>
+public sealed record EventRecord(
+    long Id, DateTimeOffset At, string Kind, Guid? RoomId, Guid? ParticipantId, string? Detail, string? ParticipantName = null);
 
 public sealed record SessionRecord(
     Guid ParticipantId, Guid RoomId, string? ExternalId, string DisplayName,
@@ -26,8 +28,9 @@ public sealed class ActivityLog(Database database, TimeProvider time)
     {
         using var connection = database.Open();
         using var command = connection.Command(
-            "SELECT id, at, kind, room_id, participant_id, detail FROM events " +
-            "WHERE ($room IS NULL OR room_id = $room) AND ($before IS NULL OR id < $before) ORDER BY id DESC LIMIT $limit",
+            "SELECT e.id, e.at, e.kind, e.room_id, e.participant_id, e.detail, s.display_name FROM events e " +
+            "LEFT JOIN sessions s ON s.participant_id = e.participant_id " +
+            "WHERE ($room IS NULL OR e.room_id = $room) AND ($before IS NULL OR e.id < $before) ORDER BY e.id DESC LIMIT $limit",
             ("$limit", limit), ("$room", roomId?.ToString()), ("$before", before));
         using var reader = command.ExecuteReader();
         var events = new List<EventRecord>();
@@ -37,7 +40,7 @@ public sealed class ActivityLog(Database database, TimeProvider time)
                 reader.GetInt64(0), FromDb(reader.GetString(1)), reader.GetString(2),
                 reader.IsDBNull(3) ? null : Guid.Parse(reader.GetString(3)),
                 reader.IsDBNull(4) ? null : Guid.Parse(reader.GetString(4)),
-                reader.GetNullableString(5)));
+                reader.GetNullableString(5), reader.GetNullableString(6)));
         }
         return events;
     }
