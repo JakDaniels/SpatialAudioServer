@@ -25,29 +25,30 @@ public sealed class AudioClipTests() : MediaTestBase(SpatialAudioServer.Media.En
     [Fact]
     public void Flite_voices_take_turns_over_one_cycle()
     {
-        var voices = AudioClip.Speech(3);
+        var voices = AudioClip.Speech(["Bot 0. East, ahead of you.", "Bot 1. North, on your left.", "Bot 2."]);
 
         Assert.Equal(3, voices.Count);
         Assert.All(voices, v => Assert.Equal(voices[0].Pcm.Length, v.Pcm.Length));
-        Assert.InRange(voices[0].Length.TotalSeconds, 1.5, 15); // three short utterances
+        Assert.InRange(voices[0].Length.TotalSeconds, 2, 15); // three short phrases and their pauses
         var samples = voices.Select(v => System.Runtime.InteropServices.MemoryMarshal.Cast<byte, short>(v.Pcm).ToArray()).ToList();
-        Assert.All(samples, s => Assert.True(s.Count(x => x != 0) > s.Length / 10, "every voice speaks"));
+        Assert.All(samples, s => Assert.True(s.Count(x => x != 0) > AudioClip.Rate / 4, "every voice speaks (≥ 0.25 s of sound)"));
         for (var i = 0; i < samples[0].Length; i++)
         {
             Assert.True(samples.Count(s => s[i] != 0) <= 1, $"voices overlap at sample {i}");
         }
-        Assert.Equal(2, AudioClip.Speech(1).Count); // a lone voice still gets pauses
+        var lone = Assert.Single(AudioClip.Speech(["Bot 0."]));
+        Assert.Equal(0, System.Runtime.InteropServices.MemoryMarshal.Cast<byte, short>(lone.Pcm)[^1]); // ends in a pause
     }
 
     [Fact]
     public void Flite_voices_together_all_start_speaking_at_once()
     {
-        var voices = AudioClip.Speech(3, together: true);
+        var voices = AudioClip.Speech(["Bot 0.", "Bot 1.", "Bot 2."], together: true);
 
         Assert.All(voices, v =>
         {
             var samples = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, short>(v.Pcm);
-            Assert.NotEqual(0, samples[0]);
+            Assert.InRange(samples.IndexOfAnyExcept((short)0), 0, AudioClip.Rate / 5); // speaking within 0.2 s of the start
         });
     }
 

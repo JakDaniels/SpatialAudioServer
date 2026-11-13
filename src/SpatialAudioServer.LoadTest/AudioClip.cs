@@ -66,79 +66,33 @@ public sealed class AudioClip
     }
 
     /// <summary>
-    /// Synthesised speech with no file needed: GStreamer's flitetestsrc (plugins-bad, "flite" plugin) speaks each
-    /// channel's number and position in turn ("zero, front left", "one, front right", …). Each channel becomes one
-    /// clip, cut to exactly one cycle, so clients given clips 0, 1, 2… take turns like a conversation and each says
-    /// its own number. At most 8 voices (the element's channel limit); at least 2, so a lone voice gets pauses.
+    /// Synthesised speech, no file needed: one clip per phrase, spoken by flite (<see cref="FliteSpeech"/>) in
+    /// rotating voices. Every clip is one cycle long. Taking turns, each phrase sits in its own slot of the cycle (so
+    /// clients given clips 0, 1, 2… speak one after another, like a conversation); <paramref name="together"/>, they
+    /// all start at once. A pause follows each phrase.
     /// </summary>
-    /// <param name="voices">How many distinct voices (clamped to 2–8).</param>
-    /// <param name="together">Rotate each voice's clip to start with its own utterance, so they all speak at once
-    /// (and keep doing so, with a pause while the others' turns would have been).</param>
-    public static IReadOnlyList<AudioClip> Speech(int voices, bool together = false)
+    public static IReadOnlyList<AudioClip> Speech(IReadOnlyList<string> phrases, bool together = false)
     {
-        var channels = Math.Clamp(voices, 2, 8);
-        if (ElementFactory.Find("flitetestsrc") is null)
+        if (phrases.Count == 0)
         {
-            throw new InvalidOperationException(
-                "--audio flite needs GStreamer's flite plugin (flitetestsrc, in gstreamer1.0-plugins-bad).");
+            throw new ArgumentException("No phrases to speak.", nameof(phrases));
         }
-        var raw = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"sas-flite-{Guid.NewGuid():N}.raw");
-        try
+        var gap = Rate * 4 / 10; // 0.4 s after each phrase
+        var spoken = phrases.Select((text, i) => FliteSpeech.Say(text, FliteSpeech.Voices[i % FliteSpeech.Voices.Length])).ToList();
+        var cycle = together ? spoken.Max(s => s.Length) + gap : spoken.Sum(s => s.Length + gap);
+        var clips = new List<AudioClip>();
+        var offset = 0;
+        for (var i = 0; i < spoken.Count; i++)
         {
-            // About 2 s per utterance, so 60 s covers a full cycle of 8 with room to spare. No audioconvert: it would
-            // downmix; the channels are wanted separately.
-            using var pipeline = (Pipeline)Global.ParseLaunch(
-                $"flitetestsrc samplesperbuffer=4800 num-buffers=600 ! " +
-                $"audio/x-raw,format=S16LE,rate=48000,channels={channels},layout=interleaved ! filesink location=\"{Escape(raw)}\"");
-            pipeline.SetState(State.Playing);
-            using var bus = pipeline.GetBus();
-            using var message = bus.TimedPopFiltered(ClockTime.FromSeconds(120), MessageType.Eos | MessageType.Error);
-            pipeline.SetState(State.Null);
-            if (message is not { Type: MessageType.Eos })
+            var pcm = new byte[cycle * 2];
+            spoken[i].AsSpan().CopyTo(System.Runtime.InteropServices.MemoryMarshal.Cast<byte, short>(pcm.AsSpan()).Slice(offset));
+            clips.Add(new AudioClip($"\"{phrases[i]}\"", pcm));
+            if (!together)
             {
-                var why = message is null ? "timed out" : message.ParseError().Item1.Message;
-                throw new InvalidOperationException($"flitetestsrc: {why}");
+                offset += spoken[i].Length + gap;
             }
-            var samples = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, short>(File.ReadAllBytes(raw)).ToArray();
-            var frames = samples.Length / channels;
-
-            // One cycle: from channel 0's first sound to its first sound after the last channel has spoken.
-            int First(int channel, int from)
-            {
-                for (var f = from; f < frames; f++)
-                {
-                    if (samples[f * channels + channel] != 0)
-                    {
-                        return f;
-                    }
-                }
-                throw new InvalidOperationException("flitetestsrc output has no full cycle.");
-            }
-            var start = First(0, 0);
-            var end = First(0, First(channels - 1, start));
-
-            var clips = new List<AudioClip>();
-            for (var c = 0; c < channels; c++)
-            {
-                var pcm = new byte[(end - start) * 2];
-                var mono = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, short>(pcm.AsSpan());
-                for (var f = start; f < end; f++)
-                {
-                    mono[f - start] = samples[f * channels + c];
-                }
-                if (together)
-                {
-                    var own = mono.IndexOfAnyExcept((short)0);
-                    pcm = [.. pcm.AsSpan(own * 2), .. pcm.AsSpan(0, own * 2)];
-                }
-                clips.Add(new AudioClip($"flite voice {c}", pcm));
-            }
-            return clips;
         }
-        finally
-        {
-            File.Delete(raw);
-        }
+        return clips;
     }
 
     private static string Escape(string path) => path.Replace("\\", "\\\\").Replace("\"", "\\\"");
