@@ -29,7 +29,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 - Firestorm viewer source (git-ignored) is in `docs/reference/phoenix-firestorm`; its WebRTC protocol is summarised
   in PLAN.md Phase 7 (viewer-style fake clients + `trickle:false` answers cover it in tests).
 - **Phase 3 started:** test web client at `/client/` (join link or API-key test mode), `Media:IceServers`,
-  `GET /signal/{id}/config`. Verified in headless Chrome. Next: server-side drop on prolonged ICE failure, manual
+  `GET /signal/{id}/config`. Verified in headless Chrome. Load tool room mode (`--room ID --audio file|flite|flite-together`)
+  adds talking bots to a room you are in from the browser. Next: server-side drop on prolonged ICE failure, manual
   Firefox/Chrome LAN test by the user; an intermittent test failure is noted in PLAN.md Phase 3.
 
 ## Key decisions (summary; PLAN.md is authoritative)

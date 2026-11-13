@@ -55,6 +55,34 @@ Other options: `--rooms R` (R rooms of N people each), `--duration S` (measuring
 `--jitter-ms`, and `--insecure` (when using `https://…:5001` with the self-signed certificate).
 The exit code is 0 when every run passes.
 
+## Extra speakers in your own room (listening tests)
+
+Room mode adds fake participants to an existing room, for example one you are in with the browser client at
+`/client/`. They stay until you press Ctrl+C (or `--duration S` runs out). They then leave, and the room is kept.
+There is no pass/fail, just a "receiving audio" line every 10 s.
+
+```bash
+R=1806b6ef-...                              # room ID: shown under the room name once you join in the browser client
+./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio flite            # synthesised, taking turns
+./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio flite-together   # all at once
+./SpatialAudioServer.LoadTest --server $S --room $R --participants 3 --audio speech.wav
+./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio a.ogg,b.wav --talkers 2 --volume 0.5
+```
+
+- `--audio` takes any file GStreamer can decode (WAV, OGG/Opus/Vorbis, FLAC, MP3). It is decoded once at start-up
+  and looped. Several files are handed out round-robin. Clients that share a file start at different points in it,
+  so they don't speak in unison.
+- `--audio flite` needs no file. GStreamer's speech test source (`flitetestsrc`) gives each client its own voice,
+  saying its number and a channel name: `bot-0` says "zero, front left", `bot-1` "one, front right", and so on. They
+  take turns, like a conversation. `flite-together` has them all speak at once. There are 8 distinct voices; from
+  `bot-8` on they repeat. It needs the flite plugin: check with `gst-inspect-1.0 flitetestsrc`. On Ubuntu that plugin
+  is in `gstreamer1.0-plugins-bad`.
+- Without `--audio`, each client sends a tone (300 Hz, 350 Hz, …).
+- `--talkers K` keeps all but the first K silent: they are in the room, but don't speak.
+- `--volume` scales what they send. The default is 1.0 for files and 0.1 for tones.
+- `--name` sets the display-name prefix. The default is `bot`, which gives `bot-0`, `bot-1`, ….
+- `--engine` can't be combined with `--room`: the room already has its engine.
+
 **Reading the output.** "server CPU" is measured on the server over the measuring window. A run passes when:
 
 - every client hears each other client's tone in more than half the frames;
