@@ -58,7 +58,8 @@ public sealed record ParticipantSnapshot(
     DateTimeOffset JoinedAt,
     ParticipantState State,
     Vec3? ListenerPosition = null,
-    Quat? ListenerOrientation = null);
+    Quat? ListenerOrientation = null,
+    bool ClientNamed = false);
 
 /// <param name="Engine">Mix engine name (see <c>GET /api/status</c>); null uses the server default (Media:Engine).</param>
 /// <param name="Spatial">Mix by participant position (distance and direction); fixed for the room's life. Default off.</param>
@@ -71,8 +72,12 @@ public sealed record CreateRoomCommand(
 public sealed record EnsureRoomCommand(
     string? Name, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null, ClientPose? ClientPose = null);
 
+/// <param name="ClientNamed">
+/// The participant may choose its own display name when it joins (an invited guest); otherwise the name given here
+/// stands (e.g. an SL avatar's name from the region module). Default false.
+/// </param>
 public sealed record AddParticipantCommand(
-    string? DisplayName, string? ExternalId, Vec3? Position, Quat? Orientation, JsonObject? Metadata);
+    string? DisplayName, string? ExternalId, Vec3? Position, Quat? Orientation, JsonObject? Metadata, bool? ClientNamed = null);
 
 /// <summary>Partial update: null fields are left unchanged.</summary>
 /// <param name="Position">Where the participant is: where others hear it from (an SL avatar's position).</param>

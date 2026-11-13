@@ -529,6 +529,12 @@ tested without GStreamer.
        speaker part (`sp`/`sh`) as a hint only and keep the region module's PATCH as the authority? Rate limits for
        the viewer's ≤ 10/s updates; whether the region module should also send camera positions; what the default
        `clientPose` for region rooms should be.
+   - **Guest names (2026-11-13):** a participant created with `clientNamed: true` (both invite buttons) may choose its
+     display name, sent as `displayName` with its first offer; `/signal/{pid}/config` reports `displayName` and
+     `clientNamed`. Checked before the one-time join token is used, so a refused name (403) can be retried. Others
+     keep the name the integration gave (an SL avatar's name from the region module). Logged as
+     `participant.renamed` ("Guest → Alice"); the session history takes the new name; the admin UI tags such
+     participants "guest". Names are trimmed, control characters dropped, ≤ 200 characters.
 
 ## Risks / things to verify
 

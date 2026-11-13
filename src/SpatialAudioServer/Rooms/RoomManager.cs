@@ -239,6 +239,7 @@ public sealed class RoomManager(
                 Orientation = command.Orientation,
                 Metadata = command.Metadata?.ToJsonString(),
                 JoinedAt = time.GetUtcNow(),
+                ClientNamed = command.ClientNamed ?? false,
             };
             participant.StateSince = participant.JoinedAt;
             var (token, expires) = joinTokens.Issue(participant.Id, roomId, auth.Value.JoinTokenLifetime);
@@ -315,6 +316,37 @@ public sealed class RoomManager(
         }
         media.ParticipantUpdated(snapshot);
         return snapshot;
+    }
+
+    /// <summary>
+    /// A participant choosing its own display name (signalling: sent with its offer). Only participants created with
+    /// <c>clientNamed</c> (invited guests) may; a name given by the integration (an SL avatar's) stands.
+    /// </summary>
+    public ParticipantSnapshot RenameSelf(Guid roomId, Guid participantId, string? displayName)
+    {
+        new Validation().Required("displayName", displayName, Validation.MaxNameLength).ThrowIfInvalid();
+        var name = new string(displayName!.Trim().Where(c => !char.IsControl(c)).ToArray());
+        if (name.Length == 0)
+        {
+            throw new DomainValidationException(new Dictionary<string, string[]> { ["displayName"] = ["must not be empty"] });
+        }
+        lock (_lock)
+        {
+            var participant = FindParticipant(FindRoom(roomId), participantId);
+            if (participant.DisplayName == name)
+            {
+                return participant.Snapshot();
+            }
+            if (!participant.ClientNamed)
+            {
+                throw new ForbiddenException("This participant's name is set by the server and cannot be changed by the client.");
+            }
+            activity.Event("participant.renamed", roomId, participantId, $"{participant.DisplayName} → {name}");
+            activity.SessionRenamed(participantId, name);
+            participant.DisplayName = name;
+            log.LogInformation("Participant {ParticipantId} in room {RoomId} is now called '{Name}'", participantId, roomId, name);
+            return participant.Snapshot();
+        }
     }
 
     /// <summary>The shortest interval between a participant's own pose updates (20 per second; SL viewers send ≤ 10).</summary>
@@ -495,7 +527,9 @@ public sealed class RoomManager(
     {
         public required Guid Id { get; init; }
         public required Guid RoomId { get; init; }
-        public required string DisplayName { get; init; }
+        public required string DisplayName { get; set; }
+        /// <summary>May choose its own display name (an invited guest).</summary>
+        public bool ClientNamed { get; init; }
         public string? ExternalId { get; init; }
         public string? Metadata { get; init; }
         public required DateTimeOffset JoinedAt { get; init; }
@@ -513,7 +547,7 @@ public sealed class RoomManager(
 
         public ParticipantSnapshot Snapshot() =>
             new(Id, RoomId, DisplayName, ExternalId, Position, Orientation, Muted, Gain, ParseMetadata(Metadata), JoinedAt, State,
-                ListenerPosition, ListenerOrientation);
+                ListenerPosition, ListenerOrientation, ClientNamed);
     }
 
     // Stored as text and parsed per snapshot, so callers never share a mutable JsonObject with the manager.

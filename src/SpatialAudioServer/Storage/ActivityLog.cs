@@ -42,6 +42,16 @@ public sealed class ActivityLog(Database database, TimeProvider time)
         return events;
     }
 
+    /// <summary>The participant chose its own name: the history shows that rather than the placeholder.</summary>
+    public void SessionRenamed(Guid participantId, string displayName)
+    {
+        using var connection = database.Open();
+        using var command = connection.Command(
+            "UPDATE sessions SET display_name = $name WHERE participant_id = $pid AND left_at IS NULL",
+            ("$pid", participantId.ToString()), ("$name", displayName));
+        command.ExecuteNonQuery();
+    }
+
     public void SessionStarted(Guid participantId, Guid roomId, string? externalId, string displayName, DateTimeOffset joinedAt)
     {
         using var connection = database.Open();

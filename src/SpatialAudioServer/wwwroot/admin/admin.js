@@ -235,7 +235,7 @@ function participantRow(p, s, now) {
   const facing = q ? `${Math.round(2 * Math.atan2(q.z, q.w) * 180 / Math.PI)}°` : null;
   return `
     <tr>
-      <td>${escapeHtml(p.displayName)}<div class="id" title="${p.id}">${short(p.id)}${p.externalId ? ` · ${escapeHtml(p.externalId)}` : ""}</div></td>
+      <td>${escapeHtml(p.displayName)}${p.clientNamed ? `<span class="tag" title="Chose its own name (invited guest)">guest</span>` : ""}<div class="id" title="${p.id}">${short(p.id)}${p.externalId ? ` · ${escapeHtml(p.externalId)}` : ""}</div></td>
       <td><span class="badge ${stateClass}">${escapeHtml(p.state)}</span></td>
       <td>${p.muted ? `<span class="warn">muted</span>`
         : `<span class="level"><i style="width:${width.toFixed(0)}%"></i></span><span class="level-db">${level == null ? "–" : `${level.toFixed(0)} dB`}</span>`}</td>
@@ -291,9 +291,10 @@ async function kick(id) {
 async function invite() {
   try {
     // Spatial rooms: the guest stands at the centre facing east (and can turn in the client); otherwise unplaced.
+    // The guest chooses its own name when it joins (clientNamed).
     const body = state.details?.spatial
-      ? { displayName: "Guest", position: { x: 0, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } }
-      : { displayName: "Guest" };
+      ? { displayName: "Guest", clientNamed: true, position: { x: 0, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } }
+      : { displayName: "Guest", clientNamed: true };
     const join = await request("POST", `/api/rooms/${state.selected}/participants`, body);
     const url = `${location.origin}/client/?participant=${join.participantId}&token=${encodeURIComponent(join.joinToken)}` +
       `&room=${encodeURIComponent(state.details?.name ?? "")}`;
