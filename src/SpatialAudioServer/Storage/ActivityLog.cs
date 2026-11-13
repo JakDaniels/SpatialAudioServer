@@ -21,12 +21,14 @@ public sealed class ActivityLog(Database database, TimeProvider time)
         command.ExecuteNonQuery();
     }
 
-    public IReadOnlyList<EventRecord> RecentEvents(int limit = 100)
+    /// <summary>Newest first; optionally one room's, and only those older than event <paramref name="before"/> (paging).</summary>
+    public IReadOnlyList<EventRecord> RecentEvents(int limit = 100, Guid? roomId = null, long? before = null)
     {
         using var connection = database.Open();
         using var command = connection.Command(
-            "SELECT id, at, kind, room_id, participant_id, detail FROM events ORDER BY id DESC LIMIT $limit",
-            ("$limit", limit));
+            "SELECT id, at, kind, room_id, participant_id, detail FROM events " +
+            "WHERE ($room IS NULL OR room_id = $room) AND ($before IS NULL OR id < $before) ORDER BY id DESC LIMIT $limit",
+            ("$limit", limit), ("$room", roomId?.ToString()), ("$before", before));
         using var reader = command.ExecuteReader();
         var events = new List<EventRecord>();
         while (reader.Read())

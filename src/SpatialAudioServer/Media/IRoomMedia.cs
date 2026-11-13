@@ -32,7 +32,20 @@ public interface IRoomMedia
 
     /// <summary>The room's mixing statistics (engine counters such as encoders and clusters), or null without media.</summary>
     Task<RoomMediaStats?> StatsAsync(Guid roomId);
+
+    /// <summary>Engine statistics plus each participant's input level and connection statistics; null without media.</summary>
+    Task<RoomLiveStats?> LiveStatsAsync(Guid roomId);
+
+    /// <summary>The room's GStreamer pipeline as Graphviz .dot text; null without media.</summary>
+    Task<string?> PipelineDotAsync(Guid roomId);
 }
+
+/// <param name="LevelDb">Incoming audio level, dBFS (peak-held RMS), or null when the engine does not measure it or no
+/// audio has arrived.</param>
+/// <param name="Connection">webrtcbin's statistics, or null before the client has offered or if they did not come in time.</param>
+public sealed record ParticipantLiveStats(Guid Id, double? LevelDb, ConnectionStats? Connection);
+
+public sealed record RoomLiveStats(RoomMediaStats Media, IReadOnlyList<ParticipantLiveStats> Participants);
 
 /// <param name="MixedPairs">(source, listener) pairs being mixed.</param>
 /// <param name="Counters">Engine-specific: e.g. encoders, talkers, clusters (matrix-shared), chains (pairchains).</param>
@@ -76,6 +89,10 @@ public sealed class NullRoomMedia : IRoomMedia
         throw new MediaUnavailableException();
 
     public Task<RoomMediaStats?> StatsAsync(Guid roomId) => Task.FromResult<RoomMediaStats?>(null);
+
+    public Task<RoomLiveStats?> LiveStatsAsync(Guid roomId) => Task.FromResult<RoomLiveStats?>(null);
+
+    public Task<string?> PipelineDotAsync(Guid roomId) => Task.FromResult<string?>(null);
 }
 
 public sealed class MediaUnavailableException() : Exception("Media is disabled on this server (Media:Enabled=false).");

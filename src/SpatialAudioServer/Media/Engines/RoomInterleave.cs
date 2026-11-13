@@ -109,19 +109,19 @@ internal sealed class RoomInterleave : IDisposable
         var decoder = OpusDecoder($"ingress-{id}", "F32LE");
         Add(_context.Pipeline, decoder);
         var src = decoder.GetStaticPad("src");
-        if (onLevel is not null && src is not null)
+        var meter = _levels[participantId] = new LevelMeter();
+        src?.AddProbe(PadProbeType.Buffer, (_, info) =>
         {
-            src.AddProbe(PadProbeType.Buffer, (_, info) =>
+            using var buffer = info.GetBuffer();
+            if (buffer is not null)
             {
-                using var buffer = info.GetBuffer();
-                if (buffer is not null)
-                {
-                    using var map = buffer.Map(MapFlags.Read);
-                    onLevel(Rms(MemoryMarshal.Cast<byte, float>(map.Span)));
-                }
-                return PadProbeReturn.Ok;
-            });
-        }
+                using var map = buffer.Map(MapFlags.Read);
+                var rms = Rms(MemoryMarshal.Cast<byte, float>(map.Span));
+                meter.Add(rms);
+                onLevel?.Invoke(rms);
+            }
+            return PadProbeReturn.Ok;
+        });
         Link(src, _slotPads[slot], "source → interleave");
         decoder.SyncStateWithParent();
         Link(rtpSource, decoder.GetStaticPad("sink"), "webrtcbin → source");
@@ -129,6 +129,24 @@ internal sealed class RoomInterleave : IDisposable
     }
 
     /// <summary>Worker, everything running: stops the source feeding its slot and frees the slot. The slot pad stays.</summary>
+    /// <summary>
+    /// Each attached source's input level (RMS, 0–1 full scale), with a short peak hold so a poll every second or so
+    /// sees speech rather than whichever 20 ms buffer came last. Streaming threads write; anyone may read.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, double> Levels => _levels.ToDictionary(l => l.Key, l => l.Value.Level);
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, LevelMeter> _levels = new();
+
+    /// <summary>Peak-hold level: jumps up at once, falls by 10% per buffer (≈ −46 dB per second at 20 ms).</summary>
+    private sealed class LevelMeter
+    {
+        private double _level;
+
+        public double Level => Volatile.Read(ref _level);
+
+        public void Add(double rms) => Volatile.Write(ref _level, Math.Max(rms, Volatile.Read(ref _level) * 0.9));
+    }
+
     public SourceSlot Detach(SourceSlot source)
     {
         if (source.Slot > 0 && source.Element.GetStaticPad("src") is { } pad)
@@ -136,6 +154,10 @@ internal sealed class RoomInterleave : IDisposable
             UnlinkWhenIdle(pad, _slotPads[source.Slot], _context.Log, $"{source.Element.Name} → interleave");
             lock (_slotLock)
             {
+                if (_slotOwners[source.Slot] is { } owner)
+                {
+                    _levels.TryRemove(owner, out _);
+                }
                 _slotOwners[source.Slot] = null;
             }
         }

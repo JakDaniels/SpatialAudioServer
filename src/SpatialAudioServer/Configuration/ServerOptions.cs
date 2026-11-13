@@ -30,6 +30,21 @@ public sealed class StorageOptions
 }
 
 /// <summary>Section "Auth".</summary>
+/// <summary>The admin web UI (<c>/admin/</c>).</summary>
+public sealed class AdminOptions
+{
+    public const string Section = "Admin";
+
+    /// <summary>
+    /// The admin password as a hash from <c>SpatialAudioServer admin hash-password</c> (for containers / config
+    /// management). When set it wins over the one stored with <c>admin set-password</c>.
+    /// </summary>
+    public string? PasswordHash { get; set; }
+
+    /// <summary>An admin session lasts this long after its last request.</summary>
+    public TimeSpan SessionLifetime { get; set; } = TimeSpan.FromHours(8);
+}
+
 public sealed class AuthOptions
 {
     public const string Section = "Auth";

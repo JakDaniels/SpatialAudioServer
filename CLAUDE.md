@@ -34,8 +34,10 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 - **Spatial (Phase 6, brought forward):** per-room `spatial` flag, inverse-distance policy, L/R matrix rows, matrix-shared
   clusters by rendering; finding: clusters ≈ listeners in a scattered crowd, so spatial rooms default to `matrix`
   (`Media:SpatialEngine`; see PLAN.md Phase 6). Engine tuning parked on the test VM; the server stays an MCU
-  (no client-side spatialisation: SL/OpenSim viewers need one mixed stream). `--delete-existing-rooms` start-up switch for clean test runs. Next: Phase 4 (admin UI); manual
-  Firefox/Chrome LAN test by the user; an intermittent test failure is noted in PLAN.md Phase 3.
+  (no client-side spatialisation: SL/OpenSim viewers need one mixed stream). `--delete-existing-rooms` start-up switch for clean test runs.
+- **Phase 4 (admin UI) first version done:** `/admin/` (password: `dotnet run --project src/SpatialAudioServer -- admin
+  set-password`); rooms, participants with levels and WebRTC stats, mute/gain/kick, event log, pipeline graph.
+  Next: the user's review of the admin UI, then Phase 5 (hardening). Parked: the intermittent pairchains test failure.
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.
