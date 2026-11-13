@@ -65,3 +65,6 @@ docs/reference/phoenix-firestorm
 
 # Server runtime data (SQLite database, generated dev certificate)
 src/SpatialAudioServer/data/
+
+# Per-machine development settings (may hold test API keys)
+src/SpatialAudioServer/appsettings.Development.json
