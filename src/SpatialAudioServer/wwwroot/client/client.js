@@ -109,7 +109,7 @@ function facingName(degrees) {
   return names[degrees] ?? `${degrees}°`;
 }
 
-async function addParticipant(displayName, placed = false) {
+async function addParticipant(displayName, placed = false, clientNamed = false) {
   const roomId = $("room").value;
   if (!roomId) throw new Error("Pick or create a room first.");
   store(ROOM_STORE, roomId);
@@ -117,6 +117,7 @@ async function addParticipant(displayName, placed = false) {
   const body = spatial && placed
     ? { displayName, position: { x: 0, y: 0, z: 0 }, orientation: facingQuaternion(0) } // the centre, facing east
     : { displayName };
+  if (clientNamed) body.clientNamed = true;
   const join = await request("POST", `/api/rooms/${roomId}/participants`, { apiKey: apiKey(), body });
   return { ...join, roomId, spatial, roomName: $("room").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") ?? "" };
 }
@@ -152,7 +153,7 @@ async function joinFromSetup() {
 
 async function invite() {
   try {
-    const join = await addParticipant("Guest", true); // spatial rooms: placed at the centre too
+    const join = await addParticipant("Guest", true, true); // spatial rooms: placed at the centre; chooses its own name
     const url = `${location.origin}/client/?participant=${join.participantId}&token=${encodeURIComponent(join.joinToken)}` +
       `&room=${encodeURIComponent(join.roomName)}`;
     $("inviteLink").hidden = false;
@@ -166,14 +167,14 @@ async function invite() {
 
 let call = null;
 
-async function startCall(participantId, joinToken, roomName, displayName, roomId) {
+async function startCall(participantId, joinToken, roomName, displayName, roomId, chosenName) {
   $("call").hidden = false;
   $("start").hidden = true;
   $("roomTitle").textContent = roomName ? `Room: ${roomName}` : "In the room";
   $("whoami").textContent = `${displayName ?? "Participant"} · ${participantId}` + (roomId ? ` · room ${roomId}` : "");
   if (roomId) log(`room ID ${roomId} (the load tool's --room)`);
   call = {
-    participantId, roomId, joinToken, sessionToken: null, pc: null, stream: null, iceServers: [],
+    participantId, roomId, joinToken, chosenName: chosenName ?? null, sessionToken: null, pc: null, stream: null, iceServers: [],
     epoch: 0, reconnects: 0, closed: false, audio: null, statsTimer: null, lastStats: null,
   };
   try {
@@ -230,7 +231,8 @@ async function connect() {
     offer.sdp = wantStereo(offer.sdp);
     await pc.setLocalDescription(offer);
     const answer = await request("POST", `/signal/${participantId}/offer`, {
-      body: { sdp: pc.localDescription.sdp },
+      // An invited guest's chosen name goes with its first offer (re-offers after a reconnect don't need it).
+      body: call.chosenName && !call.sessionToken ? { sdp: pc.localDescription.sdp, displayName: call.chosenName } : { sdp: pc.localDescription.sdp },
       bearer: call.sessionToken ?? call.joinToken,
     });
     if (epoch !== call?.epoch) return;
@@ -451,7 +453,22 @@ if (params.has("participant") && params.has("token")) {
   $("roomTitle").textContent = params.get("room") ? `Room: ${params.get("room")}` : "Ready to join";
   $("whoami").textContent = `Participant ${params.get("participant")}`;
   setState("ready");
-  $("start").onclick = () => startCall(params.get("participant"), params.get("token"), params.get("room"));
+  // An invited guest may choose its name (the config says so); others keep the name the server gave them.
+  request("GET", `/signal/${params.get("participant")}/config`, { bearer: params.get("token") }).then(config => {
+    $("whoami").textContent = `${config.displayName ?? "Participant"} · ${params.get("participant")}`;
+    if (config.clientNamed) {
+      $("guestNameField").hidden = false;
+      $("guestName").value = store(NAME_STORE) || "";
+      $("guestName").focus();
+    }
+  }).catch(e => log(`error: ${e.message}`));
+  $("start").onclick = () => {
+    const chosen = $("guestNameField").hidden ? null : $("guestName").value.trim();
+    if (chosen === "") { $("guestName").focus(); log("enter your name first"); return; }
+    if (chosen) store(NAME_STORE, chosen);
+    $("guestNameField").hidden = true;
+    startCall(params.get("participant"), params.get("token"), params.get("room"), chosen ?? undefined, undefined, chosen);
+  };
 } else {
   $("setup").hidden = false;
   $("apiKey").value = store(KEY_STORE);

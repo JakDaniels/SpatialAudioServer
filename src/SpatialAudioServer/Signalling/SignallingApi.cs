@@ -7,7 +7,8 @@ namespace SpatialAudioServer.Signalling;
 /// false: the answer waits (up to 5 s) for the server's ICE gathering and carries every candidate, for clients that
 /// never fetch candidates (Second Life viewers). Default true: answer at once and trickle via GET /ice.
 /// </param>
-public sealed record OfferRequest(string? Sdp, bool? Trickle = null);
+/// <param name="DisplayName">The name the participant chose, if it may choose one (invited guests: see config).</param>
+public sealed record OfferRequest(string? Sdp, bool? Trickle = null, string? DisplayName = null);
 
 public sealed record OfferResponse(string Sdp, string SessionToken);
 
@@ -16,7 +17,11 @@ public sealed record CandidateDto(string? Candidate, uint SdpMLineIndex);
 /// <summary>What a client needs before it offers. <see cref="IceServers"/> is ready to pass to RTCPeerConnection.</summary>
 /// <param name="Spatial">The room mixes by position.</param>
 /// <param name="ClientPose">What the participant may change about its own pose (PATCH /signal/{id}/pose).</param>
-public sealed record ClientConfig(IReadOnlyList<IceServerDto> IceServers, bool Spatial = false, ClientPose ClientPose = ClientPose.None);
+/// <param name="DisplayName">The participant's current name.</param>
+/// <param name="ClientNamed">It may choose its own name (send displayName with the offer).</param>
+public sealed record ClientConfig(
+    IReadOnlyList<IceServerDto> IceServers, bool Spatial = false, ClientPose ClientPose = ClientPose.None,
+    string? DisplayName = null, bool ClientNamed = false);
 
 public sealed record IceServerDto(IReadOnlyList<string> Urls, string? Username, string? Credential);
 
@@ -60,8 +65,10 @@ public static class SignallingApi
         {
             var roomId = sessions.AuthorizeReadOnly(participantId, Bearer(http));
             var (room, _) = rooms.GetRoom(roomId);
+            var me = rooms.GetParticipant(roomId, participantId);
             return new ClientConfig(options.Value.IceServers
-                .Select(s => new IceServerDto(s.Urls, s.Username, s.Credential)).ToList(), room.Spatial, room.ClientPose);
+                .Select(s => new IceServerDto(s.Urls, s.Username, s.Credential)).ToList(), room.Spatial, room.ClientPose,
+                me.DisplayName, me.ClientNamed);
         });
 
         // The participant's own pose, within the room's clientPose (today: turning only). Session token.
@@ -72,11 +79,17 @@ public static class SignallingApi
             return Results.NoContent();
         });
 
-        signal.MapPost("/offer", async (Guid participantId, OfferRequest body, HttpContext http, SignalSessions sessions, IRoomMedia media) =>
+        signal.MapPost("/offer", async (Guid participantId, OfferRequest body, HttpContext http, SignalSessions sessions,
+            IRoomMedia media, RoomManager rooms) =>
         {
             if (string.IsNullOrWhiteSpace(body.Sdp))
             {
                 throw new ArgumentException("sdp is required.");
+            }
+            if (body.DisplayName is not null)
+            {
+                // Checked before the offer uses up the one-time join token, so a refused name can be retried.
+                rooms.RenameSelf(sessions.AuthorizeReadOnly(participantId, Bearer(http)), participantId, body.DisplayName);
             }
             var (roomId, sessionToken) = sessions.AuthorizeOffer(participantId, Bearer(http));
             var answer = await media.AnswerOfferAsync(roomId, participantId, body.Sdp);

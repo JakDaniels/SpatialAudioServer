@@ -139,7 +139,8 @@ public sealed class FakeClient : IDisposable
     public Exception? IceError => _iceError;
 
     /// <summary>Offers to the server with the participant's join token and keeps trickling ICE until disposed.</summary>
-    public async Task ConnectAsync(HttpClient http, Guid participantId, string joinToken, CancellationToken cancel = default)
+    public async Task ConnectAsync(HttpClient http, Guid participantId, string joinToken, CancellationToken cancel = default,
+        string? displayName = null)
     {
         ParticipantId = participantId;
         if (_pipeline.SetState(State.Playing) == StateChangeReturn.Failure)
@@ -159,7 +160,9 @@ public sealed class FakeClient : IDisposable
         var offer = await Task.Run(_rtc.CreateOffer, cancel);
         using var request = new HttpRequestMessage(HttpMethod.Post, $"signal/{participantId}/offer")
         {
-            Content = JsonContent.Create(ViewerStyle ? new OfferRequest(MungeLikeViewer(offer), Trickle: false) : new OfferRequest(offer)),
+            Content = JsonContent.Create(ViewerStyle
+                ? new OfferRequest(MungeLikeViewer(offer), Trickle: false, DisplayName: displayName)
+                : new OfferRequest(offer, DisplayName: displayName)),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", joinToken);
         using var response = await http.SendAsync(request, cancel);
