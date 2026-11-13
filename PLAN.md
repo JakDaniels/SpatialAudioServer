@@ -344,7 +344,8 @@ tested without GStreamer.
        mix and switched back 300 ms later.
      - **Spatial**: the shared mix is one rendering for everyone, so it is centred; personal (talker) mixes can be
        spatial. Options for later: cluster listeners whose talker directions quantise the same (one encoder per
-       cluster), or forward the talkers' streams unmixed and spatialise in the client (WebAudio) — no server encoding.
+       cluster). (Forwarding talkers unmixed for the client to spatialise was considered and rejected: SFU, not MCU;
+       SL/OpenSim viewers expect one mixed stream. See Phase 6.)
      - The interleave and safe matrix updates moved to `RoomInterleave`/`MatrixMixer`, shared by both matrix engines.
      - Load tool `--talkers K`: only K clients per room send their tone; the rest send silence. With matrix-shared use
        K ≤ `Media:ActiveSpeakers` (everyone talking at once means only the top talkers are mixed, by design).
@@ -429,7 +430,7 @@ tested without GStreamer.
      10 dB / left-centre-right. Facing the same way helps somewhat (13–28). So a spatial room costs about one encoder
      per listener (the `matrix` engine's cost) however it is clustered. Local 32-person run: clusters 29, encoders 32.
      Options to decide: accept it (spatial rooms cost ~matrix, measure on the 22.04 box), cheaper encoding for
-     spatial rooms, or client-side spatialisation for web clients (forward the ≤ 4 talker streams unmixed).
+     spatial rooms, or client-side spatialisation for web clients (rejected below).
    - **Benchmark (22.04 client, 2026-11-13), 32 people, 3 talkers, spatial:** matrix-shared 74% of 4 cores (29
      clusters, 32 encoders), matrix 65%; both over the 60% gate (non-spatial: matrix-shared 49%, matrix 64%).
      Locally (16 people) part of the gap was start-up work counted in the window (talkers found, personal mixes and
@@ -439,7 +440,20 @@ tested without GStreamer.
      **`Media:SpatialEngine` (default `matrix`)** is the engine for spatial rooms created without one (status:
      `defaultSpatialEngine`; the client switches the engine menu when Spatial is ticked). The load tool's leak check
      now ignores tones that are exact multiples of a talker's (codec harmonics: 600 Hz = 2 × 300 Hz gave a false
-     FAIL). Next: cheaper encoding experiments (`Media__OpusComplexity`, `Media__OpusFrameMs`) on matrix.
+     FAIL).
+   - **Encoder experiments (22.04 client, warm-up on, 32 people, 3 talkers, spatial, matrix):** defaults
+     (complexity 5, 40 ms) **58%** of 4 cores (meets the gate; the earlier 65% included start-up work); complexity 2
+     **54%**, clean; complexity 2 + 60 ms frames **46%** but FAIL: a silent client heard 500 Hz (2 × 400 − 300, an
+     intermodulation product of the encoder, ~−24 dB) in 45% of frames, absent at 40 ms, and 60 ms adds latency.
+     So: keep 40 ms; complexity 2 for spatial rooms is a candidate once a listening test with speech confirms it
+     (would be a separate `Media:SpatialOpusComplexity`, leaving non-spatial rooms at 5).
+   - **Decided 2026-11-13: engine tuning is parked.** Complexity 2 with the speaking bots sounds worse but stays
+     intelligible; not adopted. The test VM (4 vCPUs on shared low-spec hardware) limits what benchmarks can say, so
+     defaults stay (complexity 5, 40 ms; spatial rooms on `matrix`) while the other phases are developed. Revisit on
+     production-like hardware: `Media:SpatialOpusComplexity`, grouping listeners by position. Engines stay as they
+     are: `matrix-shared` for non-spatial rooms, `matrix` for spatial ones.
+   - **Decided: no client-side spatialisation.** The server stays an MCU (one mixed stream per listener); an SFU-style
+     design (forwarding talkers for the browser to spatialise) would break compatibility with SL/OpenSim viewers.
    - Start-up switch `--delete-existing-rooms` (testing): deletes every stored room before any pipeline starts
      (logged as room.deleted). Each room's pipeline otherwise runs from creation even when empty (~1–1.5% of a
      core per room); starting media only when someone joins is noted for Phase 5.
