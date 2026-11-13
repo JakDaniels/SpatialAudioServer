@@ -399,6 +399,29 @@ tested without GStreamer.
      passes when re-run alone. Not yet diagnosed (candidates: a rare ingress/answer race, or interference from the
      deleted room's teardown running concurrently).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.
+   **First version done 2026-11-13** (`/admin/`). Decided: password via CLI with the hash in SQLite; an admin session
+   may use the whole control API, admin-only endpoints need the session; graph rendered server-side when Graphviz is
+   installed.
+   - **Password:** `SpatialAudioServer admin set-password` (no echo, twice; or piped on stdin) stores a PBKDF2-SHA256
+     hash (210k iterations) in the new `settings` table (migration 5); `Admin:PasswordHash` (from `admin
+     hash-password`) wins when set; `admin clear-password`. Start-up warns when none is set.
+   - **Session:** `POST /api/admin/login` → cookie `sas_admin` (HttpOnly, SameSite=Strict, sliding
+     `Admin:SessionLifetime` 8 h); `/logout`, `GET /api/admin/session`. 5 failures per address per minute → 429.
+     Events `admin.login`, `admin.login-failed`. Requests with an API key use the key scheme, others the cookie;
+     `/api/*` accepts either, 401 (no redirect) without.
+   - **Admin-only endpoints** (`/api/admin/…`): `events` (?room, ?before paging, ?limit), `rooms/{id}/sessions`,
+     `rooms/{id}/live` (engine counters + per participant: input level dBFS, peak-held RMS from `RoomInterleave` for
+     both matrix engines, none for pairchains; webrtcbin get-stats: packets/bytes in and out, loss, jitter, RTT,
+     client-reported loss, ICE candidate types), `rooms/{id}/graph.dot`, `rooms/{id}/graph.svg` (Graphviz `dot`, 501
+     if absent). get-stats is emitted on the room worker and the replies awaited off it, so a participant leaving
+     meanwhile cannot free the element under the call.
+   - **UI** (`wwwroot/admin`, reuses the client's CSS): sign-in, status line (version, rooms, memory, CPU), rooms
+     table + create (engine, spatial, max) / delete, room view (participants: state, level meter, kbit/s in/out
+     from byte deltas, loss, jitter, RTT, path, position, gain; mute/unmute, kick; invite link; pipeline graph and
+     .dot; session history), event log for all rooms or the selected one, with paging. Polls: room 1 s, rooms 3 s,
+     status and events 5 s. Checked in headless Chrome with speaking bots (screenshots).
+   - Tests: `AdminAuthTests` (hashing, login, throttle, logout, cookie flags, config precedence, admin ⊇ API, API
+     key ≠ admin), `AdminMediaTests` (levels of talking vs silent clients, connection stats, graph).
 5. **Hardening.** Limits, input validation, token expiry, rate limiting, graceful shutdown, Dockerfile,
    Windows/Linux run docs, load test using the GStreamer fake-client tool.
 6. **Spatial (brought forward 2026-11-13, first version done).** Decided: a per-room `spatial` flag (create/ensure,

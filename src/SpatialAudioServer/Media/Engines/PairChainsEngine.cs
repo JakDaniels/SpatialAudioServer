@@ -33,6 +33,9 @@ internal sealed class PairChainsEngine(MixEngineContext context) : IMixEngine
         ["decoders"] = _members.Values.Count(m => m.Source is not null),
     };
 
+    /// <summary>Not measured (pairchains is parked).</summary>
+    public IReadOnlyDictionary<Guid, double> InputLevels { get; } = new Dictionary<Guid, double>();
+
     public void ParticipantAdded(ParticipantSnapshot participant) =>
         _members.TryAdd(participant.Id, new Member(participant));
 

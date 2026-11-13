@@ -60,6 +60,9 @@ internal interface IMixEngine : IDisposable
 
     /// <summary>Worker: engine-specific counters for stats and comparison (element counts, encoders, …).</summary>
     IReadOnlyDictionary<string, long> Counters { get; }
+
+    /// <summary>Each participant's incoming audio level (RMS, 0–1 full scale, peak-held); empty if the engine has none.</summary>
+    IReadOnlyDictionary<Guid, double> InputLevels { get; }
 }
 
 /// <summary>What an engine is given to work with. One per room.</summary>

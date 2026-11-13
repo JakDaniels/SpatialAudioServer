@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spatial Audio Admin</title>
+<link rel="stylesheet" href="../client/client.css">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<header class="admin-head">
+  <div>
+    <h1>Spatial Audio admin</h1>
+    <p class="sub" id="serverLine">Not signed in</p>
+  </div>
+  <button id="logout" type="button" hidden>Sign out</button>
+</header>
+
+<main class="wide">
+  <section id="login" class="card narrow" hidden>
+    <h2>Sign in</h2>
+    <form id="loginForm">
+      <label class="field">Admin password <input id="password" type="password" autocomplete="current-password" required></label>
+      <div class="actions"><button class="primary" type="submit">Sign in</button></div>
+    </form>
+    <p class="hint" id="loginHint"></p>
+  </section>
+
+  <div id="app" hidden>
+    <section class="card">
+      <div class="section-head">
+        <h2>Rooms</h2>
+        <form id="createForm" class="row create">
+          <input id="newName" maxlength="200" placeholder="New room name" required>
+          <select id="newEngine" title="Mix engine"></select>
+          <label class="check" title="Mix by position"><input id="newSpatial" type="checkbox"> Spatial</label>
+          <input id="newMax" type="number" min="1" max="32" placeholder="Max" title="Maximum participants (blank = server limit)">
+          <button type="submit">Create</button>
+        </form>
+      </div>
+      <div class="table-wrap">
+        <table id="rooms">
+          <thead><tr><th>Name</th><th>Engine</th><th>People</th><th>External id</th><th>Created</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="room" class="card" hidden>
+      <div class="section-head">
+        <div>
+          <h2 id="roomName"></h2>
+          <p class="hint" id="roomMeta"></p>
+        </div>
+        <div class="actions">
+          <button id="invite" type="button" title="Add a participant and copy a join link for the test client">Invite link</button>
+          <a id="graphSvg" class="button" target="_blank" rel="noopener">Pipeline graph</a>
+          <a id="graphDot" class="button" download>.dot</a>
+          <button id="sessions" type="button">History</button>
+          <button id="closeRoom" type="button">Close</button>
+        </div>
+      </div>
+      <p id="inviteLink" class="link" hidden></p>
+      <p class="counters" id="counters"></p>
+      <div class="table-wrap">
+        <table id="participants">
+          <thead><tr>
+            <th>Participant</th><th>State</th><th>Level</th><th title="kbit/s from / to the client">In / out</th>
+            <th title="Packets lost from the client; the client's reported loss of ours">Loss</th><th>Jitter</th><th>RTT</th>
+            <th>Path</th><th>Position</th><th>Gain</th><th></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="history" hidden>
+        <h3>Session history</h3>
+        <div class="table-wrap">
+          <table id="historyTable">
+            <thead><tr><th>Name</th><th>External id</th><th>Joined</th><th>Left</th><th>Reason</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>Events <span class="hint" id="eventScope"></span></h2>
+        <div class="actions"><button id="olderEvents" type="button">Older</button></div>
+      </div>
+      <div class="table-wrap">
+        <table id="events">
+          <thead><tr><th>Time</th><th>Event</th><th>Room</th><th>Participant</th><th>Detail</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="admin.js"></script>
+</body>
+</html>

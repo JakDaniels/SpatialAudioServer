@@ -62,6 +62,40 @@ internal sealed class RoomPipeline : IDisposable
     public Task<RoomMediaStats> StatsAsync() =>
         _worker.InvokeAsync(() => new RoomMediaStats(EngineName, Spatial, _engine.MixedPairs, _engine.Counters));
 
+    /// <summary>
+    /// Engine stats plus, per participant, the input level and the connection's statistics. The get-stats requests
+    /// go out on the worker (endpoints cannot be removed meanwhile); the replies are awaited off it.
+    /// </summary>
+    public async Task<RoomLiveStats> LiveStatsAsync()
+    {
+        var (media, levels, requests) = await _worker.InvokeAsync(() => (
+            new RoomMediaStats(EngineName, Spatial, _engine.MixedPairs, _engine.Counters),
+            _engine.InputLevels,
+            _participants.Values.Select(p => (p.Id, Request: p.Endpoint is { } e ? TryRequestStats(e.Rtc) : null)).ToList()));
+        var participants = await System.Threading.Tasks.Task.WhenAll(requests.Select(async r => new ParticipantLiveStats(
+            r.Id,
+            levels.TryGetValue(r.Id, out var rms) ? Math.Round(20 * Math.Log10(Math.Max(rms, 1e-5)), 1) : null,
+            r.Request is null ? null : await r.Request.ResultAsync(TimeSpan.FromSeconds(2)))));
+        return new RoomLiveStats(media, participants);
+    }
+
+    private WebRtcBin.StatsRequest? TryRequestStats(WebRtcBin rtc)
+    {
+        try
+        {
+            return rtc.RequestStats();
+        }
+        catch (Exception ex)
+        {
+            _log.LogDebug(ex, "Room {RoomId}: get-stats failed", RoomId);
+            return null;
+        }
+    }
+
+    /// <summary>The room's pipeline in Graphviz form (GStreamer's debug dump), taken on the worker.</summary>
+    public Task<string> PipelineDotAsync() =>
+        _worker.InvokeAsync(() => Global.DebugBinToDotData(_pipeline, DebugGraphDetails.All));
+
     public void AddParticipant(ParticipantSnapshot participant) => _worker.Post(() =>
     {
         if (_participants.TryAdd(participant.Id, new ParticipantMedia(participant.Id)))

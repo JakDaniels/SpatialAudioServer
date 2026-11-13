@@ -71,7 +71,7 @@ async function loadRooms() {
       : rooms.map(r => `<option value="${r.id}"${r.id === remembered ? " selected" : ""}>` +
           `${escapeHtml(r.name)} (${r.participantCount} in, ${r.engine}${r.spatial ? ", spatial" : ""})</option>`).join("");
     knownRooms = new Map(rooms.map(r => [r.id, r]));
-    log(`${rooms.length} room(s); server ${status.version}, GStreamer ${status.gstreamer.version ?? "off"}`);
+    log(`${rooms.length} room(s); server ${status.version}, ${status.gstreamer.version ?? "GStreamer off"}`);
   } catch (e) {
     log(`error: ${e.message}`);
     $("room").innerHTML = `<option value="">${e.status === 401 ? "API key rejected" : "Could not load rooms"}</option>`;

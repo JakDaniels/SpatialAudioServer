@@ -1,0 +1,42 @@
+/* Builds on ../client/client.css (colours, cards, buttons, badges). */
+
+.admin-head { max-width: 80rem; display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; }
+main.wide { max-width: 80rem; }
+.narrow { max-width: 26rem; }
+.field { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; color: var(--muted); margin: .75rem 0; }
+
+.section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.section-head h2 { margin: 0; }
+.create { flex-wrap: wrap; align-items: center; }
+.create input[type=number] { width: 5rem; flex: none; }
+.row .check { display: inline-flex; align-items: center; gap: .3rem; color: var(--text); white-space: nowrap; }
+.row .check input { flex: none; }
+
+a.button {
+  font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+  padding: .4rem .6rem; text-decoration: none; display: inline-block;
+}
+a.button:hover, button:hover:not(:disabled) { border-color: var(--accent); }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: .8rem; }
+td.detail { white-space: normal; word-break: break-word; }
+td.num { font-variant-numeric: tabular-nums; }
+tbody tr.selected { background: var(--code); }
+tbody tr.clickable { cursor: pointer; }
+tbody tr.clickable:hover { background: var(--code); }
+.id { color: var(--muted); font-size: .78rem; font-family: ui-monospace, monospace; }
+.tag { font-size: .75rem; border: 1px solid var(--border); border-radius: 999px; padding: 0 .45rem; color: var(--muted); margin-left: .3rem; }
+
+.level { width: 6rem; height: .5rem; background: var(--code); border-radius: 999px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.level i { display: block; height: 100%; background: var(--meter); transition: width 150ms linear; }
+.level-db { font-size: .75rem; color: var(--muted); margin-left: .3rem; font-variant-numeric: tabular-nums; }
+
+input.gain { width: 4.2rem; padding: .2rem .35rem; }
+button.small { padding: .2rem .5rem; font-size: .82rem; }
+.counters { color: var(--muted); font-size: .85rem; margin: .25rem 0 .5rem; }
+.warn { color: var(--warn); }
+.bad { color: var(--danger); }
+#history h3 { font-size: .95rem; margin: 1rem 0 .25rem; }

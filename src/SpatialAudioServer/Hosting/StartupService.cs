@@ -22,6 +22,7 @@ internal sealed class StartupService(
     IOptions<MediaOptions> media,
     IOptions<AuthOptions> auth,
     StartupFlags flags,
+    Api.AdminPassword adminPassword,
     RoomStore roomStore,
     ActivityLog activity,
     ILogger<StartupService> log) : IHostedService
@@ -93,6 +94,11 @@ internal sealed class StartupService(
             log.LogWarning(
                 "No API key is configured, so the control API is unusable. Create one with " +
                 "'SpatialAudioServer apikey create <label>' or set Auth__ApiKeys__0");
+        }
+        if (!adminPassword.IsSet)
+        {
+            log.LogWarning("No admin password is set, so the admin UI (/admin/) cannot be used. Set one with " +
+                "'SpatialAudioServer admin set-password'");
         }
         return Task.CompletedTask;
     }

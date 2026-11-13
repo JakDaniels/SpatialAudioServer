@@ -250,6 +250,104 @@ public sealed partial class WebRtcBin : IDisposable
     }
 
     /// <summary>
+    /// Asks webrtcbin for the connection's statistics (<c>get-stats</c>). Returns at once; the reply is read with
+    /// <see cref="StatsRequest.ResultAsync"/>, which touches only the reply, so the element may go away meanwhile.
+    /// Call it where the endpoint cannot be removed concurrently (the room worker).
+    /// </summary>
+    public StatsRequest RequestStats()
+    {
+        var (promise, replied) = NewPromise();
+        Element.EmitSignal("get-stats", null, promise.Handle);
+        return new StatsRequest(promise, replied);
+    }
+
+    /// <summary>A pending <c>get-stats</c>. Dispose it if <see cref="ResultAsync"/> is never awaited.</summary>
+    public sealed class StatsRequest(Promise promise, Task replied) : IDisposable
+    {
+        /// <summary>The statistics, or null if webrtcbin did not answer in time.</summary>
+        public async Task<ConnectionStats?> ResultAsync(TimeSpan timeout)
+        {
+            try
+            {
+                if (await Task.WhenAny(replied, Task.Delay(timeout)) != replied)
+                {
+                    promise.Interrupt();
+                    return null;
+                }
+                using var reply = promise.GetReply();
+                return reply is null ? null : Parse(reply);
+            }
+            finally
+            {
+                promise.Dispose();
+            }
+        }
+
+        public void Dispose() => promise.Dispose();
+    }
+
+    /// <summary>
+    /// What arrives from the client (inbound RTP), what goes to it (outbound), what the client reports about our
+    /// stream (remote inbound, from RTCP), and the ICE candidate types of the pair in use.
+    /// </summary>
+    private static ConnectionStats Parse(Structure reply)
+    {
+        var stats = new ConnectionStats();
+        var candidates = new Dictionary<string, string>(); // id → candidate type (host, srflx, relay…)
+        string? localId = null, remoteId = null;
+        for (uint i = 0; i < reply.NFields(); i++)
+        {
+            var id = reply.NthFieldName(i);
+            using var s = reply.GetBoxed<Structure>(id);
+            if (s is null)
+            {
+                continue;
+            }
+            if (id.StartsWith("rtp-inbound-stream-stats_", StringComparison.Ordinal))
+            {
+                stats = stats with
+                {
+                    PacketsReceived = U64(s, "packets-received"),
+                    BytesReceived = U64(s, "bytes-received"),
+                    PacketsLost = s.GetInt64("packets-lost", out var lost) ? lost : null,
+                    JitterSeconds = s.GetDouble("jitter", out var jitter) ? jitter : null,
+                };
+            }
+            else if (id.StartsWith("rtp-outbound-stream-stats_", StringComparison.Ordinal))
+            {
+                stats = stats with { PacketsSent = U64(s, "packets-sent"), BytesSent = U64(s, "bytes-sent") };
+            }
+            else if (id.StartsWith("rtp-remote-inbound-stream-stats_", StringComparison.Ordinal))
+            {
+                stats = stats with
+                {
+                    RoundTripSeconds = s.GetDouble("round-trip-time", out var rtt) ? rtt : null,
+                    RemoteFractionLost = s.GetDouble("fraction-lost", out var fraction) ? fraction : null,
+                };
+            }
+            else if (id.StartsWith("ice-candidate-pair_", StringComparison.Ordinal))
+            {
+                localId = s.GetString("local-candidate-id");
+                remoteId = s.GetString("remote-candidate-id");
+            }
+            else if (id.StartsWith("ice-candidate-", StringComparison.Ordinal) && s.GetString("candidate-type") is { } type)
+            {
+                candidates[id] = type;
+            }
+        }
+        if (localId is not null && remoteId is not null)
+        {
+            stats = stats with
+            {
+                IcePath = $"{candidates.GetValueOrDefault(localId, "?")} → {candidates.GetValueOrDefault(remoteId, "?")}",
+            };
+        }
+        return stats;
+
+        static ulong? U64(Structure s, string field) => s.GetUint64(field, out var value) ? value : null;
+    }
+
+    /// <summary>
     /// One line for logs when a connection fails: ICE state and every local and remote candidate as
     /// "type proto address:port", which shows whether the failure is ICE (no usable pair) or DTLS (ICE connected).
     /// </summary>
@@ -462,3 +560,11 @@ public sealed partial class WebRtcBin : IDisposable
     [GeneratedRegex(@"^a=rtpmap:(\d+) opus/48000", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex OpusRtpMap();
 }
+
+/// <summary>A connection's statistics (any may be missing early on). Rates come from comparing two readings.</summary>
+/// <param name="RemoteFractionLost">Share of our packets the client reported lost in its last RTCP report (0–1).</param>
+/// <param name="IcePath">Local → remote candidate types of the pair in use, e.g. "host → srflx".</param>
+public sealed record ConnectionStats(
+    ulong? PacketsReceived = null, ulong? BytesReceived = null, long? PacketsLost = null, double? JitterSeconds = null,
+    ulong? PacketsSent = null, ulong? BytesSent = null, double? RoundTripSeconds = null, double? RemoteFractionLost = null,
+    string? IcePath = null);

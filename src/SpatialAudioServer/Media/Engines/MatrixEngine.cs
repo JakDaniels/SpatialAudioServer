@@ -33,6 +33,8 @@ internal sealed class MatrixEngine(MixEngineContext context) : IMixEngine
         }
     }
 
+    public IReadOnlyDictionary<Guid, double> InputLevels => _room.Levels;
+
     public IReadOnlyDictionary<string, long> Counters => new Dictionary<string, long>
     {
         ["slots"] = _room.Channels - 1,

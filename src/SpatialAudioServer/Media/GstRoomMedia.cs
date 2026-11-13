@@ -54,6 +54,10 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
 
     public async Task<RoomMediaStats?> StatsAsync(Guid roomId) => await Room(roomId).StatsAsync();
 
+    public async Task<RoomLiveStats?> LiveStatsAsync(Guid roomId) => await Room(roomId).LiveStatsAsync();
+
+    public async Task<string?> PipelineDotAsync(Guid roomId) => await Room(roomId).PipelineDotAsync();
+
     /// <summary>For tests and stats: (source, listener) pairs the room's engine is mixing.</summary>
     internal Task<int> MixedPairsAsync(Guid roomId) => Room(roomId).MixedPairsAsync();
 

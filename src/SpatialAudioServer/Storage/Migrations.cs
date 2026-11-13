@@ -78,6 +78,14 @@ internal static class Migrations
         """
         ALTER TABLE rooms ADD COLUMN spatial INTEGER NOT NULL DEFAULT 0;
         """,
+
+        // 5: server settings (key/value), e.g. the admin UI password hash.
+        """
+        CREATE TABLE settings (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;
