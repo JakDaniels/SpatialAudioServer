@@ -14,7 +14,9 @@ public sealed record OfferResponse(string Sdp, string SessionToken);
 public sealed record CandidateDto(string? Candidate, uint SdpMLineIndex);
 
 /// <summary>What a client needs before it offers. <see cref="IceServers"/> is ready to pass to RTCPeerConnection.</summary>
-public sealed record ClientConfig(IReadOnlyList<IceServerDto> IceServers);
+/// <param name="Spatial">The room mixes by position.</param>
+/// <param name="ClientPose">What the participant may change about its own pose (PATCH /signal/{id}/pose).</param>
+public sealed record ClientConfig(IReadOnlyList<IceServerDto> IceServers, bool Spatial = false, ClientPose ClientPose = ClientPose.None);
 
 public sealed record IceServerDto(IReadOnlyList<string> Urls, string? Username, string? Credential);
 
@@ -53,12 +55,21 @@ public static class SignallingApi
     {
         var signal = app.MapGroup("/signal/{participantId:guid}");
 
-        signal.MapGet("/config", (Guid participantId, HttpContext http, SignalSessions sessions,
+        signal.MapGet("/config", (Guid participantId, HttpContext http, SignalSessions sessions, RoomManager rooms,
             Microsoft.Extensions.Options.IOptions<Configuration.MediaOptions> options) =>
         {
-            sessions.AuthorizeReadOnly(participantId, Bearer(http));
+            var roomId = sessions.AuthorizeReadOnly(participantId, Bearer(http));
+            var (room, _) = rooms.GetRoom(roomId);
             return new ClientConfig(options.Value.IceServers
-                .Select(s => new IceServerDto(s.Urls, s.Username, s.Credential)).ToList());
+                .Select(s => new IceServerDto(s.Urls, s.Username, s.Credential)).ToList(), room.Spatial, room.ClientPose);
+        });
+
+        // The participant's own pose, within the room's clientPose (today: turning only). Session token.
+        signal.MapPatch("/pose", (Guid participantId, SelfPoseCommand body, HttpContext http, SignalSessions sessions, RoomManager rooms) =>
+        {
+            var roomId = sessions.Authorize(participantId, Bearer(http));
+            rooms.UpdateOwnPose(roomId, participantId, body);
+            return Results.NoContent();
         });
 
         signal.MapPost("/offer", async (Guid participantId, OfferRequest body, HttpContext http, SignalSessions sessions, IRoomMedia media) =>

@@ -108,7 +108,7 @@ public sealed class RoomManager(
     public (RoomSnapshot Room, bool Created) EnsureRoom(string externalId, EnsureRoomCommand? command)
     {
         var normalized = ExternalIds.Normalize(externalId);
-        var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine, command?.Spatial);
+        var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine, command?.Spatial, command?.ClientPose);
         ValidateCreate(create);
 
         RoomSnapshot snapshot;
@@ -292,6 +292,8 @@ public sealed class RoomManager(
             .Range("gain", command.Gain, 0, Validation.MaxGain)
             .Position("position", command.Position)
             .Orientation("orientation", command.Orientation)
+            .Position("listenerPosition", command.ListenerPosition)
+            .Orientation("listenerOrientation", command.ListenerOrientation)
             .ThrowIfInvalid();
 
         ParticipantSnapshot snapshot;
@@ -307,6 +309,45 @@ public sealed class RoomManager(
             participant.Gain = command.Gain ?? participant.Gain;
             participant.Position = command.Position ?? participant.Position;
             participant.Orientation = command.Orientation ?? participant.Orientation;
+            participant.ListenerPosition = command.ListenerPosition ?? participant.ListenerPosition;
+            participant.ListenerOrientation = command.ListenerOrientation ?? participant.ListenerOrientation;
+            snapshot = participant.Snapshot();
+        }
+        media.ParticipantUpdated(snapshot);
+        return snapshot;
+    }
+
+    /// <summary>The shortest interval between a participant's own pose updates (20 per second; SL viewers send ≤ 10).</summary>
+    public static readonly TimeSpan SelfPoseInterval = TimeSpan.FromMilliseconds(50);
+
+    /// <summary>
+    /// A participant changing its own pose (signalling, authorised by its session token), within what the room's
+    /// <see cref="ClientPose"/> allows: today, turning only. Moving is for the control API (the region module, which knows
+    /// where avatars really are); letting clients move would let them walk up to any conversation.
+    /// </summary>
+    public ParticipantSnapshot UpdateOwnPose(Guid roomId, Guid participantId, SelfPoseCommand command)
+    {
+        new Validation().Orientation("listenerOrientation", command.ListenerOrientation).ThrowIfInvalid();
+        ParticipantSnapshot snapshot;
+        lock (_lock)
+        {
+            var room = FindRoom(roomId);
+            var participant = FindParticipant(room, participantId);
+            if (command.ListenerPosition is not null)
+            {
+                throw new ForbiddenException("Participants cannot move themselves in this room; positions come from the control API.");
+            }
+            if (command.ListenerOrientation is not null && room.ClientPose < ClientPose.Orientation)
+            {
+                throw new ForbiddenException("This room does not let participants turn themselves (clientPose is none).");
+            }
+            var now = time.GetUtcNow();
+            if (now - participant.LastSelfPose < SelfPoseInterval)
+            {
+                throw new RateLimitedException($"At most one pose update per {SelfPoseInterval.TotalMilliseconds:F0} ms.");
+            }
+            participant.LastSelfPose = now;
+            participant.ListenerOrientation = command.ListenerOrientation ?? participant.ListenerOrientation;
             snapshot = participant.Snapshot();
         }
         media.ParticipantUpdated(snapshot);
@@ -388,7 +429,7 @@ public sealed class RoomManager(
             Guid.NewGuid(), command.Name!.Trim(), command.ExternalId, command.MaxParticipants ?? limit.MaxParticipantsPerRoom,
             command.Metadata?.ToJsonString(), time.GetUtcNow(),
             command.Engine ?? (command.Spatial == true ? mediaOptions.Value.SpatialEngine : DefaultEngine),
-            command.Spatial ?? false);
+            command.Spatial ?? false, command.ClientPose?.ToString());
         rooms.Insert(record);
         var room = new Room(record, DefaultEngine);
         _rooms[room.Id] = room;
@@ -438,10 +479,13 @@ public sealed class RoomManager(
         public DateTimeOffset CreatedAt { get; } = record.CreatedAt;
         public string Engine { get; } = record.Engine is { } e && MixEngines.Exists(e) ? e : defaultEngine;
         public bool Spatial { get; } = record.Spatial;
+        public ClientPose ClientPose { get; } = Enum.TryParse<ClientPose>(record.ClientPose, ignoreCase: true, out var pose)
+            ? pose
+            : record.Spatial ? ClientPose.Orientation : ClientPose.None;
         public Dictionary<Guid, Participant> Participants { get; } = [];
 
         public RoomSnapshot Snapshot() =>
-            new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine, Spatial);
+            new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine, Spatial, ClientPose);
 
         public IReadOnlyList<ParticipantSnapshot> ParticipantSnapshots() =>
             Participants.Values.OrderBy(p => p.JoinedAt).Select(p => p.Snapshot()).ToList();
@@ -457,6 +501,10 @@ public sealed class RoomManager(
         public required DateTimeOffset JoinedAt { get; init; }
         public Vec3? Position { get; set; }
         public Quat? Orientation { get; set; }
+        public Vec3? ListenerPosition { get; set; }
+        public Quat? ListenerOrientation { get; set; }
+        /// <summary>When the participant last set its own pose (rate limit).</summary>
+        public DateTimeOffset LastSelfPose { get; set; }
         public bool Muted { get; set; }
         public double Gain { get; set; } = 1.0;
         public ParticipantState State { get; set; } = ParticipantState.AwaitingSignal;
@@ -464,7 +512,8 @@ public sealed class RoomManager(
         public DateTimeOffset StateSince { get; set; }
 
         public ParticipantSnapshot Snapshot() =>
-            new(Id, RoomId, DisplayName, ExternalId, Position, Orientation, Muted, Gain, ParseMetadata(Metadata), JoinedAt, State);
+            new(Id, RoomId, DisplayName, ExternalId, Position, Orientation, Muted, Gain, ParseMetadata(Metadata), JoinedAt, State,
+                ListenerPosition, ListenerOrientation);
     }
 
     // Stored as text and parsed per snapshot, so callers never share a mutable JsonObject with the manager.

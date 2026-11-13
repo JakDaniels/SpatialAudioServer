@@ -86,6 +86,11 @@ internal static class Migrations
             value TEXT NOT NULL
         );
         """,
+
+        // 6: what participants may change about their own pose (ClientPose name); NULL = the default for the room kind.
+        """
+        ALTER TABLE rooms ADD COLUMN client_pose TEXT;
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;

@@ -72,9 +72,13 @@ internal sealed class MixEngineContext(
     /// <summary>The room's spatial policy, or null for a non-spatial room (everyone centred at their gain).</summary>
     public Spatial.ISpatialPolicy? Spatial { get; } = spatial ? new Spatial.InverseDistancePolicy(options.Spatial) : null;
 
-    /// <summary>How <paramref name="source"/> sounds to <paramref name="listener"/>, including the source's gain/mute.</summary>
+    /// <summary>
+    /// How <paramref name="source"/> sounds to <paramref name="listener"/>, including the source's gain/mute. Sources are
+    /// heard from their position; listeners hear from their listener pose if they have one, else their own.
+    /// </summary>
     public Spatial.Rendering Render(ParticipantSnapshot source, ParticipantSnapshot listener) =>
-        (Spatial?.Render(source.Position, listener.Position, listener.Orientation) ?? Media.Spatial.Rendering.Centre)
+        (Spatial?.Render(source.Position, listener.ListenerPosition ?? listener.Position, listener.ListenerOrientation ?? listener.Orientation)
+            ?? Media.Spatial.Rendering.Centre)
             .Scale(source.Muted ? 0 : source.Gain);
 
     public Guid RoomId { get; } = roomId;

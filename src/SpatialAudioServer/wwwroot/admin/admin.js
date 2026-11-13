@@ -230,6 +230,9 @@ function participantRow(p, s, now) {
   const lossOut = c?.remoteFractionLost != null ? 100 * c.remoteFractionLost : null;
   const stateClass = { connected: "connected", connecting: "connecting", failed: "failed", disconnected: "failed" }[p.state] ?? "";
   const pos = p.position ? `${p.position.x.toFixed(1)}, ${p.position.y.toFixed(1)}, ${p.position.z.toFixed(1)}` : "–";
+  // Facing: turn about z from east (SL axes), from the listener orientation if it has one.
+  const q = p.listenerOrientation ?? p.orientation;
+  const facing = q ? `${Math.round(2 * Math.atan2(q.z, q.w) * 180 / Math.PI)}°` : null;
   return `
     <tr>
       <td>${escapeHtml(p.displayName)}<div class="id" title="${p.id}">${short(p.id)}${p.externalId ? ` · ${escapeHtml(p.externalId)}` : ""}</div></td>
@@ -241,7 +244,7 @@ function participantRow(p, s, now) {
       <td class="num">${c?.jitterSeconds == null ? "–" : `${(c.jitterSeconds * 1000).toFixed(0)} ms`}</td>
       <td class="num">${c?.roundTripSeconds == null ? "–" : `${(c.roundTripSeconds * 1000).toFixed(0)} ms`}</td>
       <td>${escapeHtml(c?.icePath ?? "–")}</td>
-      <td class="num">${pos}</td>
+      <td class="num">${pos}${facing ? `<div class="id" title="Facing: degrees anticlockwise from east">facing ${facing}</div>` : ""}</td>
       <td><input class="gain" type="number" min="0" max="4" step="0.1" value="${p.gain}" data-gain="${p.id}" title="Gain (1 = unity)"></td>
       <td>
         <button class="small" type="button" data-mute="${p.id}" aria-pressed="${p.muted}">${p.muted ? "Unmute" : "Mute"}</button>
@@ -287,7 +290,11 @@ async function kick(id) {
 
 async function invite() {
   try {
-    const join = await request("POST", `/api/rooms/${state.selected}/participants`, { displayName: "Guest" });
+    // Spatial rooms: the guest stands at the centre facing east (and can turn in the client); otherwise unplaced.
+    const body = state.details?.spatial
+      ? { displayName: "Guest", position: { x: 0, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } }
+      : { displayName: "Guest" };
+    const join = await request("POST", `/api/rooms/${state.selected}/participants`, body);
     const url = `${location.origin}/client/?participant=${join.participantId}&token=${encodeURIComponent(join.joinToken)}` +
       `&room=${encodeURIComponent(state.details?.name ?? "")}`;
     $("inviteLink").hidden = false;

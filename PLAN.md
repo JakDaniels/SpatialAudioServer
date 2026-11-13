@@ -394,7 +394,8 @@ tested without GStreamer.
      reports are ignored.
    - Still to do: TURN tested for real; Firefox + Chrome manual tests on the LAN.
    - **Parked (pairchains only):** the user expects pairchains won't be efficient enough, so its issues are parked;
-     it stays in the engine suites for comparison. Intermittent issue: 1 failure in ~6 full runs: in `Deleting_a_room_with_connected_participants` (pairchains), in
+     it stays in the engine suites for comparison. A second intermittent case (2026-11-13, 1 in ~5 full runs):
+     `PairChainsSpatial.Sources_are_panned_…`, a source moved into range is never heard (4/4 reruns pass). Intermittent issue: 1 failure in ~6 full runs: in `Deleting_a_room_with_connected_participants` (pairchains), in
      the fresh second room one direction (fake2 → fake3) never came up within 20 s while the other worked; 12/12
      passes when re-run alone. Not yet diagnosed (candidates: a rare ingress/answer race, or interference from the
      deleted room's teardown running concurrently).
@@ -508,6 +509,26 @@ tested without GStreamer.
      `v` speaking, `m` moderator-muted, `V` server version string.
    - Covered by `ViewerCompatibilityTests` (viewer-style fake clients: SLData channel, the munging byte for byte,
      `trickle:false`, never fetching server candidates) and `SdpTests`. Not yet: handling SLData messages.
+   - **Client-set poses (decided in part 2026-11-13; FOR DISCUSSION AND DECISION when testing with SL viewers).**
+     The question: may participants set their own position/orientation, and how does that fit security? Positions
+     decide what you hear in a spatial room, so a client that can move anywhere can walk up to any conversation
+     (eavesdropping); SL guards against this (the viewer tethers its camera to within 50 m of the avatar, and the
+     voice server enforces it against the simulator's authoritative avatar position).
+     - **Done now:** (1) speaker and listener poses are separate: `position`/`orientation` = where others hear you
+       from (an avatar), `listenerPosition`/`listenerOrientation` = where you hear from (SL's camera; falls back to
+       the speaker pose); the control API may set all four, and mixing uses the listener pose for the listener.
+       (2) a per-room `clientPose` (stored, migration 6): `none` (default for non-spatial rooms) or `orientation`
+       (default for spatial: a participant may turn, not move). (3) `PATCH /signal/{pid}/pose`
+       `{listenerOrientation}` with the session token (403 when the room forbids it or for any position, 429 above
+       20 updates/s); `/signal/{pid}/config` reports `spatial` and `clientPose`. The test client's Facing slider uses
+       it, so invited guests can turn; invites into spatial rooms place the guest at the centre facing east. The admin
+       UI shows each participant's facing.
+     - **To decide with SL viewers:** add `tethered` (the client may move its listener pose within N m of its
+       server-set position; SL uses 50 m) and maybe `free` (web-only rooms with no authority)? Feed the viewer's
+       SLData `sp`/`sh`/`lp`/`lh` messages (cm, quaternion ×100) through the same `UpdateOwnPose` path, or treat the
+       speaker part (`sp`/`sh`) as a hint only and keep the region module's PATCH as the authority? Rate limits for
+       the viewer's ≤ 10/s updates; whether the region module should also send camera positions; what the default
+       `clientPose` for region rooms should be.
 
 ## Risks / things to verify
 

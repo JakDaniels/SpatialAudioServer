@@ -115,23 +115,25 @@ async function addParticipant(displayName, placed = false) {
   store(ROOM_STORE, roomId);
   const spatial = knownRooms.get(roomId)?.spatial === true;
   const body = spatial && placed
-    ? { displayName, position: { x: 0, y: 0, z: 0 }, orientation: facingQuaternion(Number($("facing").value)) }
+    ? { displayName, position: { x: 0, y: 0, z: 0 }, orientation: facingQuaternion(0) } // the centre, facing east
     : { displayName };
   const join = await request("POST", `/api/rooms/${roomId}/participants`, { apiKey: apiKey(), body });
   return { ...join, roomId, spatial, roomName: $("room").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") ?? "" };
 }
 
-// Spatial test mode: turning sends the new orientation through the control API (debounced).
+// Turning: the participant's own listener orientation, sent with its session token (so invited guests can turn too)
+// where the room allows it (clientPose "orientation"). Debounced; the server accepts at most 20 updates a second.
 let facingTimer = null;
 function onFacing() {
   const degrees = Number($("facing").value);
   $("facingLabel").textContent = facingName(degrees);
   clearTimeout(facingTimer);
   facingTimer = setTimeout(async () => {
-    if (!call?.roomId || call.closed) return;
+    if (!call || call.closed) return;
+    if (!call.sessionToken) { log("not connected yet: turn again once connected"); return; }
     try {
-      await request("PATCH", `/api/rooms/${call.roomId}/participants/${call.participantId}`,
-        { apiKey: apiKey(), body: { orientation: facingQuaternion(degrees) } });
+      await request("PATCH", `/signal/${call.participantId}/pose`,
+        { bearer: call.sessionToken, body: { listenerOrientation: facingQuaternion(degrees) } });
       log(`now facing ${facingName(degrees)}`);
     } catch (e) { log(`error turning: ${e.message}`); }
   }, 150);
@@ -143,15 +145,14 @@ async function joinFromSetup() {
   try {
     const join = await addParticipant(name, true);
     $("setup").hidden = true;
-    $("facingControl").hidden = !join.spatial;
-    if (join.spatial) log("spatial room: you are at (0, 0, 0); use Facing to turn");
+    if (join.spatial) log("spatial room: you are at (0, 0, 0)");
     await startCall(join.participantId, join.joinToken, join.roomName, name, join.roomId);
   } catch (e) { log(`error: ${e.message}`); }
 }
 
 async function invite() {
   try {
-    const join = await addParticipant("Guest");
+    const join = await addParticipant("Guest", true); // spatial rooms: placed at the centre too
     const url = `${location.origin}/client/?participant=${join.participantId}&token=${encodeURIComponent(join.joinToken)}` +
       `&room=${encodeURIComponent(join.roomName)}`;
     $("inviteLink").hidden = false;
@@ -178,6 +179,13 @@ async function startCall(participantId, joinToken, roomName, displayName, roomId
   try {
     const config = await request("GET", `/signal/${participantId}/config`, { bearer: joinToken });
     call.iceServers = config.iceServers;
+    // Show Facing when this participant may turn itself (spatial rooms by default). Starts facing east.
+    $("facingControl").hidden = config.clientPose !== "orientation";
+    if (config.clientPose === "orientation") {
+      $("facing").value = 0;
+      $("facingLabel").textContent = facingName(0);
+      log("you can turn with Facing (you face east to start)");
+    }
     call.stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: $("aec").checked, noiseSuppression: $("ns").checked, autoGainControl: $("agc").checked },
     });

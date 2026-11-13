@@ -45,6 +45,21 @@ public abstract class SpatialSuite<TEngine>() : MediaTestBase(TEngine.Name) wher
     }
 
     [Fact]
+    public async Task A_listener_can_turn_itself_through_signalling()
+    {
+        var room = await CreateRoomAsync(spatial: true); // clientPose defaults to orientation
+        var listener = await JoinAsync(room.Id, 0, talking: false, position: Origin, orientation: FacingEast);
+        var north = await JoinAsync(room.Id, 1, position: new Vec3(0, 5, 0));
+        await SettleAndMeasureAsync([listener], _ => [north.ToneHz]);
+        AssertSide(listener.Meter.Levels()[north.ToneHz], leftSide: true, "north source while facing east");
+
+        await listener.SetListenerOrientationAsync(Signal, FacingWest); // its own session token, no API key
+
+        await SettleAndMeasureAsync([listener], _ => [north.ToneHz]);
+        AssertSide(listener.Meter.Levels()[north.ToneHz], leftSide: false, "north source after turning to face west");
+    }
+
+    [Fact]
     public async Task Participants_without_a_position_are_heard_centred_at_full_volume()
     {
         var room = await CreateRoomAsync(spatial: true);

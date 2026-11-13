@@ -9,7 +9,8 @@ namespace SpatialAudioServer.Api;
 
 public sealed record RoomDetails(
     Guid Id, string Name, string? ExternalId, int MaxParticipants, System.Text.Json.Nodes.JsonObject? Metadata,
-    DateTimeOffset CreatedAt, int ParticipantCount, string Engine, bool Spatial, IReadOnlyList<ParticipantSnapshot> Participants);
+    DateTimeOffset CreatedAt, int ParticipantCount, string Engine, bool Spatial, ClientPose ClientPose,
+    IReadOnlyList<ParticipantSnapshot> Participants);
 
 public sealed record JoinResponse(
     Guid ParticipantId, Guid RoomId, string JoinToken, string SignalUrl, DateTimeOffset ExpiresAt, Guid? ReplacedParticipantId);
@@ -84,7 +85,7 @@ public static class ControlApi
         room.MapGet("/", (HttpContext http, RoomManager rooms) =>
         {
             var (r, participants) = rooms.GetRoom(ResolveRoom(http, rooms));
-            return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, r.Engine, r.Spatial, participants);
+            return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, r.Engine, r.Spatial, r.ClientPose, participants);
         });
 
         // Mixing statistics from the room's engine (encoders, talkers, clusters…): 404 when media is disabled.
