@@ -47,6 +47,24 @@ public sealed class EngineSelectionTests : IDisposable
     }
 
     [Fact]
+    public async Task Spatial_rooms_default_to_the_spatial_engine()
+    {
+        using var server = Server();
+        var client = server.CreateAuthedClient();
+
+        var status = await (await client.GetAsync("/api/status")).Read<StatusResponse>();
+        var spatial = await (await client.PostAsJsonAsync("/api/rooms", new { name = "S", spatial = true })).Read<RoomSnapshot>();
+        var chosen = await (await client.PostAsJsonAsync("/api/rooms", new { name = "T", spatial = true, engine = "matrix-shared" }))
+            .Read<RoomSnapshot>();
+        var plain = await (await client.PostAsJsonAsync("/api/rooms", new { name = "U" })).Read<RoomSnapshot>();
+
+        Assert.Equal("matrix", status.DefaultSpatialEngine);
+        Assert.Equal("matrix", spatial.Engine);
+        Assert.Equal("matrix-shared", chosen.Engine);
+        Assert.Equal(MixEngines.Default, plain.Engine);
+    }
+
+    [Fact]
     public async Task An_unknown_engine_is_rejected()
     {
         using var server = Server();

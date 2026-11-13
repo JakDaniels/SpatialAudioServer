@@ -16,7 +16,8 @@ public sealed record JoinResponse(
 
 public sealed record StatusResponse(
     string Version, DateTimeOffset StartedAt, double UptimeSeconds, GstStatusDto Gstreamer, int Rooms, int Participants,
-    LimitOptions Limits, ProcessStatus Process, string DefaultEngine, IReadOnlyList<MixEngineInfo> Engines);
+    LimitOptions Limits, ProcessStatus Process, string DefaultEngine, IReadOnlyList<MixEngineInfo> Engines,
+    string DefaultSpatialEngine);
 
 /// <summary>Server process resources; the load tool samples CpuSeconds twice to get CPU use over a window.</summary>
 public sealed record ProcessStatus(double CpuSeconds, int ProcessorCount, long WorkingSetBytes, int Threads);
@@ -40,7 +41,7 @@ public static class ControlApi
                 Version, clock.StartedAt, Math.Round(clock.Uptime.TotalSeconds, 1),
                 new GstStatusDto(g.Enabled, g.Ok, g.Version, g.MissingElements, g.Error),
                 rooms.RoomCount, rooms.ParticipantCount, limits.Value, CurrentProcess(),
-                media.Value.Engine, MixEngines.All);
+                media.Value.Engine, MixEngines.All, media.Value.SpatialEngine);
         });
 
         var roomsApi = api.MapGroup("/rooms");

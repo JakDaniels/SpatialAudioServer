@@ -57,8 +57,12 @@ Spatial rooms (positions matter; `matrix-shared` then needs one cluster per dist
 ./SpatialAudioServer.LoadTest --server $S --participants 32 --talkers 3 --spatial --engine matrix-shared,matrix
 ```
 
-`--spatial` places everyone at random in a 30 m square, facing a random way. Each run also prints the room's
+`--spatial` places everyone at random in a 30 m square, facing a random way. Without `--engine` it uses the server's
+engine for spatial rooms (`Media:SpatialEngine`, default `matrix`). Each run also prints the room's
 engine counters (`clusters`, `encoders`, …) from `GET /api/rooms/{id}/media`.
+
+Every run warms up for 10 s after everyone connects before measuring (`--warmup S`), so one-off set-up work
+(talkers found, mixes built, .NET compiling) isn't counted as steady-state CPU.
 
 Other options: `--rooms R` (R rooms of N people each), `--duration S` (measuring window, default 20 s),
 `--jitter-ms`, and `--insecure` (when using `https://…:5001` with the self-signed certificate).

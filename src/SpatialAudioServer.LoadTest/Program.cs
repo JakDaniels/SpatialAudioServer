@@ -54,7 +54,9 @@ public static class LoadTestProgram
             return await JoinRoomAsync(http, options, roomId, logs);
         }
 
-        var engines = options.Engines.Count > 0 ? options.Engines : [(await Status(http)).DefaultEngine];
+        var status = await Status(http);
+        var engines = options.Engines.Count > 0 ? options.Engines
+            : [options.Spatial ? status.DefaultSpatialEngine ?? status.DefaultEngine : status.DefaultEngine];
         var results = new List<RunResult>();
         foreach (var engine in engines)
         {
@@ -270,7 +272,12 @@ public static class LoadTestProgram
                     break;
                 }
             }
-            Console.WriteLine($"Settled in {settle.Elapsed.TotalSeconds:F1} s; measuring for {options.Duration.TotalSeconds:F0} s");
+            // Warm-up: engines finish building after everyone connects (matrix-shared finds its talkers, builds their
+            // personal mixes and splits listeners into clusters) and .NET is still compiling hot paths. Measuring
+            // straight away counted that one-off work as steady-state CPU.
+            Console.WriteLine($"Settled in {settle.Elapsed.TotalSeconds:F1} s; warming up for {options.Warmup.TotalSeconds:F0} s, " +
+                $"then measuring for {options.Duration.TotalSeconds:F0} s");
+            await Task.Delay(options.Warmup);
 
             var before = await Status(http);
             var wall = Stopwatch.StartNew();
@@ -345,8 +352,14 @@ public static class LoadTestProgram
         }
         var heard = others.Count(t => presence[t] > 0.5) / (double)others.Count;
         var mean = others.Average(t => presence[t]);
-        var foreign = presence.Where(p => p.Key != me.Client.ToneHz && !others.Contains(p.Key)).Select(p => p.Value).DefaultIfEmpty(0).Max();
-        return (heard, mean, presence[me.Client.ToneHz], foreign);
+        // A tone that is an exact multiple of a talker's (600 Hz = 2 × 300 Hz) also catches that talker's codec
+        // harmonics, faint but above the low spatial threshold: it cannot show a leak, so it is not judged.
+        var talkers = all.Where(o => o.Room == me.Room && o.Client.Talking).Select(o => o.Client.ToneHz).ToList();
+        bool Harmonic(double hz) => talkers.Any(t => hz > t && Math.Abs(hz / t - Math.Round(hz / t)) < 1e-9);
+        var foreign = presence.Where(p => p.Key != me.Client.ToneHz && !others.Contains(p.Key) && !Harmonic(p.Key))
+            .Select(p => p.Value).DefaultIfEmpty(0).Max();
+        var self = Harmonic(me.Client.ToneHz) ? 0 : presence[me.Client.ToneHz];
+        return (heard, mean, self, foreign);
     }
 
     private static async Task<T> Post<T>(HttpClient http, string path, object body)
@@ -372,11 +385,12 @@ public static class LoadTestProgram
     private sealed record Options(
         System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure,
         IReadOnlyList<string> Engines, int? Talkers, Guid? Room, IReadOnlyList<string> AudioFiles, double? Volume, string Name,
-        bool DurationSet, bool Spatial, double Radius)
+        bool DurationSet, bool Spatial, double Radius, TimeSpan Warmup)
     {
         public const string Usage =
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
-            "                                   [--duration 20] [--jitter-ms 100] [--insecure] [--engine a,b,...] [--talkers K]\n" +
+            "                                   [--duration 20] [--warmup 10] [--jitter-ms 100] [--insecure] [--engine a,b,...]\n" +
+            "                                   [--talkers K] [--spatial]\n" +
             "  The API key can also come from SAS_API_KEY. --insecure accepts the server's self-signed certificate.\n" +
             "  --engine runs the same load against each named mix engine in turn and prints a comparison\n" +
             "  (default: the server's default engine; GET /api/status lists them).\n" +
@@ -412,6 +426,7 @@ public static class LoadTestProgram
             var durationSet = false;
             var spatial = false;
             var radius = 5.0;
+            var warmup = TimeSpan.FromSeconds(10);
             for (var i = 0; i < args.Length; i++)
             {
                 string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -428,6 +443,7 @@ public static class LoadTestProgram
                     case "--name": name = Value(); break;
                     case "--spatial": spatial = true; break;
                     case "--radius": radius = double.Parse(Value(), CultureInfo.InvariantCulture); break;
+                    case "--warmup": warmup = TimeSpan.FromSeconds(double.Parse(Value(), CultureInfo.InvariantCulture)); break;
                     case "--jitter-ms": jitter = uint.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--insecure": insecure = true; break;
                     case "--talkers": talkers = int.Parse(Value(), CultureInfo.InvariantCulture); break;
@@ -460,7 +476,7 @@ public static class LoadTestProgram
                 throw new ArgumentException("--volume must be between 0 and 10.");
             }
             return new Options(server, key, participants, rooms, duration, jitter, insecure, engines, talkers, room, audio, volume, name,
-                durationSet, spatial, radius);
+                durationSet, spatial, radius, warmup);
         }
     }
 }

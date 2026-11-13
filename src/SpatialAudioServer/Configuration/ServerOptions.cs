@@ -104,6 +104,13 @@ public sealed class MediaOptions
     /// </summary>
     public TimeSpan DeadConnectionTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// Mix engine for spatial rooms created without one. matrix: in a spatial room matrix-shared rarely shares (each
+    /// listener hears the talkers differently, so clusters ≈ listeners) and its per-listener switching then costs
+    /// ~10% more CPU than matrix (measured 2026-11-13, PLAN.md Phase 6).
+    /// </summary>
+    public string SpatialEngine { get; set; } = Media.Engines.MatrixEngine.Name;
+
     /// <summary>Mix engine for rooms created without one (see MixEngines; listed by GET /api/status).</summary>
     public string Engine { get; set; } = Media.Engines.MixEngines.Default;
 
