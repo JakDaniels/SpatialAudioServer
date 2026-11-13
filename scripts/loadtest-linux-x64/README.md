@@ -92,7 +92,8 @@ R=1806b6ef-...                              # room ID: shown under the room name
 - Without `--audio`, each client sends a tone (300 Hz, 350 Hz, …).
 - `--talkers K` keeps all but the first K silent: they are in the room, but don't speak.
 - `--volume` scales what they send. The default is 1.0 for files and 0.1 for tones.
-- `--name` sets the display-name prefix. The default is `bot`, which gives `bot-0`, `bot-1`, ….
+- `--name` sets the display-name prefix. The default is `Bot`, which gives `Bot 1`, `Bot 2`, …. The bots say these
+  names too.
 - `--engine` can't be combined with `--room`: the room already has its engine.
 
 **Hearing spatial audio.**
@@ -104,7 +105,7 @@ R=1806b6ef-...                              # room ID: shown under the room name
    ./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio flite --spatial
    ```
 
-   Each bot says where it is: `bot-0` is ahead of you, `bot-1` on your left, `bot-2` behind, and `bot-3` on your
+   Each bot says where it is: `Bot 1` is ahead of you, `Bot 2` on your left, `Bot 3` behind, and `Bot 4` on your
    right. With 8 bots, the diagonals are filled in too. `--radius M`
    changes the circle's size (default 5 m). Within 10 m everyone is at full volume; farther out, the level falls.
 3. Turn with the **Facing** slider and the voices move round you. The compass direction each bot says stays true;
