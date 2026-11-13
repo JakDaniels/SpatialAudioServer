@@ -60,6 +60,8 @@ async function loadRooms() {
       request("GET", "/api/rooms", { apiKey: apiKey() }),
     ]);
     store(KEY_STORE, apiKey());
+    serverDefaults.plain = status.defaultEngine;
+    serverDefaults.spatial = status.defaultSpatialEngine ?? status.defaultEngine;
     $("newRoomEngine").innerHTML = status.engines
       .map(e => `<option value="${e.name}" title="${escapeHtml(e.description)}"${e.name === status.defaultEngine ? " selected" : ""}>${e.name}</option>`)
       .join("");
@@ -90,8 +92,9 @@ async function createRoom() {
   } catch (e) { log(`error: ${e.message}`); }
 }
 
-// Rooms from the last listing, by id (test mode).
+// Rooms from the last listing, by id (test mode), and the server's default engines.
 let knownRooms = new Map();
+const serverDefaults = { plain: null, spatial: null };
 
 // Spatial rooms: the tester stands at the centre (0, 0, 0). SL axes: x east, y north, z up; facing is the turn
 // left from east, as a rotation about z.
@@ -414,6 +417,11 @@ $("join").onclick = joinFromSetup;
 $("invite").onclick = invite;
 $("createRoom").onclick = createRoom;
 $("facing").oninput = onFacing;
+// Ticking Spatial picks the server's engine for spatial rooms (still changeable before Create).
+$("newRoomSpatial").onchange = () => {
+  const engine = $("newRoomSpatial").checked ? serverDefaults.spatial : serverDefaults.plain;
+  if (engine) $("newRoomEngine").value = engine;
+};
 $("refreshRooms").onclick = loadRooms;
 $("apiKey").onchange = loadRooms;
 

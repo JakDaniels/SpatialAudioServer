@@ -386,7 +386,8 @@ public sealed class RoomManager(
         }
         var record = new RoomRecord(
             Guid.NewGuid(), command.Name!.Trim(), command.ExternalId, command.MaxParticipants ?? limit.MaxParticipantsPerRoom,
-            command.Metadata?.ToJsonString(), time.GetUtcNow(), command.Engine ?? DefaultEngine,
+            command.Metadata?.ToJsonString(), time.GetUtcNow(),
+            command.Engine ?? (command.Spatial == true ? mediaOptions.Value.SpatialEngine : DefaultEngine),
             command.Spatial ?? false);
         rooms.Insert(record);
         var room = new Room(record, DefaultEngine);

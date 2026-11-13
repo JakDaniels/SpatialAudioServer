@@ -35,6 +35,12 @@ internal sealed class StartupService(
                 $"Media:Engine '{media.Value.Engine}' is not a mix engine. Available: " +
                 string.Join(", ", Media.Engines.MixEngines.All.Select(e => e.Name)) + ".");
         }
+        if (!Media.Engines.MixEngines.Exists(media.Value.SpatialEngine))
+        {
+            throw new InvalidOperationException(
+                $"Media:SpatialEngine '{media.Value.SpatialEngine}' is not a mix engine. Available: " +
+                string.Join(", ", Media.Engines.MixEngines.All.Select(e => e.Name)) + ".");
+        }
         if (!MediaOptions.OpusFrameSizes.Contains(media.Value.OpusFrameMs))
         {
             throw new InvalidOperationException(

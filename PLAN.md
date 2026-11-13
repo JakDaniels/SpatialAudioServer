@@ -430,6 +430,19 @@ tested without GStreamer.
      per listener (the `matrix` engine's cost) however it is clustered. Local 32-person run: clusters 29, encoders 32.
      Options to decide: accept it (spatial rooms cost ~matrix, measure on the 22.04 box), cheaper encoding for
      spatial rooms, or client-side spatialisation for web clients (forward the ≤ 4 talker streams unmixed).
+   - **Benchmark (22.04 client, 2026-11-13), 32 people, 3 talkers, spatial:** matrix-shared 74% of 4 cores (29
+     clusters, 32 encoders), matrix 65%; both over the 60% gate (non-spatial: matrix-shared 49%, matrix 64%).
+     Locally (16 people) part of the gap was start-up work counted in the window (talkers found, personal mixes and
+     clusters built, .NET JIT), so the load tool now warms up (`--warmup`, 10 s) before measuring; a steady ~10% gap
+     remains (85% vs 75% of a core), mostly each listener's link queue thread. Removing the queue would let one
+     stalled listener freeze its cluster (the blocking push behind the teardown deadlock), so instead
+     **`Media:SpatialEngine` (default `matrix`)** is the engine for spatial rooms created without one (status:
+     `defaultSpatialEngine`; the client switches the engine menu when Spatial is ticked). The load tool's leak check
+     now ignores tones that are exact multiples of a talker's (codec harmonics: 600 Hz = 2 × 300 Hz gave a false
+     FAIL). Next: cheaper encoding experiments (`Media__OpusComplexity`, `Media__OpusFrameMs`) on matrix.
+   - Start-up switch `--delete-existing-rooms` (testing): deletes every stored room before any pipeline starts
+     (logged as room.deleted). Each room's pipeline otherwise runs from creation even when empty (~1–1.5% of a
+     core per room); starting media only when someone joins is noted for Phase 5.
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
    **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
    `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**

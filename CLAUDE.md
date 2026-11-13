@@ -32,7 +32,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   `GET /signal/{id}/config`. Verified in headless Chrome. Load tool room mode (`--room ID --audio file|flite|flite-together`)
   adds talking bots to a room you are in from the browser. Dead connections are dropped after `Media:DeadConnectionTimeout` (~27 s detection + 10 s).
 - **Spatial (Phase 6, brought forward):** per-room `spatial` flag, inverse-distance policy, L/R matrix rows, matrix-shared
-  clusters by rendering; finding: clusters ≈ listeners in a scattered crowd (see PLAN.md Phase 6). Next: manual
+  clusters by rendering; finding: clusters ≈ listeners in a scattered crowd, so spatial rooms default to `matrix`
+  (`Media:SpatialEngine`; see PLAN.md Phase 6). `--delete-existing-rooms` start-up switch for clean test runs. Next: manual
   Firefox/Chrome LAN test by the user; an intermittent test failure is noted in PLAN.md Phase 3.
 
 ## Key decisions (summary; PLAN.md is authoritative)
