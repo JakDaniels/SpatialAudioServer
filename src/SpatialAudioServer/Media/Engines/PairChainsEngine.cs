@@ -12,8 +12,7 @@ namespace SpatialAudioServer.Media.Engines;
 /// chain (per source≠listener): tee → queue (leaky) → audioamplify → audiopanorama → listener audiomixer pad
 /// listener (per participant):  silence + chains → audiomixer → OpusEncoder → webrtcbin sink
 /// </code>
-/// The queue gives every chain its own thread, so a stalled listener cannot hold up a source. (A variant without the
-/// queues, "pairchains-lite", collapsed at 32 people and was removed.)
+/// The queue gives every chain its own thread, so a stalled listener cannot hold up a source.
 /// </summary>
 internal sealed class PairChainsEngine(MixEngineContext context) : IMixEngine
 {

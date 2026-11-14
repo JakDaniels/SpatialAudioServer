@@ -9,11 +9,9 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 
 ## Where we are
 - Planning is complete; all requirements questions are answered (see "Resolved requirements" in PLAN.md).
-- The session continues on a new machine running Ubuntu 26.04 (previous machine: Ubuntu 22.04, GStreamer 1.20.3, .NET 10 SDK).
 - Machine: Ubuntu 26.04, .NET SDK 10.0.115, GStreamer 1.28.2.
 - **Phase 0 mostly done:** binding chosen = `GstSharp.Net` 1.28.17 (GirCore is the fallback). Spike in `spikes/WebRtcEcho`
-  (`dotnet run -- --selftest` passes). Findings are in PLAN.md "Binding choice". Firefox browser test passed. Still open: Chrome/Edge test
-  and a Windows run.
+  (`dotnet run -- --selftest` passes). Findings are in PLAN.md "Binding choice". Firefox browser test passed. Still open: Chrome/Edge test.
 - **Phase 1 (skeleton) done:** solution `src/SpatialAudioServer.slnx` (server + `SpatialAudioServer.Tests`, all under `src/`).
   `dotnet test src` runs 23 tests; `dotnet run --project src/SpatialAudioServer` serves HTTP 5000 / HTTPS 5001;
   `dotnet run --project src/SpatialAudioServer -- apikey create <label>` makes a control-API key.
@@ -41,7 +39,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   per-room `clientPose` (`none`/`orientation`), `PATCH /signal/{pid}/pose` with the session token (guests can turn).
 - **Phase 5 (hardening) under way** (PLAN.md Phase 5): media on demand (`Media:IdleRoomTimeout`), stale joins removed at
   token expiry, graceful shutdown, signalling rate limits, input limits, security headers, run docs in
-  `docs/running.md` (Linux + Windows). No Dockerfile for now; the Graphviz graph is parked. The Windows run is for the user.
+  `docs/running.md` (Linux + Windows). No Dockerfile for now; the Graphviz graph is parked. Windows run done 2026-11-14 (server + load tests pass;
+  results in `docs/benchmarks.md`, which holds all benchmark numbers: keep PLAN.md to conclusions).
   Parked: the intermittent pairchains test failure.
 
 ## Key decisions (summary; PLAN.md is authoritative)
@@ -52,9 +51,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 - Licence stays Apache-2.0.
 
 ## Reference code
-`docs/reference/` holds copies of the user's earlier aborted experiments (originals were in `~/src/gstreamer-testing` and `~/src/gstreamer-test2`
-on the old machine). They are ideas only: `audiomixer-test3` (per-pair chains, dynamic add/remove) and `webrtc-test1`. They use
-`gstreamer-sharp-netcore` 0.0.8 and are not part of any build.
+`docs/reference/` holds the user's earlier experiments (`audiomixer-test3`: per-pair chains, dynamic add/remove;
+`webrtc-test1`). Ideas only, not part of any build. The GStreamer, GstSharp.Net and Firestorm source clones there are git-ignored.
 
 ## Working preferences
 - Commits end with: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commit only when asked.

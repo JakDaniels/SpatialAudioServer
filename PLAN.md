@@ -1,30 +1,29 @@
 # SpatialAudioServer – Plan
 
-An MCU-style audio conferencing server in C#/.NET using GStreamer (`GstSharp.Net` bindings; see "Binding choice").
-Rooms and participants are managed through a JSON HTTP API. Audio is mixed server-side with a
-**separate mix chain per listener**, so spatial audio (per-source gain/pan from avatar position)
-can be added later without restructuring.
+An MCU-style audio conferencing server in C# (.NET 10) on GStreamer, through the `GstSharp.Net` bindings.
+Rooms and participants are managed through a JSON HTTP API. Audio is mixed on the server with a **separate
+mix-minus for each listener** (stereo, with per-source gain and pan), which is what spatial audio needs.
 
-Phase 1 targets browser clients only. The Second Life / Firestorm viewer (via an OpenSimulator
-region module that makes one room per region and joins/removes avatars through this API) comes later,
-but nothing in phase 1 should make that harder.
+Browser clients come first. The Second Life / Firestorm viewer (via an OpenSimulator region module that makes one
+room per region and joins/removes avatars through this API) comes later, and nothing in the design makes that harder.
 
 ## Decisions so far
 
 | Topic | Decision |
 |---|---|
+| Topic | Decision |
+|---|---|
+| Stack | .NET 10 (C#), ASP.NET Core minimal APIs on Kestrel; GStreamer 1.24 or newer (developed on 1.28.2) through `GstSharp.Net` 1.28 (see "Binding choice"; GirCore is the fallback); SQLite through `Microsoft.Data.Sqlite`; xUnit tests. |
 | Signalling | HTTP JSON offer/answer + trickle ICE per participant (same path for web and, later, SL viewer). Optional WebSocket for server→client events can be added later. |
-| Auth | Static API key(s) for the control API and admin UI; `join` returns a short-lived one-time token used by the client for signalling. No end-user accounts. |
-| Audio | Opus 48 kHz. Mono in, **stereo out from day one** (each source passes through `audiopanorama`, centred by default). |
-| Mix topology | Per-listener mix-minus: each listener has own chain; a source is never routed to its own listener. |
-| Platforms | Linux and Windows (and ideally macOS). |
-| Persistence | SQLite (`Microsoft.Data.Sqlite`). |
-| Admin | Built-in web UI (static HTML/JS, no build step) served by the same process. |
-| Reference code | `~/src/gstreamer-testing` (`audiomixer-test3` per-pair queue→amplify→panorama chains, `webrtc-test1`), `~/src/gstreamer-test2`. Used for ideas, not copied wholesale. |
+| Auth | API keys for the control API; `join` returns a short-lived one-time token the client uses for signalling (exchanged for a session token); a separate admin password for the admin UI. No end-user accounts. |
+| Audio | Opus 48 kHz. Mono in, **stereo out** (per-source gain and pan for every listener; centred unless the room is spatial). |
+| Mix topology | Per-listener mix-minus: a source is never mixed into its own listener's stream. Pluggable mix engines per room: `matrix-shared` (default), `matrix` (default for spatial rooms), `pairchains`. |
+| Platforms | Linux and Windows, x64. |
+| Persistence | SQLite: rooms, API keys, tokens, event log, session history. |
+| Admin | Built-in web UI (static HTML/JS, no build step) served by the same process; so is the test web client. |
 
-Local environment (Phase 0, Ubuntu 26.04, 2026-11-11): `dotnet --version` 10.0.115, `gst-inspect-1.0 --version`
-1.28.2, with webrtcbin/nice/dtls/srtp/opus/audiomixer/audiopanorama/audioamplify present.
-Target **net10.0** (LTS; required by GstSharp.Net). The reference projects used `net8.0` + `gstreamer-sharp-netcore 0.0.8`.
+Development machine: Ubuntu 26.04, .NET SDK 10.0.115, GStreamer 1.28.2. The server checks at start-up that every
+GStreamer element it needs is present.
 
 ## Architecture
 
@@ -47,37 +46,38 @@ Single ASP.NET Core (Kestrel) process:
 
 ### GStreamer pipeline design
 
-One `Pipeline` per room. Since 2026-11-12 the mix topology is pluggable: `RoomPipeline` owns the webrtcbin
-endpoints and the room's *mix engine* (`IMixEngine`, chosen per room) owns RTP in → RTP out — see "Mix engines"
-under Phase 2. The design below is the first engine, `pairchains`. Per participant:
+One `Pipeline` per room, created when the first participant joins. `RoomPipeline` owns the participants'
+`webrtcbin` endpoints (signalling, ICE, connection state, teardown order); the room's **mix engine** (`IMixEngine`,
+`Media/Engines/`, chosen per room) owns everything from RTP in to RTP out. See "Mix engines" under Phase 2.
 
-**Ingress (participant → server)**
-`webrtcbin` (one sendrecv audio transceiver) → `rtpopusdepay` → `opusdec` → `audioconvert` →
-`audioresample` → capsfilter (`audio/x-raw,rate=48000,channels=1`) → `tee` (the participant's "source tee")
+**Ingress (every engine)**
+`webrtcbin` (one sendrecv audio transceiver) → `rtpopusdepay` → `opusdec` → mono 48 kHz raw audio.
 
-**Per (source, listener) chain** – created when both are in the room, for every source ≠ listener
-`queue (leaky)` → `audioamplify` (gain) → `audiopanorama` (mono → stereo, pan) → listener's mixer sink pad
+**`matrix` and `matrix-shared`** (`RoomInterleave` + `MatrixMixer`)
+- Room: a live silent source in slot 0 and each source's decoded audio in its own slot → `audiointerleave` → `tee`.
+- `matrix`, per listener: `tee` → `queue` → `audiomixmatrix` (a 2 × slots gain matrix: L/R gain of every source as
+  this listener hears it, own slot off) → Opus encoder → `rtpopuspay` → `webrtcbin`. One encoder per listener.
+- `matrix-shared`: only the current talkers are mixed. Each talker has a personal mix (talkers minus themselves);
+  everyone else hears a cluster mix shared by all listeners who hear the talkers the same way (one cluster in a
+  non-spatial room). Each listener has an `input-selector` over Opus frames (cluster | personal) → `rtpopuspay`, so
+  switching keeps the RTP stream continuous. Encoders = talkers + clusters.
 
-**Egress (server → participant)** – the participant's "listener mix"
-`audiomixer` (stereo, 48 kHz) → `audioconvert` → `audioresample` → `opusenc` → `rtpopuspay` → `webrtcbin`
-plus an `audiotestsrc is-live=true wave=silence` feeding the mixer so it keeps producing output (and the
-Opus stream continues) when nobody is speaking or the listener is alone.
+**`pairchains`** (for comparison): per (source, listener) `queue` → `audioamplify` → `audiopanorama` → the
+listener's `audiomixer` (with a live silent source) → Opus encoder → `webrtcbin`. Chains grow as N(N−1).
 
 Why this shape:
-- Gain/pan are per (source, listener) – exactly what spatialisation needs later (distance attenuation + azimuth).
-- Later optimisations (skip chains for sources out of range, mute-by-VAD, culling) only touch chain creation.
-- Per-pair chain count is O(N²). Mitigations: a configurable max participants per room (default ~16–24),
-  `queue` leaky settings, and the culling hook above. Measure early (see Phase 2).
+- Gain/pan are per (source, listener): what spatialisation needs (distance attenuation + azimuth); in the matrix
+  engines they are matrix coefficients, so changing them touches no elements.
+- Mix-minus by construction: a listener's own slot is always off, and no self chain exists.
 
-Lessons to apply from the earlier experiments:
-- Add/remove of chains while PLAYING must use pad probes (block, flush/EOS, unlink, release request pads,
-  set element to NULL, remove) – otherwise deadlocks/crashes. Wrap in one tested helper.
-- Don't implement "self-mute" as gain 0; just don't build the self chain.
-- All GStreamer graph mutation is serialised per room on a dedicated worker (single-threaded actor/channel);
-  webrtcbin signals (`on-negotiation-needed`, `on-ice-candidate`, `pad-added`, `notify::ice-connection-state`)
-  arrive on GStreamer threads and only enqueue work.
-- A GLib `MainLoop` thread runs for bus messages; bus watch per pipeline logs errors/state changes.
-- Pipeline graph `.dot` dump available on demand (admin UI/endpoint) – the old `Visualiser` is useful.
+Rules for the pipeline code:
+- Adding and removing branches while PLAYING uses pad probes (idle probe, unlink, release request pads, element to
+  NULL, remove), in shared helpers (`MediaBlocks`); otherwise deadlocks and crashes.
+- All graph changes for a room are serialised on its worker (`RoomWorker`); webrtcbin signals (`on-ice-candidate`,
+  `pad-added`, `notify::connection-state`) arrive on GStreamer threads and only enqueue work.
+- Each pipeline's bus is watched on its own thread (`BusWatcher`; no GLib main loop): errors, state changes,
+  latency recalculation.
+- The pipeline graph (`.dot`) is available on demand from the admin API.
 
 ### WebRTC specifics
 - Server is the SDP **answerer**: browser creates the offer (audio sendrecv, Opus), server returns the answer.
@@ -214,10 +214,9 @@ tested without GStreamer.
 ## Phases
 
 0. **Spike / de-risk (do first).** Console test: webrtcbin answerer with a browser offer, Opus in → loopback
-   out, driven from C# (originally planned with `gstreamer-sharp-netcore 0.0.8`; GstSharp.Net chosen, see "Binding choice"). Confirm the package exposes what's needed
+   out, driven from C# through GstSharp.Net (see "Binding choice"). Confirm the binding exposes what's needed
    (webrtcbin promises/`create-answer`, `GstWebRTCSessionDescription`, `add-ice-candidate`, request pads,
-   pad probes). If bindings are missing, write thin P/Invoke shims. Also verify on Windows, and with a
-   self-built newer GStreamer in a private prefix (see below).
+   pad probes); anything missing goes through thin P/Invoke shims. Also verify on Windows.
 1. **Skeleton.** Solution, config, logging, GStreamer init + plugin check, SQLite + migrations, API key auth,
    `/api/status`, room/participant CRUD against in-memory + SQLite (no media).
    **Done 2026-11-11:** 23 tests pass (incl. external-id addressing) (`dotnet test src`); smoke-tested over HTTPS on the LAN. Participant `state`
@@ -273,10 +272,7 @@ tested without GStreamer.
      registered engine has no suites. Adding an engine = implement `IMixEngine`, register it in `MixEngines`, add
      the subclasses.
    - **Load tool**: `--engine a,b,…` runs the same load against each engine in turn and prints a comparison table.
-   - Engines so far: `pairchains` (stage A–C design) and `pairchains-lite` (no per-chain `queue`/`audioamplify`;
-     gain is the audiomixer pad's `volume`; threads ∝ N instead of N²).
-   - First comparison: dropping the per-chain queue threads (`pairchains-lite`) saves ~40% at 16 people, but the
-     cost is still per pair ([docs/benchmarks.md](docs/benchmarks.md)).
+   - First engine: `pairchains` (the stage A–C design).
    - **`matrix` engine (user's design, 2026-11-12):** one `audiointerleave` per room → `tee` → per listener
      `queue` → `audiomixmatrix` (2 × slots gain matrix, own slot off) → Opus encoder. No per-pair elements; per-pair
      gain/pan are matrix coefficients. Constraints found in the 1.28 sources (`docs/reference/gstreamer`, git-ignored):
@@ -316,7 +312,7 @@ tested without GStreamer.
        K ≤ `Media:ActiveSpeakers` (everyone talking at once means only the top talkers are mixed, by design).
    - **32-person benchmark (2026-11-12), 3 talkers, complexity 5 / 40 ms:** matrix-shared **49% of 4 cores**
      (meets the Phase 2 gate), matrix 64% ([docs/benchmarks.md](docs/benchmarks.md)).
-   **Decided 2026-11-12:** default engine `matrix-shared`; `pairchains-lite` removed. Phase 2 done.
+   **Decided 2026-11-12:** default engine `matrix-shared`. Phase 2 done.
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
    **Started 2026-11-12:**
@@ -538,15 +534,15 @@ tested without GStreamer.
 
 ## Risks / things to verify
 
-- ~~gstreamer-sharp-netcore 0.0.8 completeness~~ - resolved: GstSharp.Net chosen and proven in Phase 0. Remaining
-  binding risk is its maintenance (single maintainer); keep it behind `Media/`.
-- **GStreamer version differences.** Linux distro has 1.20.3; webrtcbin has had many fixes since (1.22/1.24).
-  ICE port-range / NAT 1:1 control may only exist in newer versions. Recommend documenting a minimum
-  version and providing a Docker image with a newer GStreamer.
-- **Windows:** need the official MSVC GStreamer runtime including gst-plugins-bad (webrtc), libnice,
-  dtls, srtp; locating native DLLs from .NET (PATH / `GSTREAMER_1_0_ROOT_MSVC_X86_64`).
-- **O(N²) chains** – CPU and thread count at larger room sizes; spatial culling mitigates later.
-- **Dynamic pipeline modification** is the usual crash/deadlock source; centralise in one helper + per-room worker.
+- **Binding maintenance:** GstSharp.Net has effectively one maintainer; all GStreamer use stays behind `Media/`, and
+  GirCore is the fallback.
+- **GStreamer version differences:** minimum 1.24, developed on 1.28.2; webrtcbin keeps getting fixes. ICE
+  port-range / NAT 1:1 control may be needed for public deployment.
+- **Windows:** needs the official MSVC GStreamer runtime (full install: gst-plugins-bad for webrtc, libnice, dtls,
+  srtp). Verified 2026-11-14: the binding finds it and the server runs, load tests pass.
+- **CPU at scale:** encoders per listener dominate; measured in [docs/benchmarks.md](docs/benchmarks.md). Distance
+  culling and listener grouping are the levers.
+- **Dynamic pipeline modification** is the usual crash/deadlock source; centralised in shared helpers + the per-room worker.
 - **Jitter/latency:** `audiomixer` latency and webrtcbin jitterbuffer `latency` need tuning to avoid
   underruns vs. delay; make both configurable.
 - **Browser autoplay / HTTPS** constraints for the test client.
@@ -555,8 +551,8 @@ tested without GStreamer.
 
 - **Scale target (absolute maximum):** 16 rooms x 32 participants. Expected real load is much lower. Per-room
   cap default 32; a server-wide cap on total participants, configurable. 32 participants means up to
-  32 x 31 = 992 pair chains in a room, so Phase 2 must benchmark this worst case (all rooms full = ~16k chains;
-  document the measured limit) and the culling/VAD optimisations in Phase 6 may be needed sooner than planned.
+  32 x 31 = 992 source→listener pairs in a room; Phase 2 benchmarks this worst case
+  ([docs/benchmarks.md](docs/benchmarks.md)).
 - **Room IDs:** always generated by the server (UUID) on create. The caller may attach `externalId`/`name`
   (e.g. region UUID) and look rooms up by it (`GET /api/rooms?externalId=`) so the region module can find its room.
 - **Persistence:** rooms persist in SQLite until explicitly deleted; restored at startup. Participants/sessions are
@@ -568,40 +564,20 @@ tested without GStreamer.
   getUserMedia); designed for public deployment later (TLS, TURN, rate limiting in Phase 5).
 - **Licence:** keep Apache-2.0 (permissive, compatible with OpenSim's BSD and with dynamically linking LGPL GStreamer).
 
-## Using a newer GStreamer without Docker
-
-The .NET binding only P/Invokes the native `libgstreamer-1.0.so.0` etc. by name at runtime, and GStreamer's C ABI is
-stable across 1.x, so a self-built GStreamer in a private prefix works with no changes to the binding:
-
-1. Build the GStreamer monorepo (meson) into e.g. `~/gst/1.26` with gst-plugins-bad `webrtc`, libnice (as a subproject),
-   `dtls`/`srtp`, `opus`, `rtpmanager`, `gstreamer-sharp` not required.
-2. Run the server with `LD_LIBRARY_PATH=~/gst/1.26/lib/x86_64-linux-gnu`, `GST_PLUGIN_SYSTEM_PATH_1_0` and
-   `GST_PLUGIN_PATH` pointing at the new plugins (and an isolated `GST_REGISTRY`), so system 1.20 is not mixed in.
-   A `run-dev.sh` script will set these, and the `/api/status` endpoint reports the loaded GStreamer version.
-3. Caveat: the binding (0.0.8) was generated against an old API, so *new* APIs are not wrapped; anything needed
-   (e.g. ICE port range properties) is reachable through `GObject` property/signal calls or small P/Invoke shims.
-   Phase 0 confirms this.
-
-This is added to Phase 0 (build/verify newer GStreamer alongside the system one) and Docker becomes an optional
-later deployment aid rather than a requirement.
-
 ## Hardware and browser targets
 
 - **Server:** 4 or 8 cores. Phase 2 benchmark gate: a full 32-participant room should run on 4 cores with headroom
   (target < ~60% total CPU, no audible underruns); if not, VAD/culling is pulled forward. Record results for 4 and 8 cores.
 - **Browsers:** current evergreen browsers (Chrome/Edge, Firefox, Safari 2025+). No legacy/Plan-B SDP or polyfills needed.
-- **Dev/deploy VM:** Ubuntu 24.04 or 26.04 LTS. Their distro GStreamer is considerably newer than 22.04's 1.20
-  (24.04 ships 1.24; 26.04 should ship a newer one still - verify with `apt-cache policy libgstreamer1.0-0`),
-  so the self-built GStreamer path above becomes a fallback, not the default. Phase 0 records the exact versions used,
-  and the minimum supported GStreamer version is set from what the spike proves works.
+- **Linux server:** Ubuntu 24.04 (GStreamer 1.24) or 26.04 (1.28) LTS, distro GStreamer packages.
+- **Windows server:** Windows 10/11 x64 with the official GStreamer 1.28 MSVC runtime.
 
 ## Binding choice (Phase 0 decision)
 
-Requested package: `GStreamer-Sharp-NetCore` 0.0.8 (a community port of old gstreamer-sharp, roughly 1.14-1.16 era API).
-Phase 0 time-boxes a webrtcbin spike against each candidate and picks one. All GStreamer use stays behind the `Media/` layer
-so a swap is contained:
-**Decision (2026-11-11): `GstSharp.Net` 1.28.17** (`GstSharp.Net`, `GstSharp.Net.Sdp`, `GstSharp.Net.WebRTC`; add
-`GstSharp.Net.App`/`.Audio` if needed). GirCore stays the fallback; the other candidates were not spiked.
+**`GstSharp.Net` 1.28.17** (`GstSharp.Net`, `GstSharp.Net.Sdp`, `GstSharp.Net.WebRTC`; chosen 2026-11-11 after the
+Phase 0 spike). It is generated for GStreamer 1.28 and targets net10.0. All GStreamer use stays behind the `Media/`
+layer, so a swap is contained. **Fallback: GirCore** (`GirCore.Gst-1.0`, `GirCore.GstSdp`, `GirCore.GstWebRTC`,
+generated from GObject Introspection; needs the matching typelibs).
 
 Phase 0 spike: [spikes/WebRtcEcho](spikes/WebRtcEcho/README.md) (ASP.NET minimal API + GStreamer echo; `--selftest` runs a
 GStreamer fake client against it). Findings:
@@ -633,14 +609,5 @@ GStreamer fake client against it). Findings:
   Apache-2.0. The source clone in `docs/reference/GstSharp.Net` is git-ignored and must stay out of this repo.
 - Risk: effectively single-maintainer and ~3 months old. Mitigated by the `Media/` boundary and the GirCore fallback.
 
-Still open from Phase 0: Chrome/Edge test of the spike page (Firefox done); Windows run (official MSVC runtime);
-self-built newer GStreamer is no longer needed (distro 1.28.2 is current).
-
-Candidates considered:
-- `GStreamer-Sharp-NetCore` 0.0.8 - baseline; known from the earlier experiments; likely missing GstWebRTC types.
-- `GirCore.Gst-1.0` / `GirCore.GstSdp` / `GirCore.GstWebRTC` (gir.core, generated from GObject Introspection, actively developed) -
-  strongest candidate for full, current webrtcbin coverage; needs the matching typelibs (`gir1.2-gst-plugins-bad-1.0`). Verify current versions on NuGet.
-- `GstSharp.Net` + `GstSharp.Net.WebRTC` (1.28 bindings, net10.0 only, young project, maintenance unverified) - **chosen**, see above.
-- `GstSharpBundle` - bundles native binaries (only a Windows x64 runtime package so far), LGPL-2.1, GStreamer version unstated. Possibly useful for
-  Windows packaging, not for the Linux server.
-- Official `GstSharp` NuGet is stale (1.18, .NET Framework 4.5). Not an option.
+Still open from Phase 0: a Chrome/Edge test of the spike page (Firefox works, and the test web client works in
+headless Chrome). The Windows run was done on 2026-11-14.
