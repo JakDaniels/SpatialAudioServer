@@ -535,6 +535,14 @@ tested without GStreamer.
      keep the name the integration gave (an SL avatar's name from the region module). Logged as
      `participant.renamed` ("Guest → Alice"); the session history takes the new name; the admin UI tags such
      participants "guest". Names are trimmed, control characters dropped, ≤ 200 characters.
+   - **Speaking bots, natural voices (2026-11-14):** the load tool's `--audio voices` uses pre-rendered clips committed
+     in `scripts/loadtest-linux-x64/voices` (Ogg Opus, 2.3 MB: 8 voices × 32 names, 8 directions, 12 distances),
+     made once with Piper by `scripts/render-voices.py`, so nothing is needed where the load tool runs (Linux and
+     Windows; flite is Linux-only). Voices chosen by ear and licence: Jenny (Dioco) and Cori (public domain), plus 6
+     LibriTTS-R speakers (CC BY 4.0); credits in `voices/CREDITS.md`. Ruled out on licence: alan, lessac, ryan,
+     hfc_male/female. Spatial room mode places bots on rings of the 8 compass points (5, 15, 25, 35 m; decided over
+     16-point compass, bearings or clock positions): every bot's "North-west, behind, to your left. 15 metres." is
+     exact, and the outer rings test distance.
 
 ## Risks / things to verify
 

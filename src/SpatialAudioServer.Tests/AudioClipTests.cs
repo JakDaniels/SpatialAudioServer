@@ -53,6 +53,20 @@ public sealed class AudioClipTests() : MediaTestBase(SpatialAudioServer.Media.En
     }
 
     [Fact]
+    public void The_committed_voices_say_each_bots_name_place_and_distance()
+    {
+        var voices = BotVoices.Load(); // found in the repository (scripts/loadtest-linux-x64/voices)
+
+        Assert.True(voices.Voices.Count >= 2, "several voices");
+        Assert.True(voices.Names >= 32, "a name for every bot a room can hold");
+        var nameOnly = voices.Line(11, place: null);
+        var placed = voices.Line(11, BotLayout.Place(11, 16, radius: 5)); // "Bot, 12. … 15 metres."
+        Assert.True(nameOnly.Length > AudioClip.Rate / 4, "the name is spoken");
+        Assert.True(placed.Length > nameOnly.Length + AudioClip.Rate, "direction and distance follow the name");
+        Assert.NotEqual(voices.Line(0, null).Length, voices.Line(1, null).Length); // different voices take turns
+    }
+
+    [Fact]
     public void A_missing_file_is_reported()
     {
         Assert.Throws<FileNotFoundException>(() => AudioClip.Load(_files.File("missing.wav")));

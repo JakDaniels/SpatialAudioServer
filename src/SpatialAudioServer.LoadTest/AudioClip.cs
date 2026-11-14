@@ -77,8 +77,22 @@ public sealed class AudioClip
         {
             throw new ArgumentException("No phrases to speak.", nameof(phrases));
         }
-        var gap = Rate * 4 / 10; // 0.4 s after each phrase
         var spoken = phrases.Select((text, i) => FliteSpeech.Say(text, FliteSpeech.Voices[i % FliteSpeech.Voices.Length])).ToList();
+        return Arrange(spoken, phrases.Select(p => $"\"{p}\"").ToList(), together);
+    }
+
+    /// <summary>
+    /// One clip per spoken line (48 kHz mono samples), every clip one cycle long. Taking turns, each line sits in its
+    /// own slot of the cycle, so clients given clips 0, 1, 2… speak one after another; <paramref name="together"/>, they
+    /// all start at once. A pause follows each line.
+    /// </summary>
+    public static IReadOnlyList<AudioClip> Arrange(IReadOnlyList<short[]> spoken, IReadOnlyList<string> labels, bool together = false)
+    {
+        if (spoken.Count == 0)
+        {
+            throw new ArgumentException("Nothing to speak.", nameof(spoken));
+        }
+        var gap = Rate * 4 / 10; // 0.4 s after each line
         var cycle = together ? spoken.Max(s => s.Length) + gap : spoken.Sum(s => s.Length + gap);
         var clips = new List<AudioClip>();
         var offset = 0;
@@ -86,7 +100,7 @@ public sealed class AudioClip
         {
             var pcm = new byte[cycle * 2];
             spoken[i].AsSpan().CopyTo(System.Runtime.InteropServices.MemoryMarshal.Cast<byte, short>(pcm.AsSpan()).Slice(offset));
-            clips.Add(new AudioClip($"\"{phrases[i]}\"", pcm));
+            clips.Add(new AudioClip(labels[i], pcm));
             if (!together)
             {
                 offset += spoken[i].Length + gap;
