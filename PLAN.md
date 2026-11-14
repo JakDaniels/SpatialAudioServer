@@ -481,6 +481,21 @@ tested without GStreamer.
    - Start-up switch `--delete-existing-rooms` (testing): deletes every stored room before any pipeline starts
      (logged as room.deleted). Each room's pipeline otherwise runs from creation even when empty (~1–1.5% of a
      core per room); starting media only when someone joins is noted for Phase 5.
+   **Future direction (recorded 2026-11-14, not scheduled):**
+   - **Distance profiles per room.** SL's voice attenuation is very non-linear (aimed at people within ~50 m talking
+     as if nearby); for other rooms a model based on real sound propagation is preferred. Idea: named profiles in
+     server config, chosen per room like `engine`, using the standard distance models (OpenAL / Web Audio):
+     `inverse`, `exponential` (rolloff 1 = physical 1/r, about −6 dB per doubling from a reference of ~1.5–2 m, with
+     a near-field clamp ~0.5 m), `linear`, plus `table` (interpolated gain at given distances) to match SL by ear.
+     Each with a maximum range for culling. To decide: which profiles ship, the default, the physical reference.
+   - **Richer per-listener acoustics: a custom GStreamer element** (`acousticspace`, see
+     `docs/gstreamer_acousticspace_design.md`): per pair distance, ILD/ITD, early-reflection taps and a shared late
+     reverb, with environment presets and later geometry; expensive work only when geometry changes. Today each
+     listener's mix only has a left/right gain per participant, so it would come in as a new mix engine (engines
+     are pluggable per room and the engine suites test them). The spatial policy's per-pair result (today gain + pan)
+     would grow into per-path coefficients (L/R gain, ITD, reflection taps). The control API will need more
+     parameters from the region module (environment preset per room, geometry, per-participant voice level, …)
+     carried on the same JSON update path to the engines.
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
    **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
    `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**
@@ -529,6 +544,11 @@ tested without GStreamer.
        speaker part (`sp`/`sh`) as a hint only and keep the region module's PATCH as the authority? Rate limits for
        the viewer's ≤ 10/s updates; whether the region module should also send camera positions; what the default
        `clientPose` for region rooms should be.
+     - **Distance model, to check against a real SL viewer (2026-11-14):** the defaults (full volume within 10 m,
+       then 10/d, silent beyond 60 m) were chosen as "SL-like" but have not been compared with SL's own voice service.
+       In listening tests the 15 m ring is only 3.5 dB below the 5 m ring, so distance is subtle;
+       `Media__Spatial__ReferenceDistance=2` makes it obvious (5 m −8 dB … 35 m −25 dB) and sounded better, but the
+       defaults stay until they can be matched with SL by ear and by measurement (a rolloff exponent may be needed).
    - **Guest names (2026-11-13):** a participant created with `clientNamed: true` (both invite buttons) may choose its
      display name, sent as `displayName` with its first offer; `/signal/{pid}/config` reports `displayName` and
      `clientNamed`. Checked before the one-time join token is used, so a refused name (403) can be retried. Others
