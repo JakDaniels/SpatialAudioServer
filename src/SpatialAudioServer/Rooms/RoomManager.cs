@@ -26,6 +26,7 @@ public sealed class RoomManager(
     private readonly Lock _lock = new();
     private readonly Dictionary<Guid, Room> _rooms = [];
     private bool _restored;
+    private bool _stopping;
 
     public int RoomCount
     {
@@ -80,6 +81,28 @@ public sealed class RoomManager(
                 restored.Count, closed);
         }
         restored.ForEach(media.RoomCreated);
+    }
+
+    /// <summary>
+    /// The server is stopping: ends every participant's session (reason "server-shutdown"; their media stops with the
+    /// room pipelines) and refuses new participants. Returns how many were ended.
+    /// </summary>
+    public int Shutdown()
+    {
+        lock (_lock)
+        {
+            _stopping = true;
+            var ended = 0;
+            foreach (var room in _rooms.Values)
+            {
+                foreach (var pid in room.Participants.Keys.ToList())
+                {
+                    EndParticipant(room, pid, "server-shutdown");
+                    ended++;
+                }
+            }
+            return ended;
+        }
     }
 
     /// <summary>Creates a room. A room with the same externalId already existing is a <see cref="ConflictException"/>.</summary>
@@ -212,6 +235,10 @@ public sealed class RoomManager(
         Guid? replaced = null;
         lock (_lock)
         {
+            if (_stopping)
+            {
+                throw new ServiceUnavailableException("The server is shutting down.");
+            }
             var room = FindRoom(roomId);
             if (command.ExternalId is { } externalId && FindParticipantByExternalId(room, externalId) is { } previous)
             {
@@ -436,6 +463,30 @@ public sealed class RoomManager(
             catch (NotFoundException)
             {
                 // Left or was removed since the scan.
+            }
+        }
+        return removed;
+    }
+
+    /// <summary>
+    /// Removes participants whose join token expired unused (reason "join-expired"): their client never connected and
+    /// now never can. Also clears used and expired tokens from the database. Returns how many were removed.
+    /// </summary>
+    public int DropExpiredJoins()
+    {
+        var removed = 0;
+        foreach (var claim in joinTokens.PurgeDead())
+        {
+            try
+            {
+                log.LogWarning("Participant {ParticipantId} in room {RoomId} never connected and its join token has expired; removing it",
+                    claim.ParticipantId, claim.RoomId);
+                RemoveParticipant(claim.RoomId, claim.ParticipantId, "join-expired");
+                removed++;
+            }
+            catch (NotFoundException)
+            {
+                // Removed meanwhile.
             }
         }
         return removed;

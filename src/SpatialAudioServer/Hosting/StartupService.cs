@@ -25,6 +25,7 @@ internal sealed class StartupService(
     Api.AdminPassword adminPassword,
     RoomStore roomStore,
     ActivityLog activity,
+    IRoomMedia roomMedia,
     ILogger<StartupService> log) : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
@@ -58,6 +59,11 @@ internal sealed class StartupService(
         {
             throw new InvalidOperationException(
                 $"Media:DeadConnectionTimeout must not be negative (is {media.Value.DeadConnectionTimeout}); 0 disables it.");
+        }
+        if (media.Value.IdleRoomTimeout < TimeSpan.Zero)
+        {
+            throw new InvalidOperationException(
+                $"Media:IdleRoomTimeout must not be negative (is {media.Value.IdleRoomTimeout}); 0 stops a room's media as soon as it empties.");
         }
 
         if (media.Value.Enabled)
@@ -103,5 +109,17 @@ internal sealed class StartupService(
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    /// <summary>
+    /// Graceful stop (Ctrl+C, SIGTERM, Windows service stop): ends every participant's session with reason
+    /// "server-shutdown" so the history is accurate, then stops all room pipelines in parallel.
+    /// </summary>
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var ended = rooms.Shutdown();
+        (roomMedia as IDisposable)?.Dispose();
+        log.LogInformation("Stopped: ended {Count} participant sessions and stopped room media in {Ms} ms",
+            ended, started.ElapsedMilliseconds);
+        return Task.CompletedTask;
+    }
 }

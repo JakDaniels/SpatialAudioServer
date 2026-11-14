@@ -101,6 +101,9 @@ public sealed class FakeClient : IDisposable
 
     public ToneMeter Meter { get; }
 
+    /// <summary>The signalling session token from the offer response (tests use it to call signalling directly).</summary>
+    public string? SessionToken => _sessionToken;
+
     public Guid ParticipantId { get; private set; }
 
     public bool Receiving => Volatile.Read(ref _receiving) == 1;

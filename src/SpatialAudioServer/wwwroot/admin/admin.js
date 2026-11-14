@@ -209,10 +209,10 @@ function renderRoom() {
   $("roomName").textContent = d.name;
   $("roomMeta").textContent = `${d.id} · ${d.engine}${d.spatial ? ", spatial" : ""} · ${d.participantCount} of ${d.maxParticipants}` +
     (d.externalId ? ` · external id ${d.externalId}` : "");
-  $("counters").textContent = live
-    ? `Mixing ${live.media.mixedPairs} source→listener pairs · ` +
-      Object.entries(live.media.counters).map(([k, v]) => `${k} ${v}`).join(", ")
-    : "No media statistics (media disabled).";
+  $("counters").textContent = !live ? "No media statistics (media disabled)."
+    : !live.media.running ? "Media idle: the pipeline starts when someone joins."
+    : `Mixing ${live.media.mixedPairs} source→listener pairs · ` +
+      Object.entries(live.media.counters).map(([k, v]) => `${k} ${v}`).join(", ");
 
   const stats = new Map((live?.participants ?? []).map(p => [p.id, p]));
   const now = performance.now();

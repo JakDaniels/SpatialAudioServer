@@ -168,7 +168,8 @@ public sealed class ControlApiTests : IDisposable
         Assert.Equal("r1", details.ExternalId);
         Assert.Empty(details.Participants);
         var session = Assert.Single(second.Services.GetRequiredService<ActivityLog>().Sessions(roomId));
-        Assert.Equal("server-restart", session.LeaveReason);
+        // A clean stop closes sessions itself; "server-restart" is left for sessions a crashed run left open.
+        Assert.Equal("server-shutdown", session.LeaveReason);
     }
 
     [Fact]
