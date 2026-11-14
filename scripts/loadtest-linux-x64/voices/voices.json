@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "names": 32,
+  "directions": [
+    "east",
+    "north-east",
+    "north",
+    "north-west",
+    "west",
+    "south-west",
+    "south",
+    "south-east"
+  ],
+  "distances": [
+    5,
+    10,
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
+    55,
+    60
+  ],
+  "voices": [
+    {
+      "id": "jenny",
+      "model": "en_GB-jenny_dioco-medium",
+      "speaker": null,
+      "credit": "Jenny (Dioco), https://github.com/dioco-group/jenny-tts-dataset"
+    },
+    {
+      "id": "cori",
+      "model": "en_GB-cori-high",
+      "speaker": null,
+      "credit": "Cori, Piper voice trained on public-domain LibriVox recordings"
+    },
+    {
+      "id": "libritts-0",
+      "model": "en_US-libritts_r-medium",
+      "speaker": 0,
+      "credit": "LibriTTS-R speaker 0 (CC BY 4.0)"
+    },
+    {
+      "id": "libritts-40",
+      "model": "en_US-libritts_r-medium",
+      "speaker": 40,
+      "credit": "LibriTTS-R speaker 40 (CC BY 4.0)"
+    },
+    {
+      "id": "libritts-120",
+      "model": "en_US-libritts_r-medium",
+      "speaker": 120,
+      "credit": "LibriTTS-R speaker 120 (CC BY 4.0)"
+    },
+    {
+      "id": "libritts-300",
+      "model": "en_US-libritts_r-medium",
+      "speaker": 300,
+      "credit": "LibriTTS-R speaker 300 (CC BY 4.0)"
+    },
+    {
+      "id": "libritts-550",
+      "model": "en_US-libritts_r-medium",
+      "speaker": 550,
+      "credit": "LibriTTS-R speaker 550 (CC BY 4.0)"
+    },
+    {
+      "id": "libritts-850",
+      "model": "en_US-libritts_r-medium",
+      "speaker": 850,
+      "credit": "LibriTTS-R speaker 850 (CC BY 4.0)"
+    }
+  ]
+}

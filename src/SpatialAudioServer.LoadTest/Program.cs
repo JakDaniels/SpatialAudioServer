@@ -96,15 +96,28 @@ public static class LoadTestProgram
 
         var clips = new List<AudioClip>();
         var n = options.Participants;
+        // --spatial: rings of 8 compass points round the centre (where the browser client stands); see BotLayout.
+        var places = Enumerable.Range(0, n).Select(i => options.Spatial ? BotLayout.Place(i, n, options.Radius) : null).ToList();
         foreach (var file in options.AudioFiles)
         {
-            if (file.ToLowerInvariant() is "flite" or "flite-together")
+            var keyword = file.ToLowerInvariant();
+            if (keyword is "voices" or "voices-together")
             {
-                var together = file.Equals("flite-together", StringComparison.OrdinalIgnoreCase);
-                // One phrase per bot: its number, and with --spatial where it stands (see the circle below).
-                var phrases = Enumerable.Range(0, n)
-                    .Select(i => options.Spatial ? $"{SpokenName(options, i)}. {Spoken(2 * Math.PI * i / n)}." : $"{SpokenName(options, i)}.")
-                    .ToList();
+                // Pre-rendered natural voices (any platform): each bot's line joined from its voice's clips.
+                var together = keyword == "voices-together";
+                var voices = BotVoices.Load(options.VoicesDirectory);
+                var lines = Enumerable.Range(0, n).Select(i => voices.Line(i, places[i])).ToList();
+                var arranged = AudioClip.Arrange(lines, Enumerable.Range(0, n).Select(i => $"\"{Phrase(options, i, places[i])}\"").ToList(), together);
+                clips.AddRange(arranged);
+                Console.WriteLine($"Audio: {voices.Voices.Count} voices from {voices.Directory} " +
+                    $"{(together ? "speaking together" : "taking turns")}, a {arranged[0].Length.TotalSeconds:F1} s cycle, e.g. {arranged[^1].Path}");
+                continue;
+            }
+            if (keyword is "flite" or "flite-together")
+            {
+                // Synthesised on the spot with libflite (Linux): robotic, but needs no voice files.
+                var together = keyword == "flite-together";
+                var phrases = Enumerable.Range(0, n).Select(i => Phrase(options, i, places[i])).ToList();
                 var voices = AudioClip.Speech(phrases, together);
                 clips.AddRange(voices);
                 Console.WriteLine($"Audio: {voices.Count} flite voices {(together ? "speaking together" : "taking turns")}, " +
@@ -140,13 +153,8 @@ public static class LoadTestProgram
         {
             for (var i = 0; i < n && !stop.IsCancellationRequested; i++)
             {
-                var name = BotName(options, i); // what the flite voices say too
-                // --spatial: a circle round the centre (where the browser client stands), Bot 1 straight ahead (east)
-                // and the rest spaced anticlockwise, i.e. towards the listener's left first.
-                var angle = 2 * Math.PI * i / n;
-                var position = options.Spatial
-                    ? new Vec3(Math.Round(options.Radius * Math.Cos(angle), 3), Math.Round(options.Radius * Math.Sin(angle), 3), 0)
-                    : null;
+                var name = BotName(options, i);
+                var position = places[i]?.Position;
                 var join = await Post<JoinResponse>(http, $"api/rooms/{roomId}/participants", new { displayName = name, position });
                 // Each client of a shared clip starts at a different point so they don't speak in unison.
                 var clip = clips.Count > 0 ? clips[i % clips.Count] : null;
@@ -157,7 +165,7 @@ public static class LoadTestProgram
                 clients.Add(client);
                 await client.ConnectAsync(http, join.ParticipantId, join.JoinToken);
                 Console.WriteLine($"  {name} joined ({join.ParticipantId}){(i < talkers ? "" : ", silent")}" +
-                    (position is null ? "" : $", {options.Radius:0.#} m {Direction(angle)}"));
+                    (places[i] is { } place ? $", {place.Distance:0.#} m {BotLayout.Describe(place.Octant)}" : ""));
             }
 
             Console.WriteLine(options.DurationSet
@@ -226,30 +234,12 @@ public static class LoadTestProgram
     private static string BotName(Options options, int index) => $"{options.Name} {index + 1}";
 
     /// <summary>
-    /// The same name as flite should say it: "Bot, 1". Without the comma flite runs "Bot" and the number together
-    /// (a 20 ms gap); the comma gives a 100 ms pause, which sounded best (2026-11-13).
+    /// What bot <paramref name="index"/> says: "Bot, 12." and, when placed, "North-west, behind, to your left. 15 metres."
+    /// The comma makes a pause between the name and the number (without it flite ran them together). The pre-rendered
+    /// voices say the same (scripts/render-voices.py).
     /// </summary>
-    private static string SpokenName(Options options, int index) => $"{options.Name}, {index + 1}";
-
-    /// <summary>What a bot at this angle (anticlockwise from east) says about where it is: compass, then relative to a
-    /// listener facing east (the browser client's starting direction).</summary>
-    private static string Spoken(double angle)
-    {
-        string[] compass = ["East", "North-east", "North", "North-west", "West", "South-west", "South", "South-east"];
-        string[] relative = ["ahead of you", "ahead, to your left", "on your left", "behind, to your left", "behind you",
-            "behind, to your right", "on your right", "ahead, to your right"];
-        var octant = (int)Math.Round(angle / (Math.PI / 4)) % 8;
-        return $"{compass[octant]}, {relative[octant]}";
-    }
-
-    /// <summary>Where a bot at this angle (anticlockwise from east) is for a listener facing east.</summary>
-    private static string Direction(double angle)
-    {
-        var degrees = (int)Math.Round(angle * 180 / Math.PI) % 360;
-        string[] names = ["ahead (east)", "ahead-left (north-east)", "left (north)", "behind-left (north-west)", "behind (west)",
-            "behind-right (south-west)", "right (south)", "ahead-right (south-east)"];
-        return degrees % 45 == 0 ? names[degrees / 45] : $"at {degrees}° anticlockwise from ahead";
-    }
+    private static string Phrase(Options options, int index, BotPlace? place) =>
+        $"{options.Name}, {index + 1}." + (place is null ? "" : $" {BotLayout.Spoken(place.Octant)}. {place.Distance:0.#} metres.");
 
     private sealed record RunResult(string Engine, bool Pass, double CpuCores, int Cores, long MemoryBytes, int Threads, double HeardMin);
 
@@ -416,7 +406,7 @@ public static class LoadTestProgram
     private sealed record Options(
         System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure,
         IReadOnlyList<string> Engines, int? Talkers, Guid? Room, IReadOnlyList<string> AudioFiles, double? Volume, string Name,
-        bool DurationSet, bool Spatial, double Radius, TimeSpan Warmup)
+        bool DurationSet, bool Spatial, double Radius, TimeSpan Warmup, string? VoicesDirectory)
     {
         public const string Usage =
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
@@ -429,16 +419,17 @@ public static class LoadTestProgram
             "  --spatial: spatial rooms, everyone placed at random in a 30 m square facing a random way.\n" +
             "\n" +
             "Room mode (listening tests): SpatialAudioServer.LoadTest --api-key KEY --room ROOM_ID [--participants 4]\n" +
-            "                                   [--audio speech.wav[,other.ogg...]] [--talkers K] [--volume 1.0] [--name bot]\n" +
-            "                                   [--duration SECONDS]\n" +
+            "                                   [--audio voices|file.wav[,...]] [--spatial [--radius 5]] [--talkers K]\n" +
+            "                                   [--volume 1.0] [--name Bot] [--duration SECONDS] [--voices DIR]\n" +
             "  Adds participants to an existing room (e.g. one you are in with the browser client) and keeps them there\n" +
-            "  until Ctrl+C or --duration, then removes them; the room is left alone. They send a tone each, or loop the\n" +
-            "  --audio files (any format GStreamer decodes; shared round-robin, each client starting at a different point).\n" +
-            "  --audio flite: synthesised speech instead of a file: each bot says its name (\"Bot 1\", \"Bot 2\", …; --name\n" +
-            "  changes \"Bot\"), and with --spatial where it stands; taking turns. --audio flite-together: all at once.\n" +
-            "  --volume scales what they send (default 1.0 for audio files, 0.1 for tones).\n" +
-            "  --spatial (spatial rooms): bots stand in a circle of --radius metres (default 5) round the centre, where the\n" +
-            "  browser client puts you: Bot 1 ahead (east), the rest spaced anticlockwise.";
+            "  until Ctrl+C or --duration, then removes them; the room is left alone. They send a tone each, or speak:\n" +
+            "  --audio voices: natural pre-rendered voices (scripts/loadtest-linux-x64/voices; --voices DIR elsewhere).\n" +
+            "  Each bot says its name (\"Bot, 1\", …; --name changes \"Bot\"), and with --spatial where it stands, taking\n" +
+            "  turns; voices-together: all at once. flite / flite-together: the same words synthesised by libflite\n" +
+            "  (Linux only, robotic). Or loop audio files (any format GStreamer decodes; shared round-robin).\n" +
+            "  --volume scales what they send (default 1.0 for audio, 0.1 for tones).\n" +
+            "  --spatial (spatial rooms): bots stand on the 8 compass points of rings round the centre, where the browser\n" +
+            "  client puts you facing east: bots 1-8 on the first ring (--radius, default 5 m), 9-16 10 m further out, ….";
 
         public static Options Parse(string[] args)
         {
@@ -458,6 +449,7 @@ public static class LoadTestProgram
             var spatial = false;
             var radius = 5.0;
             var warmup = TimeSpan.FromSeconds(10);
+            string? voices = null;
             for (var i = 0; i < args.Length; i++)
             {
                 string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -475,6 +467,7 @@ public static class LoadTestProgram
                     case "--spatial": spatial = true; break;
                     case "--radius": radius = double.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--warmup": warmup = TimeSpan.FromSeconds(double.Parse(Value(), CultureInfo.InvariantCulture)); break;
+                    case "--voices": voices = Value(); break;
                     case "--jitter-ms": jitter = uint.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--insecure": insecure = true; break;
                     case "--talkers": talkers = int.Parse(Value(), CultureInfo.InvariantCulture); break;
@@ -507,7 +500,7 @@ public static class LoadTestProgram
                 throw new ArgumentException("--volume must be between 0 and 10.");
             }
             return new Options(server, key, participants, rooms, duration, jitter, insecure, engines, talkers, room, audio, volume, name,
-                durationSet, spatial, radius, warmup);
+                durationSet, spatial, radius, warmup, voices);
         }
     }
 }

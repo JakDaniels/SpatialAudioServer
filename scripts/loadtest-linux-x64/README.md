@@ -76,8 +76,8 @@ There is no pass/fail, just a "receiving audio" line every 10 s.
 
 ```bash
 R=1806b6ef-...                              # room ID: shown under the room name once you join in the browser client
-./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio flite            # synthesised, taking turns
-./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio flite-together   # all at once
+./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio voices            # speaking, taking turns
+./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio voices-together   # all at once
 ./SpatialAudioServer.LoadTest --server $S --room $R --participants 3 --audio speech.wav
 ./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio a.ogg,b.wav --talkers 2 --volume 0.5
 ```
@@ -85,10 +85,13 @@ R=1806b6ef-...                              # room ID: shown under the room name
 - `--audio` takes any file GStreamer can decode (WAV, OGG/Opus/Vorbis, FLAC, MP3). It is decoded once at start-up
   and looped. Several files are handed out round-robin. Clients that share a file start at different points in it,
   so they don't speak in unison.
-- `--audio flite` needs no file. Each bot says its number, and with `--spatial` where it stands: "Bot 1. North, on
-  your left." The bots take turns, like a conversation; `flite-together` has them all speak at once. Speech comes
-  from libflite, the library behind GStreamer's flite plugin, in four rotating voices. Any number of bots works. The
-  library ships with `gstreamer1.0-plugins-bad` (package `libflite1`); check with `gst-inspect-1.0 flitetestsrc`.
+- `--audio voices` makes the bots speak in natural voices. Each bot says its name, and with `--spatial` where it
+  stands: "Bot, 2. North-east, ahead, to your left. 5 metres." They take turns, like a conversation;
+  `voices-together` has them all speak at once. The speech is pre-rendered clips in `voices/` next to the load tool
+  (8 voices, rotating, up to 32 bots), so nothing needs installing and it works on Linux and Windows. Credits and
+  licences are in `voices/CREDITS.md`. Re-render with `scripts/render-voices.py` (needs Piper) only to change them.
+- `--audio flite` (and `flite-together`) says the same words with libflite instead: robotic, Linux only (it comes
+  with `gstreamer1.0-plugins-bad`), but needs no voice files.
 - Without `--audio`, each client sends a tone (300 Hz, 350 Hz, …).
 - `--talkers K` keeps all but the first K silent: they are in the room, but don't speak.
 - `--volume` scales what they send. The default is 1.0 for files and 0.1 for tones.
@@ -99,20 +102,22 @@ R=1806b6ef-...                              # room ID: shown under the room name
 **Hearing spatial audio.**
 1. In the browser client, tick **Spatial** when you create the room, then join it. You stand at the centre
    (0, 0, 0), facing east.
-2. Add bots in a circle around you:
+2. Add bots around you:
 
    ```bash
-   ./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio flite --spatial
+   ./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio voices --spatial
    ```
 
-   Each bot says where it is: `Bot 1` is ahead of you, `Bot 2` on your left, `Bot 3` behind, and `Bot 4` on your
-   right. With 8 bots, the diagonals are filled in too. `--radius M`
-   changes the circle's size (default 5 m). Within 10 m everyone is at full volume; farther out, the level falls.
+   Bots stand on the 8 compass points of rings round you, and each says where it is. With 4 bots: `Bot 1` ahead
+   of you, `Bot 2` on your left, `Bot 3` behind, `Bot 4` on your right. Bots 1–8 fill the first ring, 5 m away
+   (`--radius M` changes it), bots 9–16 a second ring 10 m further out (15 m), then 25 m and 35 m. A ring with fewer
+   than 8 bots spreads them evenly. Within 10 m everyone is at full volume; farther out the level falls, so the outer
+   rings test distance as well as direction.
 3. Turn with the **Facing** slider and the voices move round you. The compass direction each bot says stays true;
    "on your left" assumes you face east. Stereo can't tell front from back, so bots ahead and behind both sound
    centred.
 
-Invite-link guests have no position, so they hear everyone centred at full volume.
+Invite-link guests in spatial rooms are placed at the centre too, and can turn.
 
 **Reading the output.** "server CPU" is measured on the server over the measuring window. A run passes when:
 
