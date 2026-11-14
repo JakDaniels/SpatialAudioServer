@@ -28,12 +28,12 @@ public static class BotLayout
     private static readonly string[] Compass = ["East", "North-east", "North", "North-west", "West", "South-west", "South", "South-east"];
 
     private static readonly string[] Relative =
-        ["ahead of you", "ahead, to your left", "on your left", "behind, to your left", "behind you", "behind, to your right",
-         "on your right", "ahead, to your right"];
+        ["in front of you", "in front, to your left", "on your left", "behind, to your left", "behind you",
+         "behind, to your right", "on your right", "in front, to your right"];
 
     private static readonly string[] Short =
-        ["ahead (east)", "ahead-left (north-east)", "left (north)", "behind-left (north-west)", "behind (west)",
-         "behind-right (south-west)", "right (south)", "ahead-right (south-east)"];
+        ["in front (east)", "front-left (north-east)", "left (north)", "behind-left (north-west)", "behind (west)",
+         "behind-right (south-west)", "right (south)", "front-right (south-east)"];
 
     public static BotPlace Place(int index, int count, double radius)
     {

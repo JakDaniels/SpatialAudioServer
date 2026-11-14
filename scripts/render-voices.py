@@ -41,14 +41,14 @@ NAMES = 32  # a room holds at most 32 participants
 # Octants anticlockwise from east, as the load tool numbers them (Program.Spoken): compass, then relative to a
 # listener facing east (the browser client's starting direction).
 DIRECTIONS = [
-    ("east", "East, ahead of you."),
-    ("north-east", "North-east, ahead, to your left."),
+    ("east", "East, in front of you."),
+    ("north-east", "North-east, in front, to your left."),
     ("north", "North, on your left."),
     ("north-west", "North-west, behind, to your left."),
     ("west", "West, behind you."),
     ("south-west", "South-west, behind, to your right."),
     ("south", "South, on your right."),
-    ("south-east", "South-east, ahead, to your right."),
+    ("south-east", "South-east, in front, to your right."),
 ]
 
 
@@ -93,11 +93,14 @@ def main() -> None:
     parser.add_argument("--models", required=True, type=pathlib.Path, help="directory with the Piper .onnx voices")
     parser.add_argument("--out", type=pathlib.Path,
                         default=pathlib.Path(__file__).resolve().parent / "loadtest-linux-x64" / "voices")
+    parser.add_argument("--only", choices=["names", "directions", "distances"],
+                        help="re-render just these clips in the existing set (keeps the rest unchanged in git)")
     args = parser.parse_args()
 
-    if args.out.exists():
-        shutil.rmtree(args.out)
-    args.out.mkdir(parents=True)
+    if args.only is None:
+        if args.out.exists():
+            shutil.rmtree(args.out)
+        args.out.mkdir(parents=True)
     loaded = {}
     with tempfile.TemporaryDirectory() as scratch_dir:
         scratch = pathlib.Path(scratch_dir)
@@ -105,14 +108,17 @@ def main() -> None:
             if model not in loaded:
                 loaded[model] = PiperVoice.load(args.models / f"{model}.onnx")
             folder = args.out / voice_id
-            folder.mkdir()
-            for number in range(1, NAMES + 1):
-                render(loaded[model], speaker, name_text(number), folder / f"name-{number:02}.ogg", scratch)
-            for key, text in DIRECTIONS:
-                render(loaded[model], speaker, text, folder / f"dir-{key}.ogg", scratch)
-            for metres in DISTANCES:
-                render(loaded[model], speaker, f"{metres} metres.", folder / f"dist-{metres:02}.ogg", scratch)
-            print(f"{voice_id}: {NAMES} names, {len(DIRECTIONS)} directions, {len(DISTANCES)} distances")
+            folder.mkdir(exist_ok=True)
+            if args.only in (None, "names"):
+                for number in range(1, NAMES + 1):
+                    render(loaded[model], speaker, name_text(number), folder / f"name-{number:02}.ogg", scratch)
+            if args.only in (None, "directions"):
+                for key, text in DIRECTIONS:
+                    render(loaded[model], speaker, text, folder / f"dir-{key}.ogg", scratch)
+            if args.only in (None, "distances"):
+                for metres in DISTANCES:
+                    render(loaded[model], speaker, f"{metres} metres.", folder / f"dist-{metres:02}.ogg", scratch)
+            print(f"{voice_id}: {args.only or 'all clips'} rendered")
 
     manifest = {
         "format": 1,

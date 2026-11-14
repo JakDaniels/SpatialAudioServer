@@ -31,7 +31,7 @@ public sealed class BotLayoutTests
     [Fact]
     public void Each_bot_describes_its_compass_point_relative_to_a_listener_facing_east()
     {
-        Assert.Equal("East, ahead of you", BotLayout.Spoken(0));
+        Assert.Equal("East, in front of you", BotLayout.Spoken(0));
         Assert.Equal("North-west, behind, to your left", BotLayout.Spoken(3));
         Assert.Equal("South, on your right", BotLayout.Spoken(6));
     }
