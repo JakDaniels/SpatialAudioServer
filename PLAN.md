@@ -205,7 +205,8 @@ src/SpatialAudioServer.LoadTest/ load tool: GStreamer fake clients (FakeClient, 
 spikes/WebRtcEcho/               Phase 0 spike (not part of the solution)
 scripts/                         setup-ubuntu.sh, build-loadtest.sh, render-voices.py,
                                  loadtest-linux-x64/ (committed self-contained load tool + voices)
-docs/                            running.md (Linux/Windows run docs), design notes; reference/ (git-ignored sources)
+docs/                            running.md (Linux/Windows run docs), benchmarks.md (load-test results), design notes;
+                                 reference/ (git-ignored sources)
 ```
 Domain/API code talks to the media layer via an interface (`IRoomMedia`) so the API and storage can be
 tested without GStreamer.
@@ -253,20 +254,9 @@ tested without GStreamer.
    **Stage C (2026-11-12): load tool + first numbers.** `dotnet run --project src/SpatialAudioServer.LoadTest --
    --api-key KEY [--server URL] [--participants N] [--rooms R] [--duration S] [--insecure]`; tones 300 Hz + 50 Hz·i,
    volume scaled to avoid clipping; reports server CPU/memory/threads from `/api/status` (now has a `process`
-   block). One room, server and load tool on the same N6005 (4 cores), so the tool's own CPU competes:
-
-   | participants | chains | server CPU | server RSS | server threads | heard others (min / mean) | self |
-   |---|---|---|---|---|---|---|
-   | 4 | 12 | 25% of 1 core (6% of 4) | 143 MB | 85 | 100% / 100% | 0% |
-   | 8 | 56 | 63% of 1 core (16% of 4) | 164 MB | 174 | 100% / 100% | 0% |
-   | 16 | 240 | 214% of 1 core (53% of 4) | 207 MB | 444 | 100% / 90% | 1.2%* |
-
-   \*16-person run: the tool used another 107% of a core, so the box was ~80% busy; the dropouts and the 1.2% "self"
-   (tone detection at 50 Hz spacing, not a routing fault: no self chain exists) are expected to vanish with the
-   tool on another machine — to confirm there.
-   **Finding: the per-pair chain topology does not reach the 32-person target on this CPU.** Cost is ~0.9–1% of a
-   core per chain and chains grow as N(N-1): 32 people = 992 chains ≈ 9 cores, against the gate of < 60% of 4
-   cores. Threads also grow as N² (each chain's `queue` is a streaming thread: ~1,500 for one 32-person room).
+   block). Results: [docs/benchmarks.md](docs/benchmarks.md).
+   **Finding: the per-pair chain topology does not reach the 32-person target.** Cost is ~1% of a core per chain
+   and chains grow as N(N−1) (32 people = 992 chains ≈ 9 cores of the N6005), and threads grow as N².
    **Stage D (2026-11-12): pluggable mix engines**, so alternative topologies can be compared under the same tests
    and load runs (user's decision, instead of picking one optimisation up front).
    - Boundary is **RTP in → RTP out**: `RoomPipeline` keeps webrtcbin, signalling, ICE, connection state and the
@@ -285,17 +275,8 @@ tested without GStreamer.
    - **Load tool**: `--engine a,b,…` runs the same load against each engine in turn and prints a comparison table.
    - Engines so far: `pairchains` (stage A–C design) and `pairchains-lite` (no per-chain `queue`/`audioamplify`;
      gain is the audiomixer pad's `volume`; threads ∝ N instead of N²).
-   - First comparison (one room, server + tool on the N6005, `--engine pairchains,pairchains-lite`, 15 s):
-
-     | participants | engine | server CPU | threads | heard min |
-     |---|---|---|---|---|
-     | 8 | pairchains | 54% of 1 core | 173 | 100% |
-     | 8 | pairchains-lite | 57% of 1 core | 117 | 100% |
-     | 16 | pairchains | 204% of 1 core (51% of 4) | 445 | 100% |
-     | 16 | pairchains-lite | 121% of 1 core (30% of 4) | 204 | 100% |
-
-     Dropping the per-chain queue threads saves ~40% at 16 (context switching grows with threads), but cost is
-     still per pair: extrapolating lite to 32 people (992 pairs) gives ~5 cores, still over the gate.
+   - First comparison: dropping the per-chain queue threads (`pairchains-lite`) saves ~40% at 16 people, but the
+     cost is still per pair ([docs/benchmarks.md](docs/benchmarks.md)).
    - **`matrix` engine (user's design, 2026-11-12):** one `audiointerleave` per room → `tee` → per listener
      `queue` → `audiomixmatrix` (2 × slots gain matrix, own slot off) → Opus encoder. No per-pair elements; per-pair
      gain/pan are matrix coefficients. Constraints found in the 1.28 sources (`docs/reference/gstreamer`, git-ignored):
@@ -308,28 +289,10 @@ tested without GStreamer.
      - The `matrix` setter frees/rebuilds tables without a lock → applied from a buffer probe on the matrix sink
        pad (streaming thread). The sparse/dense mixer is chosen at caps time by density (≥ 50% non-zero = dense), and
        crossing that line later would silence the sparse one → "off" is 1e-9 (−180 dB), so it is always dense.
-     Same machine, 16 people, 15–20 s: matrix 90–123% of one core / ~190 threads; pairchains-lite 114–127% / ~204;
-     pairchains ~205–212% / 445. 24 people on matrix: 186% (with the tool using another 173%, so the box was ~90%
-     busy and this is inflated). The remaining cost looks per-participant (decode, encode, SRTP, jitterbuffer), not
-     per-pair. One cold-server 16-person matrix run failed the 2% self/leak check (later runs: 0.0–0.2%); watch for
-     it in the second-machine benchmark.
-   - **Second-machine benchmark (2026-11-12)**: load tool on Ubuntu 22.04 (GStreamer 1.20.3 clients work fine),
-     server on DevTest26 (a Xen guest, 4 vCPUs of an N6005). 20 s windows:
-
-     | people | engine | server CPU | threads | result |
-     |---|---|---|---|---|
-     | 16 | matrix | 85% of 1 core (21% of 4) | 192 | PASS |
-     | 16 | pairchains-lite | 116% (29%) | 207 | PASS |
-     | 16 | pairchains | 176% (44%) | 446 | PASS |
-     | 32 | matrix | **310% (78% of 4)** | 352 | PASS (self max 0.7%) |
-     | 32 | pairchains-lite | 359% (90%) | 383 | FAIL: nothing heard (overloaded) |
-
-     Matrix passes 32 but is over the 60%-of-4-cores gate, and per-person cost rose from 5.3% of a core at 16 to
-     9.7% at 32. The matrix arithmetic is negligible, so the growth is probably contention (VM, ~80% busy, cache)
-     rather than a per-pair term. Per-thread CPU at 16 (matrix, from /proc thread names): listener threads
-     (matrix + Opus encode + RTP/SRTP send) 56–59%, decode-side queues 26%, nicesrc (receive + SRTP) 10%,
-     interleave 3.5%. `Media:OpusComplexity` (new, default 10) at 5 cut the listener threads to 41% and the total
-     by ~17%.
+     The remaining cost is per participant (decode, encode, SRTP, jitter buffer), not per pair.
+   - **Second-machine benchmark (2026-11-12)**, server on DevTest26 (4 vCPUs), tool on the 22.04 machine: matrix
+     passes 32 people but at 78% of 4 cores, over the gate; listener threads (matrix + Opus encode + send) are
+     the largest share, and Opus complexity 5 instead of 10 saves ~17% ([docs/benchmarks.md](docs/benchmarks.md)).
      The first cross-machine run found a load-tool bug (signalling JSON enums), hidden on one machine because ICE
      connected from one-sided candidates; tests now assert both directions of trickle ICE.
    - **Decided 2026-11-12:** `Media:OpusComplexity` default 5; new `Media:OpusFrameMs` (10/20/40/60, checked at
@@ -351,17 +314,8 @@ tested without GStreamer.
      - The interleave and safe matrix updates moved to `RoomInterleave`/`MatrixMixer`, shared by both matrix engines.
      - Load tool `--talkers K`: only K clients per room send their tone; the rest send silence. With matrix-shared use
        K ≤ `Media:ActiveSpeakers` (everyone talking at once means only the top talkers are mixed, by design).
-     First numbers (server + tool on DevTest26, 3 talkers, new defaults): 8 people matrix 50% / matrix-shared 32% of
-     one core; 16 people 75% / 64%. What remains at 16 is per participant (decode, payload/SRTP/send).
-   - **32-person benchmark from the 22.04 machine (2026-11-12), 3 talkers, Opus complexity 5 / 40 ms:**
-
-     | engine | server CPU | memory | threads | heard min | self max |
-     |---|---|---|---|---|---|
-     | matrix-shared | **196% of 1 core = 49% of 4** | 194 MB | 356 | 100% | 0.1% |
-     | matrix | 257% = 64% of 4 | 219 MB | 353 | 100% | 0.3% |
-
-     **matrix-shared meets the Phase 2 gate (< 60% of 4 cores at 32 participants).** (The tool's "992 pairs" label
-     counts n(n−1) regardless of `--talkers`; with 3 talkers 93 pairs are actually mixed.)
+   - **32-person benchmark (2026-11-12), 3 talkers, complexity 5 / 40 ms:** matrix-shared **49% of 4 cores**
+     (meets the Phase 2 gate), matrix 64% ([docs/benchmarks.md](docs/benchmarks.md)).
    **Decided 2026-11-12:** default engine `matrix-shared`; `pairchains-lite` removed. Phase 2 done.
 3. **Signalling + web client.** Test web client, STUN/TURN config,
    reconnect / ICE-failure handling (drop participant after timeout, event logged).
@@ -475,54 +429,25 @@ tested without GStreamer.
    - Tests: policy/pan law/quantiser units, the flag through the API and a restart, `SpatialSuite` per engine
      (hard left/right by facing, distance ratio, out of range, turning round, moving in range, unplaced = centred),
      and `SpatialClusterTests` (shared and split clusters, regrouping when a listener turns).
-   - **Finding: clustering saves little in a scattered crowd.** Offline simulation of 32 people, 3 talkers, random
-     positions and facing (29 listeners): clusters ≈ 29 at the default grid, 26 at 6 dB / 2 pan steps, 21 even at
-     10 dB / left-centre-right. Facing the same way helps somewhat (13–28). So a spatial room costs about one encoder
-     per listener (the `matrix` engine's cost) however it is clustered. Local 32-person run: clusters 29, encoders 32.
-     Options to decide: accept it (spatial rooms cost ~matrix, measure on the 22.04 box), cheaper encoding for
-     spatial rooms, or client-side spatialisation for web clients (rejected below).
-   - **Benchmark (22.04 client, 2026-11-13), 32 people, 3 talkers, spatial:** matrix-shared 74% of 4 cores (29
-     clusters, 32 encoders), matrix 65%; both over the 60% gate (non-spatial: matrix-shared 49%, matrix 64%).
-     Locally (16 people) part of the gap was start-up work counted in the window (talkers found, personal mixes and
-     clusters built, .NET JIT), so the load tool now warms up (`--warmup`, 10 s) before measuring; a steady ~10% gap
-     remains (85% vs 75% of a core), mostly each listener's link queue thread. Removing the queue would let one
-     stalled listener freeze its cluster (the blocking push behind the teardown deadlock), so instead
+   - **Finding: clustering saves little in a scattered crowd** (offline simulation of 32 people: ~29 clusters for
+     29 listeners at the default grid, 21 even at a coarse one). So a spatial room costs about one encoder per
+     listener (the `matrix` engine's cost) however it is clustered ([docs/benchmarks.md](docs/benchmarks.md)).
+   - **Spatial benchmark (2026-11-13):** matrix-shared costs ~10% more than matrix in a spatial room (each
+     listener's link queue thread; removing it would let one stalled listener freeze its cluster), so
      **`Media:SpatialEngine` (default `matrix`)** is the engine for spatial rooms created without one (status:
-     `defaultSpatialEngine`; the client switches the engine menu when Spatial is ticked). The load tool's leak check
-     now ignores tones that are exact multiples of a talker's (codec harmonics: 600 Hz = 2 × 300 Hz gave a false
-     FAIL).
-   - **Encoder experiments (22.04 client, warm-up on, 32 people, 3 talkers, spatial, matrix):** defaults
-     (complexity 5, 40 ms) **58%** of 4 cores (meets the gate; the earlier 65% included start-up work); complexity 2
-     **54%**, clean; complexity 2 + 60 ms frames **46%** but FAIL: a silent client heard 500 Hz (2 × 400 − 300, an
-     intermodulation product of the encoder, ~−24 dB) in 45% of frames, absent at 40 ms, and 60 ms adds latency.
-     So: keep 40 ms; complexity 2 for spatial rooms is a candidate once a listening test with speech confirms it
-     (would be a separate `Media:SpatialOpusComplexity`, leaving non-spatial rooms at 5).
+     `defaultSpatialEngine`; the client switches the engine menu when Spatial is ticked). The load tool now warms
+     up (`--warmup`, 10 s) before measuring.
+   - **Encoder experiments:** complexity 2 saves a little and stays clean; 60 ms frames save more but add
+     latency and an audible intermodulation product. Keep 40 ms; complexity 2 for spatial rooms stays a
+     candidate (`Media:SpatialOpusComplexity`) ([docs/benchmarks.md](docs/benchmarks.md)).
    - **Decided 2026-11-13: engine tuning is parked.** Complexity 2 with the speaking bots sounds worse but stays
      intelligible; not adopted. The test VM (4 vCPUs on shared low-spec hardware) limits what benchmarks can say, so
      defaults stay (complexity 5, 40 ms; spatial rooms on `matrix`) while the other phases are developed. Revisit on
      production-like hardware: `Media:SpatialOpusComplexity`, grouping listeners by position. Engines stay as they
      are: `matrix-shared` for non-spatial rooms, `matrix` for spatial ones.
-   - **Windows benchmark (2026-11-14):** server on Windows, Xeon W-10855M (6 cores / 12 threads, 2.8–5.1 GHz,
-     32 GB), load tool on the 22.04 machine, 3 talkers, CPU as % of one core:
-
-     | load | matrix-shared | matrix | pairchains |
-     |---|---|---|---|
-     | 32 people | **56%** (303 MB) | 88% | 377% (1387 threads) |
-     | 32 people, spatial | 113% (29 clusters) | 98% | 515% |
-     | 2 × 32 | 109% | | |
-     | 4 × 32 = 128 | 224% (452 MB) | | |
-     | 6 × 32 = 192 | 337% (563 MB) | | |
-     | 4 × 32 spatial | | 373% (586 MB) | |
-     | 32 people, 8 talkers | 51% (4 mixed, by design) | 88% | 528% |
-
-     About 3.5× the 4-vCPU test VM per core (matrix-shared 56% vs 196%), and it scales linearly with rooms (~56% of a
-     core per 32-person room), so 16 × 32 would need ~9 cores' worth: more than this machine's 6 cores. The two
-     spatial FAILs were 500 Hz = 2 × 400 − 300 again (the encoder's intermodulation, at ~volume/12 just over the
-     spatial threshold, not a leak); the leak check now ignores 2a − b products of talkers as it does harmonics.
-     Rerun: all three engines PASS spatially (matrix 86%, matrix-shared 110%). 8 × 32 from one load-tool machine
-     hit the per-address signalling limit (429): connected fake clients polled `/ice` every 500 ms to notice removal,
-     ~450 requests/s from one address; they now poll every 2 s. With 8 talkers matrix-shared mixes only the 4 loudest
-     (`Media:ActiveSpeakers`), so the tool's "hears every talker" check fails by design; its CPU does not grow.
+   - **Windows run (2026-11-14):** the server runs on Windows (Xeon W-10855M, 6 cores). matrix-shared costs 56% of a
+     core per full 32-person room, linear up to 6 rooms; 8 × 32 passes. Working figure for that machine: ~8
+     non-spatial or ~4 spatial full rooms; 16 × 32 needs a bigger machine ([docs/benchmarks.md](docs/benchmarks.md)).
    - **Decided: no client-side spatialisation.** The server stays an MCU (one mixed stream per listener); an SFU-style
      design (forwarding talkers for the browser to spatialise) would break compatibility with SL/OpenSim viewers.
    - Start-up switch `--delete-existing-rooms` (testing): deletes every stored room before any pipeline starts
