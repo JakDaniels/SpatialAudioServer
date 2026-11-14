@@ -94,6 +94,31 @@ public static class LoadTestProgram
     }
 
     /// <summary>
+    /// The --around point: "X,Y,Z", or the position of the room's participant with that display name (e.g. an avatar
+    /// in OpenSim, which uses global coordinates). Null (after an error message) when there is no such participant.
+    /// </summary>
+    private static async Task<Vec3?> Centre(HttpClient http, Guid roomId, string around)
+    {
+        var parts = around.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length == 3 && parts.All(p => double.TryParse(p, NumberStyles.Float, CultureInfo.InvariantCulture, out _)))
+        {
+            var v = parts.Select(p => double.Parse(p, CultureInfo.InvariantCulture)).ToArray();
+            return new Vec3(v[0], v[1], v[2]);
+        }
+        var list = await http.GetFromJsonAsync<JsonElement>($"api/rooms/{roomId}/participants", Json);
+        foreach (var p in list.EnumerateArray())
+        {
+            if (string.Equals(p.GetProperty("displayName").GetString(), around, StringComparison.OrdinalIgnoreCase)
+                && p.TryGetProperty("position", out var pos) && pos.ValueKind == JsonValueKind.Object)
+            {
+                return new Vec3(pos.GetProperty("x").GetDouble(), pos.GetProperty("y").GetDouble(), pos.GetProperty("z").GetDouble());
+            }
+        }
+        Console.Error.WriteLine($"--around: no participant named \"{around}\" with a position in room {roomId}.");
+        return null;
+    }
+
+    /// <summary>
     /// Room mode: adds fake speakers to an existing room (for listening tests in a browser) and keeps them there until
     /// Ctrl+C or --duration. Only its own participants are removed on exit; the room stays.
     /// </summary>
@@ -111,6 +136,16 @@ public static class LoadTestProgram
         var n = options.Participants;
         // --spatial: rings of 8 compass points round the centre (where the browser client stands); see BotLayout.
         var places = Enumerable.Range(0, n).Select(i => options.Spatial ? BotLayout.Place(i, n, options.Radius) : null).ToList();
+        var centre = new Vec3(0, 0, 0);
+        if (options.Around is { } around)
+        {
+            if (await Centre(http, roomId, around) is not { } found)
+            {
+                return 2;
+            }
+            centre = found;
+            Console.WriteLine($"Bots stand round {around} at {centre.X:0.#}, {centre.Y:0.#}, {centre.Z:0.#}");
+        }
         foreach (var file in options.AudioFiles)
         {
             var keyword = file.ToLowerInvariant();
@@ -167,7 +202,7 @@ public static class LoadTestProgram
             for (var i = 0; i < n && !stop.IsCancellationRequested; i++)
             {
                 var name = BotName(options, i);
-                var position = places[i]?.Position;
+                var position = places[i]?.Position is { } p ? new Vec3(centre.X + p.X, centre.Y + p.Y, centre.Z + p.Z) : null;
                 var join = await Post<JoinResponse>(http, $"api/rooms/{roomId}/participants", new { displayName = name, position });
                 // Each client of a shared clip starts at a different point so they don't speak in unison.
                 var clip = clips.Count > 0 ? clips[i % clips.Count] : null;
@@ -423,7 +458,7 @@ public static class LoadTestProgram
     private sealed record Options(
         System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure,
         IReadOnlyList<string> Engines, int? Talkers, Guid? Room, IReadOnlyList<string> AudioFiles, double? Volume, string Name,
-        bool DurationSet, bool Spatial, double Radius, TimeSpan Warmup, string? VoicesDirectory)
+        bool DurationSet, bool Spatial, double Radius, TimeSpan Warmup, string? VoicesDirectory, string? Around)
     {
         public const string Usage =
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
@@ -436,7 +471,7 @@ public static class LoadTestProgram
             "  --spatial: spatial rooms, everyone placed at random in a 30 m square facing a random way.\n" +
             "\n" +
             "Room mode (listening tests): SpatialAudioServer.LoadTest --api-key KEY --room ROOM_ID [--participants 4]\n" +
-            "                                   [--audio voices|file.wav[,...]] [--spatial [--radius 5]] [--talkers K]\n" +
+            "                                   [--audio voices|file.wav[,...]] [--spatial [--radius 5] [--around X,Y,Z|NAME]] [--talkers K]\n" +
             "                                   [--volume 1.0] [--name Bot] [--duration SECONDS] [--voices DIR]\n" +
             "  Adds participants to an existing room (e.g. one you are in with the browser client) and keeps them there\n" +
             "  until Ctrl+C or --duration, then removes them; the room is left alone. They send a tone each, or speak:\n" +
@@ -446,7 +481,9 @@ public static class LoadTestProgram
             "  (Linux only, robotic). Or loop audio files (any format GStreamer decodes; shared round-robin).\n" +
             "  --volume scales what they send (default 1.0 for audio, 0.1 for tones).\n" +
             "  --spatial (spatial rooms): bots stand on the 8 compass points of rings round the centre, where the browser\n" +
-            "  client puts you facing east: bots 1-8 on the first ring (--radius, default 5 m), 9-16 10 m further out, ….";
+            "  client puts you facing east: bots 1-8 on the first ring (--radius, default 5 m), 9-16 10 m further out, ….\n" +
+            "  --around (implies --spatial): the rings' centre, a point or the participant with that display name (e.g. an\n" +
+            "  OpenSim avatar: they use global coordinates). \"In front\" etc. in the clips then assume you face east.";
 
         public static Options Parse(string[] args)
         {
@@ -467,6 +504,7 @@ public static class LoadTestProgram
             var radius = 5.0;
             var warmup = TimeSpan.FromSeconds(10);
             string? voices = null;
+            string? around = null;
             for (var i = 0; i < args.Length; i++)
             {
                 string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -482,6 +520,7 @@ public static class LoadTestProgram
                     case "--volume": volume = double.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--name": name = Value(); break;
                     case "--spatial": spatial = true; break;
+                    case "--around": around = Value(); spatial = true; break;
                     case "--radius": radius = double.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--warmup": warmup = TimeSpan.FromSeconds(double.Parse(Value(), CultureInfo.InvariantCulture)); break;
                     case "--voices": voices = Value(); break;
@@ -517,7 +556,7 @@ public static class LoadTestProgram
                 throw new ArgumentException("--volume must be between 0 and 10.");
             }
             return new Options(server, key, participants, rooms, duration, jitter, insecure, engines, talkers, room, audio, volume, name,
-                durationSet, spatial, radius, warmup, voices);
+                durationSet, spatial, radius, warmup, voices, around);
         }
     }
 }
