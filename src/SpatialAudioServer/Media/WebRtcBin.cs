@@ -236,6 +236,9 @@ public sealed partial class WebRtcBin : IDisposable
 
     public void ApplyRemoteAnswer(string answerSdp) => SetDescription("set-remote-description", WebRTCSDPType.Answer, answerSdp);
 
+    /// <summary>More than any real client gathers (a few per interface and protocol); the rest are refused.</summary>
+    public const int MaxRemoteCandidates = 200;
+
     public void AddRemoteCandidate(IceCandidate candidate)
     {
         // An empty candidate is the browser's end-of-candidates marker; webrtcbin needs nothing for it.
@@ -243,6 +246,11 @@ public sealed partial class WebRtcBin : IDisposable
         {
             lock (_remoteCandidates)
             {
+                if (_remoteCandidates.Count >= MaxRemoteCandidates)
+                {
+                    throw new Rooms.LimitExceededException(
+                        $"At most {MaxRemoteCandidates} ICE candidates per connection (send a new offer to start again).");
+                }
                 _remoteCandidates.Add(candidate.Candidate);
             }
             Element.EmitSignal("add-ice-candidate", candidate.SdpMLineIndex, candidate.Candidate);

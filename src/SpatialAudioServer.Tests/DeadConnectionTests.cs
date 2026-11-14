@@ -91,4 +91,36 @@ public sealed class DeadConnectionRuleTests : IDisposable
         Assert.DoesNotContain(failed, left);
         Assert.DoesNotContain(disconnected, left);
     }
+
+    [Fact]
+    public async Task A_participant_whose_join_token_expired_unused_is_removed()
+    {
+        using var server = new ServerFactory(_dir.File("server.db"), new Dictionary<string, string?>
+        {
+            ["Media:DeadConnectionTimeout"] = "0",
+            ["Auth:JoinTokenLifetime"] = "00:00:01",
+        });
+        var api = server.CreateAuthedClient();
+        var signal = server.CreateClient();
+        var rooms = server.Services.GetRequiredService<RoomManager>();
+        var room = await (await api.PostAsJsonAsync("/api/rooms", new { name = "sweep" })).Read<RoomSnapshot>();
+        var neverCame = await (await api.PostAsJsonAsync($"/api/rooms/{room.Id}/participants", new { displayName = "away" })).Read<JoinResponse>();
+        var offered = await (await api.PostAsJsonAsync($"/api/rooms/{room.Id}/participants", new { displayName = "here" })).Read<JoinResponse>();
+        // The offer redeems the token (media is off here, so the answer itself fails afterwards).
+        using (var offer = new HttpRequestMessage(HttpMethod.Post, $"/signal/{offered.ParticipantId}/offer")
+        {
+            Content = JsonContent.Create(new { sdp = "v=0" }),
+        })
+        {
+            offer.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", offered.JoinToken);
+            await signal.SendAsync(offer);
+        }
+
+        await Task.Delay(TimeSpan.FromSeconds(1.2));
+        rooms.DropExpiredJoins(); // the background sweep (every 5 s) may also get there first
+
+        Assert.Equal(offered.ParticipantId, Assert.Single(rooms.ListParticipants(room.Id)).Id);
+        var events = server.Services.GetRequiredService<SpatialAudioServer.Storage.ActivityLog>().RecentEvents(10, room.Id, null);
+        Assert.Contains(events, e => e.Kind == "participant.left" && e.ParticipantId == neverCame.ParticipantId && e.Detail == "join-expired");
+    }
 }

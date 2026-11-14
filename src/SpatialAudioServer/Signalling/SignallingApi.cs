@@ -40,6 +40,14 @@ public static class SignallingApi
 
     private static readonly TimeSpan GatheringTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>Browser offers are 2–10 KB; a viewer's (audio + data channel) about the same.</summary>
+    public const int MaxSdpLength = 32 * 1024;
+
+    public const int MaxCandidatesPerRequest = 50;
+
+    /// <summary>An ICE candidate line is ~100–250 characters.</summary>
+    public const int MaxCandidateLength = 1024;
+
     private static async Task<string> WithAllCandidatesAsync(
         IRoomMedia media, Guid roomId, Guid participantId, string answer, CancellationToken cancel)
     {
@@ -86,6 +94,10 @@ public static class SignallingApi
             {
                 throw new ArgumentException("sdp is required.");
             }
+            if (body.Sdp.Length > MaxSdpLength)
+            {
+                throw new ArgumentException($"sdp must be at most {MaxSdpLength} characters.");
+            }
             if (body.DisplayName is not null)
             {
                 // Checked before the offer uses up the one-time join token, so a refused name can be retried.
@@ -103,6 +115,14 @@ public static class SignallingApi
         signal.MapPost("/ice", (Guid participantId, CandidatesRequest body, HttpContext http, SignalSessions sessions, IRoomMedia media) =>
         {
             var roomId = sessions.Authorize(participantId, Bearer(http));
+            if (body.Candidates is { Count: > MaxCandidatesPerRequest })
+            {
+                throw new ArgumentException($"At most {MaxCandidatesPerRequest} candidates per request.");
+            }
+            if (body.Candidates?.Any(c => c.Candidate?.Length > MaxCandidateLength) == true)
+            {
+                throw new ArgumentException($"A candidate must be at most {MaxCandidateLength} characters.");
+            }
             var candidates = (body.Candidates ?? [])
                 .Where(c => !string.IsNullOrWhiteSpace(c.Candidate))
                 .Select(c => new IceCandidate(c.SdpMLineIndex, c.Candidate!))
@@ -112,15 +132,25 @@ public static class SignallingApi
         });
 
         // Long-poll for the server's candidates from index `since`; returns early when there are new ones.
+        // Ends at once (503) when the server starts shutting down, so open polls do not hold up the stop.
         signal.MapGet("/ice", async (Guid participantId, int? since, int? waitMs, HttpContext http,
-            SignalSessions sessions, IRoomMedia media, RoomManager rooms) =>
+            SignalSessions sessions, IRoomMedia media, RoomManager rooms, IHostApplicationLifetime lifetime) =>
         {
             var roomId = sessions.Authorize(participantId, Bearer(http));
             var wait = waitMs is { } ms ? TimeSpan.FromMilliseconds(Math.Clamp(ms, 0, (int)MaxWait.TotalMilliseconds)) : DefaultWait;
-            var batch = await media.WaitForLocalCandidatesAsync(roomId, participantId, since ?? 0, wait, http.RequestAborted);
+            using var cancel = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted, lifetime.ApplicationStopping);
+            CandidateBatch batch;
+            try
+            {
+                batch = await media.WaitForLocalCandidatesAsync(roomId, participantId, Math.Max(0, since ?? 0), wait, cancel.Token);
+            }
+            catch (OperationCanceledException) when (lifetime.ApplicationStopping.IsCancellationRequested)
+            {
+                return Results.Problem("The server is shutting down.", statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
             var state = rooms.GetParticipant(roomId, participantId).State;
-            return new CandidatesResponse(
-                batch.Candidates.Select(c => new CandidateDto(c.Candidate, c.SdpMLineIndex)).ToList(), batch.Next, batch.Complete, state);
+            return Results.Ok(new CandidatesResponse(
+                batch.Candidates.Select(c => new CandidateDto(c.Candidate, c.SdpMLineIndex)).ToList(), batch.Next, batch.Complete, state));
         });
 
         signal.MapDelete("/", (Guid participantId, HttpContext http, SignalSessions sessions, RoomManager rooms) =>

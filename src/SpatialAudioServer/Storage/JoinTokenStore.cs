@@ -50,6 +50,31 @@ public sealed class JoinTokenStore(Database database, TimeProvider time)
         return reader.Read() ? new JoinTokenClaim(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1))) : null;
     }
 
+    /// <summary>
+    /// Deletes every token that can no longer be redeemed (used, or expired) and returns whom the expired, never-used
+    /// ones were issued to: participants whose client never connected.
+    /// </summary>
+    public IReadOnlyList<JoinTokenClaim> PurgeDead()
+    {
+        using var connection = database.Open();
+        var expired = new List<JoinTokenClaim>();
+        using (var command = connection.Command(
+            "DELETE FROM join_tokens WHERE used_at IS NULL AND expires_at <= $now RETURNING participant_id, room_id",
+            ("$now", ToDb(time.GetUtcNow()))))
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                expired.Add(new JoinTokenClaim(Guid.Parse(reader.GetString(0)), Guid.Parse(reader.GetString(1))));
+            }
+        }
+        using (var command = connection.Command("DELETE FROM join_tokens WHERE used_at IS NOT NULL"))
+        {
+            command.ExecuteNonQuery();
+        }
+        return expired;
+    }
+
     public void DeleteForParticipant(Guid participantId)
     {
         using var connection = database.Open();

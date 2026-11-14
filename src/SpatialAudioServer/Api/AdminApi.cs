@@ -37,7 +37,7 @@ public static class AdminApi
             rooms.GetRoom(roomId);
             return await media.PipelineDotAsync(roomId) is { } dot
                 ? Results.File(System.Text.Encoding.UTF8.GetBytes(dot), "text/vnd.graphviz", $"room-{roomId.ToString()[..8]}.dot")
-                : MediaDisabled();
+                : NoPipeline();
         });
 
         // Rendered with Graphviz on the server when it is installed (501 otherwise: use graph.dot).
@@ -46,7 +46,7 @@ public static class AdminApi
             rooms.GetRoom(roomId);
             if (await media.PipelineDotAsync(roomId) is not { } dot)
             {
-                return MediaDisabled();
+                return NoPipeline();
             }
             var svg = await Graphviz.RenderSvgAsync(dot, cancel);
             return svg is null
@@ -55,6 +55,10 @@ public static class AdminApi
                 : Results.Text(svg, "image/svg+xml", System.Text.Encoding.UTF8);
         });
     }
+
+    private static IResult NoPipeline() =>
+        Results.Problem("The room has no pipeline: nobody is in it (media runs only while it has participants), or media is " +
+            "disabled on this server.", statusCode: StatusCodes.Status404NotFound);
 
     private static IResult MediaDisabled() =>
         Results.Problem("Media is disabled on this server (Media:Enabled=false).", statusCode: StatusCodes.Status404NotFound);

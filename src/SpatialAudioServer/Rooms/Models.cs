@@ -95,6 +95,9 @@ public sealed class ForbiddenException(string message) : Exception(message);
 /// <summary>Too many requests of this kind; try again shortly.</summary>
 public sealed class RateLimitedException(string message) : Exception(message);
 
+/// <summary>The server cannot take this now (it is shutting down): 503.</summary>
+public sealed class ServiceUnavailableException(string message) : Exception(message);
+
 /// <param name="ReplacedParticipantId">
 /// Set when a participant with the same externalId was already in the room and has been replaced (treated as a reconnect).
 /// </param>

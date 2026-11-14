@@ -16,8 +16,15 @@ var cliCommand = args is ["apikey", ..] or ["admin", ..];
 const string DeleteRoomsFlag = "--delete-existing-rooms";
 var deleteRooms = !cliCommand && args.Contains(DeleteRoomsFlag);
 args = [.. args.Where(a => a != DeleteRoomsFlag)]; // not a configuration switch: keep it away from the config parser
-var builder = WebApplication.CreateBuilder(cliCommand ? [] : args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = cliCommand ? [] : args,
+    ContentRootPath = ContentRoot.Resolve(),
+});
 builder.Services.AddSingleton(new StartupFlags(deleteRooms));
+// No effect unless started by systemd (Type=notify, journal-friendly logs) or as a Windows service (Event Log).
+builder.Host.UseSystemd();
+builder.Host.UseWindowsService(o => o.ServiceName = "SpatialAudioServer");
 
 builder.Services.Configure<ServerOptions>(builder.Configuration.GetSection(ServerOptions.Section));
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.Section));
@@ -48,9 +55,11 @@ builder.Services.AddSingleton<SignalSessions>();
 builder.Services.AddSingleton<RoomManager>();
 builder.Services.AddSingleton<ApiKeyValidator>();
 builder.Services.AddHostedService<StartupService>();
-builder.Services.AddHostedService<DeadConnectionSweeper>();
+builder.Services.AddHostedService<ParticipantSweeper>();
 
 builder.Services.AddApiKeyAndAdminAuthentication();
+var limitOptions = builder.Configuration.GetSection(LimitOptions.Section).Get<LimitOptions>() ?? new LimitOptions();
+builder.Services.AddSignalRateLimits(limitOptions);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.ConfigureHttpJsonOptions(o =>
@@ -59,6 +68,7 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 // Listeners. Only consulted when Kestrel actually starts, so the test host never generates a certificate.
 builder.WebHost.ConfigureKestrel((context, kestrel) =>
 {
+    kestrel.Limits.MaxRequestBodySize = limitOptions.MaxRequestBodyBytes;
     var server = context.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new ServerOptions();
     if (server.HttpPort > 0)
     {
@@ -85,11 +95,22 @@ if (cliCommand)
 }
 
 app.UseExceptionHandler();
+app.Use((http, next) =>
+{
+    // The UIs load only their own scripts and styles; join links carry a token in the query, so no Referer.
+    var headers = http.Response.Headers;
+    headers.XContentTypeOptions = "nosniff";
+    headers["Referrer-Policy"] = "no-referrer";
+    headers.ContentSecurityPolicy = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+        "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+    return next(http);
+});
 // wwwroot: the test web client at /client/ (and later the admin UI). Static, no build step, no auth.
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet("/", () => Results.Redirect("/client/")).ExcludeFromDescription();
 app.UseStatusCodePages();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapAdminSession();
@@ -99,6 +120,19 @@ app.MapSignalling();
 
 app.Run();
 return 0;
+
+/// <summary>
+/// Where wwwroot, appsettings.json and data/ are. `dotnet run` (and the tests) start in the project directory; a published
+/// build may be started from anywhere (a Windows service starts in System32), so it uses its own directory instead.
+/// </summary>
+internal static class ContentRoot
+{
+    public static string? Resolve() =>
+        !Directory.Exists(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"))
+        && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "wwwroot"))
+            ? AppContext.BaseDirectory
+            : null;
+}
 
 /// <summary>Visible to the integration tests' WebApplicationFactory.</summary>
 public partial class Program;

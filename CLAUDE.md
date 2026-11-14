@@ -39,7 +39,10 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   set-password`); rooms, participants with levels and WebRTC stats, mute/gain/kick, event log, pipeline graph.
 - **Client-set poses (part done, rest for discussion with SL viewers, PLAN.md Phase 7):** listener vs speaker pose,
   per-room `clientPose` (`none`/`orientation`), `PATCH /signal/{pid}/pose` with the session token (guests can turn).
-  Next: the user's review of the admin UI, then Phase 5 (hardening). Parked: the intermittent pairchains test failure.
+- **Phase 5 (hardening) under way** (PLAN.md Phase 5): media on demand (`Media:IdleRoomTimeout`), stale joins removed at
+  token expiry, graceful shutdown, signalling rate limits, input limits, security headers, run docs in
+  `docs/running.md` (Linux + Windows). No Dockerfile for now; the Graphviz graph is parked. The Windows run is for the user.
+  Parked: the intermittent pairchains test failure.
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.

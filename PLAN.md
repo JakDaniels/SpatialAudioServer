@@ -195,15 +195,17 @@ src/SpatialAudioServer/
   Media/                     GStreamer layer: GstRuntime, IRoomMedia/GstRoomMedia/NullRoomMedia, RoomPipeline
                              (webrtcbin endpoints per room), WebRtcBin, RoomWorker, BusWatcher, NativeGObject
   Media/Engines/             IMixEngine + MixEngines catalogue, MediaBlocks, one class per engine
-  Hosting/                   StartupService, DevCertificate, ApiKeyCommand (CLI)
+  Hosting/                   StartupService, ParticipantSweeper, DevCertificate, ApiKeyCommand/AdminCommand (CLI)
   Signalling/                SDP/ICE handling (Phase 3)
   Storage/                   SQLite stores + numbered migrations (PRAGMA user_version)
   wwwroot/admin, wwwroot/client   (Phases 3-4)
   data/                      runtime: SQLite db + generated dev cert (git-ignored)
 src/SpatialAudioServer.Tests/    xUnit unit + integration tests (WebApplicationFactory, temp SQLite)
+src/SpatialAudioServer.LoadTest/ load tool: GStreamer fake clients (FakeClient, ToneMeter, bot voices); the tests use it too
 spikes/WebRtcEcho/               Phase 0 spike (not part of the solution)
-tools/                           GStreamer-based fake client for load/integration tests (from the spike's FakeClient)
-docs/
+scripts/                         setup-ubuntu.sh, build-loadtest.sh, render-voices.py,
+                                 loadtest-linux-x64/ (committed self-contained load tool + voices)
+docs/                            running.md (Linux/Windows run docs), design notes; reference/ (git-ignored sources)
 ```
 Domain/API code talks to the media layer via an interface (`IRoomMedia`) so the API and storage can be
 tested without GStreamer.
@@ -227,7 +229,7 @@ tested without GStreamer.
    `DELETE /signal/{pid}`, join-token redemption), so the mix can be heard with real browsers and fake clients test
    over real HTTP. Load testing: correctness and churn tests on the dev box now (4-core Pentium Silver N6005, 5 GB;
    fake clients share the CPU, so CPU numbers are indicative only); the real 32-participant benchmark runs later with
-   the fake clients (`tools/`) on a second LAN machine.
+   the fake clients (`src/SpatialAudioServer.LoadTest`) on a second LAN machine.
    **Stages A+B done 2026-11-11** (33 tests, 3 consecutive clean runs): mix-minus for 2–4 people, late join, leave
    via API and via signalling, mute/unmute, replace-while-connected, room delete with people connected, signalling
    auth, 5-round churn with chain-count and native-thread checks. Fake client + Goertzel tone meter live in
@@ -425,6 +427,30 @@ tested without GStreamer.
      key ≠ admin), `AdminMediaTests` (levels of talking vs silent clients, connection stats, graph).
 5. **Hardening.** Limits, input validation, token expiry, rate limiting, graceful shutdown, Dockerfile,
    Windows/Linux run docs, load test using the GStreamer fake-client tool.
+   **Started 2026-11-14.** Decided: no Dockerfile for now; the Graphviz graph is parked (output not good enough);
+   participants who never connect are removed when their join token expires; an empty room's media stops after 30 s.
+   - **Media on demand:** a room's pipeline starts with its first participant and stops once the room has been empty
+     for `Media:IdleRoomTimeout` (30 s; 0 = at once), so stored rooms cost nothing. `RoomMediaStats.running`; the
+     admin UI shows "Media idle". (`GstRoomMedia` tracks each room's participants; `RoomManager` is unchanged.)
+   - **Stale participants:** `ParticipantSweeper` (was DeadConnectionSweeper) also removes participants whose join
+     token expired unused (reason `join-expired`) and purges used/expired tokens from SQLite.
+   - **Graceful shutdown:** on stop every session is closed as `server-shutdown`, new joins get 503, ICE long-polls end
+     at once (503), and all room pipelines stop in parallel (≈1 s; `ShutdownTests`). SIGTERM checked on a published build.
+   - **Rate limiting** (ASP.NET rate limiter, token buckets): `/signal/…` per participant
+     (`Limits:SignalRequestsPerSecond` 30) and per client address (`…PerAddress` 300), 429 + Retry-After. The control
+     API is not limited (key holders; the region module may send many position updates); admin login keeps its own throttle.
+   - **Input limits:** Kestrel body ≤ `Limits:MaxRequestBodyBytes` (64 KB); SDP ≤ 32 K chars; ≤ 50 candidates per
+     request, ≤ 1024 chars each, ≤ 200 per connection. Malformed offers (no Opus, broken SDP, NUL characters) are 400
+     and leave the room working (test).
+   - **Headers:** CSP (self only), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` (join links
+     carry the token in the query), `frame-ancestors 'none'`.
+   - **Token expiry, as built:** join tokens 5 min, one use; session tokens live as long as the participant; admin
+     sessions sliding 8 h. API keys do not expire (revoke them); revisit before public deployment.
+   - **Run docs:** `docs/running.md` (Linux + Windows: prerequisites, first-time setup, configuration table,
+     firewall, systemd unit, Windows service, load tool). A published build uses its own folder as content root when
+     started elsewhere (Windows services start in System32). `dotnet publish -r win-x64` checked from Linux (SQLite
+     native DLL included); **the Windows run itself is for the user** (GStreamer 1.28 installers are now Inno Setup
+     `.exe`, not MSI: choose the full install).
 6. **Spatial (brought forward 2026-11-13, first version done).** Decided: a per-room `spatial` flag (create/ensure,
    default off, stored: migration 4, shown in room details); `matrix-shared` clusters listeners by rendering; an
    inverse, SL-like distance model.

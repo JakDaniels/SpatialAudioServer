@@ -69,6 +69,21 @@ public sealed class LimitOptions
     public int MaxParticipantsPerRoom { get; set; } = 32;
 
     public int MaxParticipantsTotal { get; set; } = 512;
+
+    /// <summary>Largest request body Kestrel accepts (SDP offers are a few KB, participant metadata at most 16 KB).</summary>
+    public long MaxRequestBodyBytes { get; set; } = 64 * 1024;
+
+    /// <summary>
+    /// Signalling requests (<c>/signal/{participantId}/…</c>) per second per participant, with bursts of twice this.
+    /// Real clients use a few per second (pose updates at most 20). 0 turns the limit off.
+    /// </summary>
+    public int SignalRequestsPerSecond { get; set; } = 30;
+
+    /// <summary>
+    /// Signalling requests per second from one client address (all its participants together; the load tool runs up to
+    /// 32 from one machine), with bursts of twice this. 0 turns the limit off.
+    /// </summary>
+    public int SignalRequestsPerSecondPerAddress { get; set; } = 300;
 }
 
 /// <summary>Section "Media".</summary>
@@ -118,6 +133,12 @@ public sealed class MediaOptions
     /// this can be short. Zero disables it.
     /// </summary>
     public TimeSpan DeadConnectionTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// A room's pipeline starts with its first participant and stops once the room has been empty this long (so a quick
+    /// leave and rejoin does not rebuild it). Zero stops it as soon as the last participant leaves.
+    /// </summary>
+    public TimeSpan IdleRoomTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Mix engine for spatial rooms created without one. matrix: in a spatial room matrix-shared rarely shares (each

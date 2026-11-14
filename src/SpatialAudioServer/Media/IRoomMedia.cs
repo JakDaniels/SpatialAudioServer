@@ -36,7 +36,7 @@ public interface IRoomMedia
     /// <summary>Engine statistics plus each participant's input level and connection statistics; null without media.</summary>
     Task<RoomLiveStats?> LiveStatsAsync(Guid roomId);
 
-    /// <summary>The room's GStreamer pipeline as Graphviz .dot text; null without media.</summary>
+    /// <summary>The room's GStreamer pipeline as Graphviz .dot text; null without media or while the room's media is idle.</summary>
     Task<string?> PipelineDotAsync(Guid roomId);
 }
 
@@ -49,7 +49,9 @@ public sealed record RoomLiveStats(RoomMediaStats Media, IReadOnlyList<Participa
 
 /// <param name="MixedPairs">(source, listener) pairs being mixed.</param>
 /// <param name="Counters">Engine-specific: e.g. encoders, talkers, clusters (matrix-shared), chains (pairchains).</param>
-public sealed record RoomMediaStats(string Engine, bool Spatial, int MixedPairs, IReadOnlyDictionary<string, long> Counters);
+/// <param name="Running">The room's pipeline exists. It runs only while the room has participants (and for
+/// Media:IdleRoomTimeout after the last one leaves).</param>
+public sealed record RoomMediaStats(string Engine, bool Spatial, int MixedPairs, IReadOnlyDictionary<string, long> Counters, bool Running = true);
 
 /// <summary>Media is disabled (Media:Enabled=false): lifecycle calls do nothing, signalling is unavailable.</summary>
 public sealed class NullRoomMedia : IRoomMedia
