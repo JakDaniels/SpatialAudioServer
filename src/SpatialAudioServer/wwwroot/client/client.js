@@ -270,7 +270,7 @@ async function pollCandidates(pc, epoch) {
         await pc.addIceCandidate({ candidate: c.candidate, sdpMLineIndex: c.sdpMLineIndex });
       }
       since = r.next;
-      if (r.complete && pc.connectionState === "connected") return; // nothing more to exchange
+      if (r.complete) return; // the server has sent all its candidates (polling again would return at once)
     } catch (e) {
       if (e instanceof HttpError && (e.status === 401 || e.status === 404)) {
         await endCall("the server ended this participant");

@@ -51,7 +51,15 @@ public static class LoadTestProgram
 
         if (options.Room is { } roomId)
         {
-            return await JoinRoomAsync(http, options, roomId, logs);
+            try
+            {
+                return await JoinRoomAsync(http, options, roomId, logs);
+            }
+            catch (HttpRequestException ex)
+            {
+                Console.Error.WriteLine($"Failed: {ex.Message}"); // the bots have already left
+                return 1;
+            }
         }
 
         var status = await Status(http);
