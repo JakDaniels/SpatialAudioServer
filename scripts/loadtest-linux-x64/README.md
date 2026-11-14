@@ -86,7 +86,7 @@ R=1806b6ef-...                              # room ID: shown under the room name
   and looped. Several files are handed out round-robin. Clients that share a file start at different points in it,
   so they don't speak in unison.
 - `--audio voices` makes the bots speak in natural voices. Each bot says its name, and with `--spatial` where it
-  stands: "Bot, 2. North-east, ahead, to your left. 5 metres." They take turns, like a conversation;
+  stands: "Bot, 2. North-east, in front, to your left. 5 metres." They take turns, like a conversation;
   `voices-together` has them all speak at once. The speech is pre-rendered clips in `voices/` next to the load tool
   (8 voices, rotating, up to 32 bots), so nothing needs installing and it works on Linux and Windows. Credits and
   licences are in `voices/CREDITS.md`. Re-render with `scripts/render-voices.py` (needs Piper) only to change them.
@@ -108,13 +108,13 @@ R=1806b6ef-...                              # room ID: shown under the room name
    ./SpatialAudioServer.LoadTest --server $S --room $R --participants 4 --audio voices --spatial
    ```
 
-   Bots stand on the 8 compass points of rings round you, and each says where it is. With 4 bots: `Bot 1` ahead
+   Bots stand on the 8 compass points of rings round you, and each says where it is. With 4 bots: `Bot 1` in front
    of you, `Bot 2` on your left, `Bot 3` behind, `Bot 4` on your right. Bots 1–8 fill the first ring, 5 m away
    (`--radius M` changes it), bots 9–16 a second ring 10 m further out (15 m), then 25 m and 35 m. A ring with fewer
    than 8 bots spreads them evenly. Within 10 m everyone is at full volume; farther out the level falls, so the outer
    rings test distance as well as direction.
 3. Turn with the **Facing** slider and the voices move round you. The compass direction each bot says stays true;
-   "on your left" assumes you face east. Stereo can't tell front from back, so bots ahead and behind both sound
+   "on your left" assumes you face east. Stereo can't tell front from back, so bots in front and behind both sound
    centred.
 
 Invite-link guests in spatial rooms are placed at the centre too, and can turn.
