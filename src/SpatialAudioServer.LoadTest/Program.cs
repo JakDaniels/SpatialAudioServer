@@ -382,9 +382,13 @@ public static class LoadTestProgram
         var heard = others.Count(t => presence[t] > 0.5) / (double)others.Count;
         var mean = others.Average(t => presence[t]);
         // A tone that is an exact multiple of a talker's (600 Hz = 2 × 300 Hz) also catches that talker's codec
-        // harmonics, faint but above the low spatial threshold: it cannot show a leak, so it is not judged.
+        // harmonics, and one at 2a − b of two talkers (2 × 400 − 300 = 500 Hz) their third-order intermodulation:
+        // faint (~volume/12 at worst, seen in spatial rooms where one talker is near) but above the low spatial
+        // threshold. Such a tone cannot show a leak, so it is not judged.
         var talkers = all.Where(o => o.Room == me.Room && o.Client.Talking).Select(o => o.Client.ToneHz).ToList();
-        bool Harmonic(double hz) => talkers.Any(t => hz > t && Math.Abs(hz / t - Math.Round(hz / t)) < 1e-9);
+        bool Harmonic(double hz) =>
+            talkers.Any(t => hz > t && Math.Abs(hz / t - Math.Round(hz / t)) < 1e-9)
+            || talkers.Any(a => talkers.Any(b => a != b && Math.Abs(2 * a - b - hz) < 1e-9));
         var foreign = presence.Where(p => p.Key != me.Client.ToneHz && !others.Contains(p.Key) && !Harmonic(p.Key))
             .Select(p => p.Value).DefaultIfEmpty(0).Max();
         var self = Harmonic(me.Client.ToneHz) ? 0 : presence[me.Client.ToneHz];
