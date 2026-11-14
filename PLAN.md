@@ -502,6 +502,20 @@ tested without GStreamer.
      defaults stay (complexity 5, 40 ms; spatial rooms on `matrix`) while the other phases are developed. Revisit on
      production-like hardware: `Media:SpatialOpusComplexity`, grouping listeners by position. Engines stay as they
      are: `matrix-shared` for non-spatial rooms, `matrix` for spatial ones.
+   - **Windows benchmark (2026-11-14):** server on Windows, Xeon W-10855M (6 cores / 12 threads, 2.8–5.1 GHz,
+     32 GB), load tool on the 22.04 machine, 3 talkers, CPU as % of one core:
+
+     | load | matrix-shared | matrix | pairchains |
+     |---|---|---|---|
+     | 32 people | **56%** (303 MB) | 88% | 377% (1387 threads) |
+     | 32 people, spatial | 113% (29 clusters) | 98% | 515% |
+     | 2 × 32 | 109% | | |
+     | 4 × 32 = 128 | 224% (452 MB) | | |
+
+     About 3.5× the 4-vCPU test VM per core (matrix-shared 56% vs 196%), and it scales linearly with rooms (~56% of a
+     core per 32-person room), so 16 × 32 would need ~9 cores' worth: more than this machine's 6 cores. The two
+     spatial FAILs were 500 Hz = 2 × 400 − 300 again (the encoder's intermodulation, at ~volume/12 just over the
+     spatial threshold, not a leak); the leak check now ignores 2a − b products of talkers as it does harmonics.
    - **Decided: no client-side spatialisation.** The server stays an MCU (one mixed stream per listener); an SFU-style
      design (forwarding talkers for the browser to spatialise) would break compatibility with SL/OpenSim viewers.
    - Start-up switch `--delete-existing-rooms` (testing): deletes every stored room before any pipeline starts
