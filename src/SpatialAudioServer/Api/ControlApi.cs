@@ -112,6 +112,10 @@ public static class ControlApi
 
         participants.MapGet("/", (HttpContext http, RoomManager rooms) => rooms.ListParticipants(ResolveRoom(http, rooms)));
 
+        // Many participants' positions at once: the simulator's avatar positions, a few times a second.
+        room.MapPost("/poses", (HttpContext http, PoseBatchCommand body, RoomManager rooms) =>
+            rooms.UpdatePoses(ResolveRoom(http, rooms), body));
+
         MapParticipant(participants.MapGroup($"/{{{ParticipantId}:guid}}"));
         MapParticipant(participants.MapGroup($"/by-external/{{{ParticipantExternalId}}}"));
     }

@@ -11,6 +11,15 @@ public sealed class SpatialOptions
     /// <summary>Beyond this distance a source is silent and left out of the mix.</summary>
     public double MaxRange { get; set; } = 60;
 
+    /// <summary>
+    /// Tethered rooms: a viewer's own avatar position is used while it is within this many metres of the simulator's
+    /// (which lags: it is pushed a few times a second); further away, the simulator's position is used.
+    /// </summary>
+    public double SpeakerTether { get; set; } = 10;
+
+    /// <summary>Tethered rooms: how far from the simulator's avatar position a viewer's camera may listen (SL: 50 m).</summary>
+    public double ListenerTether { get; set; } = 50;
+
     /// <summary>matrix-shared clusters: listeners whose talker levels match to this many dB share a mix.</summary>
     public double ClusterGainStepDb { get; set; } = 3;
 
@@ -38,6 +47,39 @@ public readonly record struct Rendering(double Gain, double Pan)
     {
         var angle = (Math.Clamp(Pan, -1, 1) + 1) * Math.PI / 4; // 0 = hard left, π/4 = centre, π/2 = hard right
         return (Gain * Math.Min(1, Math.Sqrt(2) * Math.Cos(angle)), Gain * Math.Min(1, Math.Sqrt(2) * Math.Sin(angle)));
+    }
+}
+
+/// <summary>Where a participant is heard from and hears from, after the tether rules (<see cref="ClientPose.Tethered"/>).</summary>
+public readonly record struct EffectivePose(Vec3? Speaker, Vec3? Listener, Quat? ListenerOrientation)
+{
+    public static EffectivePose Of(ParticipantSnapshot p, SpatialOptions options)
+    {
+        if (p.ClientReport is not { } report || p.Position is not { } anchor)
+        {
+            // No viewer report, or nothing to check it against: the control API's pose only.
+            return new(p.Position, p.ListenerPosition ?? p.Position, p.ListenerOrientation ?? p.Orientation);
+        }
+        var speaker = Distance(report.SpeakerPosition, anchor) <= options.SpeakerTether ? report.SpeakerPosition : anchor;
+        return new(speaker, Clamp(report.ListenerPosition, anchor, options.ListenerTether), report.ListenerOrientation);
+    }
+
+    private static double Distance(Vec3 a, Vec3 b)
+    {
+        double dx = a.X - b.X, dy = a.Y - b.Y, dz = a.Z - b.Z;
+        return Math.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /// <summary><paramref name="point"/>, or the nearest point to it within <paramref name="radius"/> of <paramref name="centre"/>.</summary>
+    private static Vec3 Clamp(Vec3 point, Vec3 centre, double radius)
+    {
+        var distance = Distance(point, centre);
+        if (distance <= radius)
+        {
+            return point;
+        }
+        var k = radius / distance;
+        return new Vec3(centre.X + (point.X - centre.X) * k, centre.Y + (point.Y - centre.Y) * k, centre.Z + (point.Z - centre.Z) * k);
     }
 }
 

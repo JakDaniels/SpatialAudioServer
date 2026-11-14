@@ -12,6 +12,9 @@ public interface IRoomMedia
     /// <summary>Raised (on a GStreamer thread) when a participant's WebRTC connection state changes.</summary>
     event Action<Guid, Guid, ParticipantState>? ParticipantStateChanged;
 
+    /// <summary>Raised (on a GStreamer thread) for each text message on a participant's data channel (an SL viewer's SLData).</summary>
+    event Action<Guid, Guid, string>? ParticipantData;
+
     void RoomCreated(RoomSnapshot room);
 
     void RoomDeleted(Guid roomId);
@@ -64,6 +67,12 @@ public sealed record RoomMediaStats(string Engine, bool Spatial, int MixedPairs,
 public sealed class NullRoomMedia : IRoomMedia
 {
     public event Action<Guid, Guid, ParticipantState>? ParticipantStateChanged
+    {
+        add { }
+        remove { }
+    }
+
+    public event Action<Guid, Guid, string>? ParticipantData
     {
         add { }
         remove { }

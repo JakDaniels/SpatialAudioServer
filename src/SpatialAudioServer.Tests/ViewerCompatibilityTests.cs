@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using SpatialAudioServer.Rooms;
 using SpatialAudioServer.LoadTest;
 using SpatialAudioServer.Media;
 using SpatialAudioServer.Media.Engines;
@@ -29,6 +31,30 @@ public sealed class ViewerCompatibilityTests() : MediaTestBase(MixEngines.Defaul
         Assert.Contains("a=end-of-candidates", answer);
         Assert.Contains("m=application", answer); // the SLData channel was negotiated
         Assert.Equal(0, clients[0].RemoteCandidates); // it never fetched any
+    }
+
+    [Fact]
+    public async Task A_viewers_pose_arrives_over_its_data_channel_in_a_tethered_room()
+    {
+        var room = await (await Api.PostAsJsonAsync("/api/rooms",
+            new { name = "region", engine = Engine, spatial = true, clientPose = "tethered" })).Read<RoomSnapshot>();
+        var viewer = await JoinAsync(room.Id, 0, viewerStyle: true, position: new Vec3(256131, 256126, 25));
+        await viewer.DataChannelOpen.WaitAsync(TimeSpan.FromSeconds(20));
+
+        Assert.True(viewer.SendData("""{"j":{"p":true}}"""));
+        Assert.True(viewer.SendViewerPose(new Vec3(256132, 256126, 26), new Quat(0, 0, 0, 1),
+            new Vec3(256122, 256126, 28), new Quat(0, 0, 0, 1)));
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        ClientPoseReport? report = null;
+        while (report is null && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(100);
+            report = (await Api.GetFromJsonAsync<ParticipantSnapshot>($"/api/rooms/{room.Id}/participants/{viewer.ParticipantId}", Json.Options))!.ClientReport;
+        }
+        Assert.NotNull(report);
+        Assert.Equal(new Vec3(256132, 256126, 26), report.SpeakerPosition);
+        Assert.Equal(new Vec3(256122, 256126, 28), report.ListenerPosition);
     }
 }
 

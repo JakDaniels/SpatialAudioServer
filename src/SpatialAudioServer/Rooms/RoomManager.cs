@@ -64,6 +64,7 @@ public sealed class RoomManager(
             }
             _restored = true;
             media.ParticipantStateChanged += SetParticipantState;
+            media.ParticipantData += ReceiveClientData;
 
             var closed = activity.CloseOpenSessions("server-restart");
             joinTokens.DeleteAll();
@@ -345,6 +346,61 @@ public sealed class RoomManager(
         return snapshot;
     }
 
+    /// <summary>Most poses in one batch: more than a room can hold, so a real batch never hits it.</summary>
+    public const int MaxPoseBatch = 256;
+
+    /// <summary>
+    /// Sets many participants' positions and orientations at once (the simulator's avatar positions). Unknown ids are
+    /// reported, not errors: an avatar may leave between the simulator's snapshot and this call.
+    /// </summary>
+    public PoseBatchResult UpdatePoses(Guid roomId, PoseBatchCommand command)
+    {
+        var poses = command.Poses ?? [];
+        var validation = new Validation();
+        if (poses.Count > MaxPoseBatch)
+        {
+            throw new LimitExceededException($"At most {MaxPoseBatch} poses per request.");
+        }
+        for (var i = 0; i < poses.Count; i++)
+        {
+            var pose = poses[i];
+            var oneId = pose is not null && (pose.ParticipantId is null) != string.IsNullOrWhiteSpace(pose.ExternalId);
+            validation.Check($"poses[{i}]", oneId, "needs exactly one of participantId and externalId");
+            if (!oneId)
+            {
+                continue;
+            }
+            validation.Position($"poses[{i}].position", pose!.Position).Orientation($"poses[{i}].orientation", pose.Orientation);
+        }
+        validation.ThrowIfInvalid();
+
+        var updated = new List<ParticipantSnapshot>();
+        var unknown = new List<string>();
+        lock (_lock)
+        {
+            var room = FindRoom(roomId);
+            foreach (var pose in poses)
+            {
+                var participant = pose.ParticipantId is { } id
+                    ? room.Participants.GetValueOrDefault(id)
+                    : FindParticipantByExternalId(room, ExternalIds.Normalize(pose.ExternalId)!);
+                if (participant is null)
+                {
+                    unknown.Add(pose.ParticipantId?.ToString() ?? pose.ExternalId!);
+                    continue;
+                }
+                participant.Position = pose.Position ?? participant.Position;
+                participant.Orientation = pose.Orientation ?? participant.Orientation;
+                updated.Add(participant.Snapshot());
+            }
+        }
+        foreach (var snapshot in updated)
+        {
+            media.ParticipantUpdated(snapshot);
+        }
+        return new PoseBatchResult(updated.Count, unknown);
+    }
+
     /// <summary>
     /// A participant choosing its own display name (signalling: sent with its offer). Only participants created with
     /// <c>clientNamed</c> (invited guests) may; a name given by the integration (an SL avatar's) stands.
@@ -412,6 +468,63 @@ public sealed class RoomManager(
         media.ParticipantUpdated(snapshot);
         return snapshot;
     }
+
+    /// <summary>Client data messages closer together than this are dropped (SL viewers send poses ≤ 10 times a second).</summary>
+    public static readonly TimeSpan ClientPoseInterval = TimeSpan.FromMilliseconds(20);
+
+    /// <summary>
+    /// Called by the media layer (on a GStreamer thread) for each message on a participant's data channel: an SL
+    /// viewer's SLData. Poses are used in <see cref="ClientPose.Tethered"/> rooms; the rest is logged for now.
+    /// </summary>
+    public void ReceiveClientData(Guid roomId, Guid participantId, string text)
+    {
+        if (SlData.Parse(text) is not { } message)
+        {
+            log.LogDebug("Participant {ParticipantId}: data channel message that is not SLData: {Text}", participantId, Shorten(text));
+            return;
+        }
+        if (message.Joined || message.Mutes.Count > 0 || message.Gains.Count > 0 || message.OtherKeys.Count > 0)
+        {
+            log.LogInformation("Participant {ParticipantId} SLData: {Text}", participantId, Shorten(text));
+        }
+        else
+        {
+            log.LogTrace("Participant {ParticipantId} SLData: {Text}", participantId, Shorten(text));
+        }
+        if (message.Pose is not { } pose)
+        {
+            return;
+        }
+        ParticipantSnapshot snapshot;
+        lock (_lock)
+        {
+            if (!_rooms.TryGetValue(roomId, out var room) || !room.Participants.TryGetValue(participantId, out var participant))
+            {
+                return;
+            }
+            if (room.ClientPose != ClientPose.Tethered)
+            {
+                if (!participant.PoseIgnoredLogged)
+                {
+                    participant.PoseIgnoredLogged = true;
+                    log.LogInformation("Participant {ParticipantId} sends its pose, but room {RoomId} is clientPose {ClientPose}, not tethered: ignored",
+                        participantId, roomId, room.ClientPose);
+                }
+                return;
+            }
+            var now = time.GetUtcNow();
+            if (now - participant.LastSelfPose < ClientPoseInterval)
+            {
+                return;
+            }
+            participant.LastSelfPose = now;
+            participant.ClientReport = pose;
+            snapshot = participant.Snapshot();
+        }
+        media.ParticipantUpdated(snapshot);
+    }
+
+    private static string Shorten(string text) => text.Length <= 300 ? text : text[..300] + "…";
 
     /// <summary>Called by the media layer (on a GStreamer thread) as a participant's WebRTC connection changes.</summary>
     public void SetParticipantState(Guid roomId, Guid participantId, ParticipantState state)
@@ -590,6 +703,9 @@ public sealed class RoomManager(
         public Quat? ListenerOrientation { get; set; }
         /// <summary>When the participant last set its own pose (rate limit).</summary>
         public DateTimeOffset LastSelfPose { get; set; }
+        /// <summary>The viewer's own report of where it is (tethered rooms).</summary>
+        public ClientPoseReport? ClientReport { get; set; }
+        public bool PoseIgnoredLogged { get; set; }
         public bool Muted { get; set; }
         public double Gain { get; set; } = 1.0;
         public ParticipantState State { get; set; } = ParticipantState.AwaitingSignal;
@@ -598,7 +714,7 @@ public sealed class RoomManager(
 
         public ParticipantSnapshot Snapshot() =>
             new(Id, RoomId, DisplayName, ExternalId, Position, Orientation, Muted, Gain, ParseMetadata(Metadata), JoinedAt, State,
-                ListenerPosition, ListenerOrientation, ClientNamed);
+                ListenerPosition, ListenerOrientation, ClientNamed, ClientReport);
     }
 
     // Stored as text and parsed per snapshot, so callers never share a mutable JsonObject with the manager.

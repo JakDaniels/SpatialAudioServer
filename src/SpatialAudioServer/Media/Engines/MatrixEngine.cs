@@ -20,6 +20,7 @@ internal sealed class MatrixEngine(MixEngineContext context) : IMixEngine
 
     private readonly ConcurrentDictionary<Guid, Member> _members = new(); // written on the worker; read by AttachSource
     private readonly RoomInterleave _room = new(context);
+    private bool _updatePosted; // worker: an UpdateMatrices is queued
 
     private Pipeline Pipeline => context.Pipeline;
 
@@ -50,7 +51,16 @@ internal sealed class MatrixEngine(MixEngineContext context) : IMixEngine
         if (_members.TryGetValue(participant.Id, out var member))
         {
             member.Snapshot = participant;
-            UpdateMatrices();
+            // Poses arrive often (each viewer up to 10/s, the simulator for everyone at once): one update per burst.
+            if (!_updatePosted)
+            {
+                _updatePosted = true;
+                context.Worker.Post(() =>
+                {
+                    _updatePosted = false;
+                    UpdateMatrices();
+                });
+            }
         }
     }
 

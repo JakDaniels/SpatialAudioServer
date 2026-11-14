@@ -27,7 +27,9 @@ public sealed partial class WebRtcBin : IDisposable
     private readonly List<ulong> _handlers = [];
     private readonly List<IceCandidate> _candidates = [];
     private readonly List<string> _remoteCandidates = []; // for Diagnostics
-    private WebRTCDataChannel? _dataChannel; // kept alive while the connection is
+    private readonly object _dataSync = new();
+    private WebRTCDataChannel? _dataChannel; // ours or the remote's (an SL viewer's "SLData"); kept while the connection is
+    private bool _dataOpen;
     private TaskCompletionSource _candidatesChanged = NewSignal();
     private bool _gatheringComplete;
     private bool _disposed;
@@ -71,6 +73,16 @@ public sealed partial class WebRtcBin : IDisposable
             return null;
         }));
 
+        // The remote side's data channel (SL viewers always open "SLData"; browsers open none).
+        _handlers.Add(Element.ConnectSignal("on-data-channel", (_, args) =>
+        {
+            if (args is [WebRTCDataChannel channel])
+            {
+                UseDataChannel(channel, open: true);
+            }
+            return null;
+        }));
+
         _handlers.Add(Element.ConnectSignal("notify::connection-state", (_, _) =>
         {
             ConnectionStateChanged?.Invoke(Element.GetProperty<WebRTCPeerConnectionState>("connection-state"));
@@ -87,6 +99,15 @@ public sealed partial class WebRtcBin : IDisposable
 
     /// <summary>Raised on webrtcbin's thread when an offerer should create its offer. The server (answerer) ignores it.</summary>
     public event Action? NegotiationNeeded;
+
+    /// <summary>Raised on webrtcbin's SCTP thread for each text message on the data channel (an SL viewer's SLData).</summary>
+    public event Action<string>? DataMessage;
+
+    /// <summary>Raised on webrtcbin's thread once the data channel can carry messages (<see cref="SendData"/>).</summary>
+    public event Action? DataChannelOpened;
+
+    /// <summary>The data channel's label once there is one ("SLData" for SL viewers).</summary>
+    public string? DataChannelLabel { get; private set; }
 
     /// <summary>Raised on a streaming thread for each new src pad; link it before returning or data is lost.</summary>
     public event Action<Pad>? IncomingPad;
@@ -230,8 +251,73 @@ public sealed partial class WebRtcBin : IDisposable
     {
         using var options = Structure.NewFromString("options, ordered=(boolean)true")
             ?? throw new InvalidOperationException("Bad data channel options.");
-        _dataChannel = Element.EmitSignal<WebRTCDataChannel>("create-data-channel", label, options)
-            ?? throw new InvalidOperationException("webrtcbin did not create the data channel.");
+        UseDataChannel(Element.EmitSignal<WebRTCDataChannel>("create-data-channel", label, options)
+            ?? throw new InvalidOperationException("webrtcbin did not create the data channel."), open: false);
+    }
+
+    /// <summary>
+    /// Sends a text message on the data channel; false (nothing sent) if there is none or it is not open yet.
+    /// Safe from any thread except webrtcbin's own callbacks for this connection.
+    /// </summary>
+    public bool SendData(string text)
+    {
+        WebRTCDataChannel channel;
+        lock (_dataSync)
+        {
+            if (_disposed || !_dataOpen || _dataChannel is null)
+            {
+                return false;
+            }
+            channel = _dataChannel;
+        }
+        return channel.SendStringFull(text);
+    }
+
+    private void UseDataChannel(WebRTCDataChannel channel, bool open)
+    {
+        lock (_dataSync)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            _dataChannel = channel;
+            DataChannelLabel = channel.Label;
+            channel.OnMessageString += OnDataMessage;
+            channel.OnOpen += OnDataOpen;
+            channel.OnClose += OnDataClose;
+            // A remote channel announced by on-data-channel is already open (no on-open follows).
+            _dataOpen = open || channel.ReadyState == WebRTCDataChannelState.Open;
+        }
+        if (_dataOpen)
+        {
+            DataChannelOpened?.Invoke();
+        }
+    }
+
+    private void OnDataMessage(object? sender, WebRTCDataChannel.OnMessageStringSignalArgs e)
+    {
+        if (e.Data is { } text && !_disposed)
+        {
+            DataMessage?.Invoke(text);
+        }
+    }
+
+    private void OnDataOpen(object? sender, EventArgs e)
+    {
+        lock (_dataSync)
+        {
+            _dataOpen = true;
+        }
+        DataChannelOpened?.Invoke();
+    }
+
+    private void OnDataClose(object? sender, EventArgs e)
+    {
+        lock (_dataSync)
+        {
+            _dataOpen = false;
+        }
     }
 
     public void ApplyRemoteAnswer(string answerSdp) => SetDescription("set-remote-description", WebRTCSDPType.Answer, answerSdp);
@@ -452,6 +538,16 @@ public sealed partial class WebRtcBin : IDisposable
             Element.RemoveHandler(id);
         }
         Element.PadAdded -= OnPadAdded;
+        lock (_dataSync)
+        {
+            _dataOpen = false;
+            if (_dataChannel is { } channel)
+            {
+                channel.OnMessageString -= OnDataMessage;
+                channel.OnOpen -= OnDataOpen;
+                channel.OnClose -= OnDataClose;
+            }
+        }
     }
 
     /// <summary>
