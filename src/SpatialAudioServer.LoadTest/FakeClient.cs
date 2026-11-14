@@ -277,9 +277,10 @@ public sealed class FakeClient : IDisposable
                 {
                     // The server has no more candidates, so its long-poll now returns at once: pace the loop (it
                     // still sends our own late candidates and notices removal). Without this it spins until
-                    // connected and runs into the signalling rate limit.
+                    // connected and runs into the signalling rate limit. Once connected it only watches for removal:
+                    // every 2 s keeps hundreds of clients from one address under the per-address limit (300/s).
                     var idle = local.Complete && remote.State == Rooms.ParticipantState.Connected;
-                    await Task.Delay(idle ? 500 : 200, cancel);
+                    await Task.Delay(idle ? 2000 : 200, cancel);
                 }
             }
         }

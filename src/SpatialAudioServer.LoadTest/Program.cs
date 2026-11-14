@@ -26,6 +26,19 @@ public static class LoadTestProgram
 
     public static async Task<int> Main(string[] args)
     {
+        try
+        {
+            return await RunMainAsync(args);
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.Error.WriteLine($"Failed: {ex.Message}"); // the clients have already left
+            return 1;
+        }
+    }
+
+    private static async Task<int> RunMainAsync(string[] args)
+    {
         Options options;
         try
         {
@@ -51,15 +64,7 @@ public static class LoadTestProgram
 
         if (options.Room is { } roomId)
         {
-            try
-            {
-                return await JoinRoomAsync(http, options, roomId, logs);
-            }
-            catch (HttpRequestException ex)
-            {
-                Console.Error.WriteLine($"Failed: {ex.Message}"); // the bots have already left
-                return 1;
-            }
+            return await JoinRoomAsync(http, options, roomId, logs);
         }
 
         var status = await Status(http);

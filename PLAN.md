@@ -511,11 +511,18 @@ tested without GStreamer.
      | 32 people, spatial | 113% (29 clusters) | 98% | 515% |
      | 2 × 32 | 109% | | |
      | 4 × 32 = 128 | 224% (452 MB) | | |
+     | 6 × 32 = 192 | 337% (563 MB) | | |
+     | 4 × 32 spatial | | 373% (586 MB) | |
+     | 32 people, 8 talkers | 51% (4 mixed, by design) | 88% | 528% |
 
      About 3.5× the 4-vCPU test VM per core (matrix-shared 56% vs 196%), and it scales linearly with rooms (~56% of a
      core per 32-person room), so 16 × 32 would need ~9 cores' worth: more than this machine's 6 cores. The two
      spatial FAILs were 500 Hz = 2 × 400 − 300 again (the encoder's intermodulation, at ~volume/12 just over the
      spatial threshold, not a leak); the leak check now ignores 2a − b products of talkers as it does harmonics.
+     Rerun: all three engines PASS spatially (matrix 86%, matrix-shared 110%). 8 × 32 from one load-tool machine
+     hit the per-address signalling limit (429): connected fake clients polled `/ice` every 500 ms to notice removal,
+     ~450 requests/s from one address; they now poll every 2 s. With 8 talkers matrix-shared mixes only the 4 loudest
+     (`Media:ActiveSpeakers`), so the tool's "hears every talker" check fails by design; its CPU does not grow.
    - **Decided: no client-side spatialisation.** The server stays an MCU (one mixed stream per listener); an SFU-style
      design (forwarding talkers for the browser to spatialise) would break compatibility with SL/OpenSim viewers.
    - Start-up switch `--delete-existing-rooms` (testing): deletes every stored room before any pipeline starts
