@@ -52,6 +52,16 @@ internal sealed class Validation
         return this;
     }
 
+    /// <summary>A rule that the other helpers do not cover: fails <paramref name="field"/> unless <paramref name="ok"/>.</summary>
+    public Validation Check(string field, bool ok, string message)
+    {
+        if (!ok)
+        {
+            Add(field, message);
+        }
+        return this;
+    }
+
     public Validation Position(string field, Vec3? value)
     {
         if (value is not null && !(double.IsFinite(value.X) && double.IsFinite(value.Y) && double.IsFinite(value.Z)))

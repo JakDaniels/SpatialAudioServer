@@ -54,6 +54,9 @@ internal sealed class RoomPipeline : IDisposable
     /// <summary>Raised on webrtcbin's thread when a participant's connection state changes.</summary>
     public event Action<Guid, ParticipantState>? StateChanged;
 
+    /// <summary>Raised on webrtcbin's SCTP thread for each text message on a participant's data channel.</summary>
+    public event Action<Guid, string>? DataReceived;
+
     /// <summary>(source, listener) pairs the engine is mixing. For tests and stats.</summary>
     public Task<int> MixedPairsAsync() => _worker.InvokeAsync(() => _engine.MixedPairs);
 
@@ -239,6 +242,15 @@ internal sealed class RoomPipeline : IDisposable
                     RoomId, p.Id, rtc.Diagnostics());
             }
             StateChanged?.Invoke(p.Id, Map(state));
+        };
+        rtc.DataChannelOpened += () => _log.LogInformation("Room {RoomId}: participant {ParticipantId} data channel '{Label}' is open",
+            RoomId, p.Id, rtc.DataChannelLabel);
+        rtc.DataMessage += text =>
+        {
+            if (!endpoint.Removed)
+            {
+                DataReceived?.Invoke(p.Id, text);
+            }
         };
         // Only webrtcbin starts now; the engine starts its send branch once it is linked to the negotiated transceiver.
         rtc.Element.SyncStateWithParent();

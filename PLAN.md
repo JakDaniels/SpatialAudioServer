@@ -508,7 +508,8 @@ tested without GStreamer.
    - **Data channel server → viewer**: object keyed by agent UUID: `j` {p} joined, `l` true left, `p` level 0–128,
      `v` speaking, `m` moderator-muted, `V` server version string.
    - Covered by `ViewerCompatibilityTests` (viewer-style fake clients: SLData channel, the munging byte for byte,
-     `trickle:false`, never fetching server candidates) and `SdpTests`. Not yet: handling SLData messages.
+     `trickle:false`, never fetching server candidates) and `SdpTests`. The server reads SLData (2026-11-14): poses in
+     tethered rooms (below); `j`, `m` and `ug` are logged only, for now. Not yet: writing to the viewer.
    - **Client-set poses (decided in part 2026-11-13; FOR DISCUSSION AND DECISION when testing with SL viewers).**
      The question: may participants set their own position/orientation, and how does that fit security? Positions
      decide what you hear in a spatial room, so a client that can move anywhere can walk up to any conversation
@@ -523,12 +524,14 @@ tested without GStreamer.
        20 updates/s); `/signal/{pid}/config` reports `spatial` and `clientPose`. The test client's Facing slider uses
        it, so invited guests can turn; invites into spatial rooms place the guest at the centre facing east. The admin
        UI shows each participant's facing.
-     - **To decide with SL viewers:** add `tethered` (the client may move its listener pose within N m of its
-       server-set position; SL uses 50 m) and maybe `free` (web-only rooms with no authority)? Feed the viewer's
-       SLData `sp`/`sh`/`lp`/`lh` messages (cm, quaternion ×100) through the same `UpdateOwnPose` path, or treat the
-       speaker part (`sp`/`sh`) as a hint only and keep the region module's PATCH as the authority? Rate limits for
-       the viewer's ≤ 10/s updates; whether the region module should also send camera positions; what the default
-       `clientPose` for region rooms should be.
+     - **Decided and done (2026-11-14): `clientPose: tethered`**, which the OpenSim module asks for when it creates
+       region and parcel rooms. The viewer's SLData `sp/sh/lp/lh` (cm, quaternion ×100) are kept as its report
+       (`clientReport` on the participant); the control API's `position` (the simulator's avatar position) stays
+       the authority. Mixing hears the avatar from the viewer's `sp` while that is within `Media:Spatial:SpeakerTether`
+       (10 m) of the simulator's position, else from the simulator's; the listener is the viewer's camera (`lp/lh`)
+       pulled back to within `Media:Spatial:ListenerTether` (50 m); no simulator position → the report is ignored.
+       Messages closer than 20 ms are dropped (viewers send ≤ 10/s). A room made before this keeps its old
+       `clientPose` (the module warns: delete the room to have it made again). `free` was not needed.
      - **Distance model, to check against a real SL viewer (2026-11-14):** the defaults (full volume within 10 m,
        then 10/d, silent beyond 60 m) were chosen as "SL-like" but have not been compared with SL's own voice service.
        In listening tests the 15 m ring is only 3.5 dB below the 5 m ring, so distance is subtle;
@@ -573,16 +576,17 @@ tested without GStreamer.
      - **Mapping:** provision with an offer → `PUT /api/rooms/by-external/{room}` (`spatial: true`) → `POST
        …/participants` (`externalId` = avatar UUID, display name, global position) → `POST /signal/{pid}/offer`
        (`trickle:false`, join token) → `{jsep: answer, viewer_session}`. Room external ids: the region's estate
-       channel and parcels using it → `region/{regionId}`; a parcel with its own channel → `parcel/{regionId}/{parcel
+       channel and parcels using it → `region:{regionId}`; a parcel with its own channel → `parcel:{regionId}:{parcel
        GlobalID}` (stable across subdivide/join, unlike the local id). `VoiceSignalingRequest` candidates/completed →
        `POST /signal/{pid}/ice` (session token); logout, leaving or a duplicate → `DELETE /signal/{pid}`. A re-provision
        by the same avatar replaces its participant (existing `externalId` rule). Join and session tokens stay in the
        simulator.
      - **Module work (`os-webrtc-sas`):** `prebuild.xml`; `SasVoiceService : IWebRtcVoiceService` and its viewer
-       session (config `[SasWebRtcVoice]`: server URL, API key, timeouts, accept a self-signed certificate); a
-       companion `ISharedRegionModule` giving the back end what the plug-in interface lacks: region name and global
-       origin, avatar names, parcels, and the simulator's avatar positions pushed by `PATCH` every 250–500 ms (global
-       = region origin + local) for avatars with voice sessions; console commands (`sas status`, `sas rooms`); an
+       session (config `[SasWebRtcVoice]`: server URL, API key, timeouts, accept a self-signed certificate); region
+       name and global origin, avatar names, parcels and positions come from OpenSim's `SceneManager`, so no
+       companion region module was needed: a timer in the back end sends the simulator's avatar positions every
+       `PositionUpdateMilliseconds` (250) for avatars with voice sessions that moved (5 cm or 2°; every 5 s anyway),
+       one `POST /api/rooms/by-external/{room}/poses` per room (global = region origin + local); console commands (`sas status`, `sas rooms`); an
        example `.ini`, README and build/install notes. Blocking HTTP calls (the capability handlers are synchronous)
        done without the `.Result` deadlock pattern the Janus code uses. The Robust/grid route is not needed: every
        simulator calls the server directly.
@@ -596,6 +600,9 @@ tested without GStreamer.
      - **Testing:** viewer-style fake clients extended to send and check SLData messages; then OpenSim standalone +
        Firestorm: one region with two avatars; parcel voice and voice-off parcels; crossing into a neighbouring
        region; logout, crash and reconnect.
+     - **Progress (2026-11-14):** (a) and (b) done: Firestorm 7.2 (Windows) talks and hears bots in stereo. Then,
+       by choice, reading SLData from (c) and the first part of (d): simulator position push, viewer `sp/lp` in
+       tethered rooms. Next: the rest of (c) (writing to the viewer), neighbouring regions.
      - **Order:** (a) module skeleton that builds in the OpenSim tree and loads under the core module; (b) provision
        and signalling → audio between two Firestorm viewers in one region (non-spatial mix is fine at first);
        (c) server SLData: join/leave/levels/speaking (white dots); (d) positions: simulator push + viewer `sp/lp` with

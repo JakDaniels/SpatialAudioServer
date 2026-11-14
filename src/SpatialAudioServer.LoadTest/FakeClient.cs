@@ -42,6 +42,8 @@ public sealed class FakeClient : IDisposable
     private int _disposed;
     private string? _sessionToken;
     private readonly Thread? _clipPump;
+    private readonly TaskCompletionSource _dataOpen = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly List<string> _dataMessages = [];
 
     public FakeClient(
         string name, double toneHz, IReadOnlyList<double> listenFor, uint jitterBufferMs = 100, ILogger? log = null, double volume = 0.1,
@@ -56,6 +58,14 @@ public sealed class FakeClient : IDisposable
         _rtc = new WebRtcBin("webrtc", jitterBufferMs);
         _rtc.NegotiationNeeded += _negotiationNeeded.Set;
         _rtc.IncomingPad += OnIncomingPad;
+        _rtc.DataChannelOpened += () => _dataOpen.TrySetResult();
+        _rtc.DataMessage += message =>
+        {
+            lock (_dataMessages)
+            {
+                _dataMessages.Add(message);
+            }
+        };
 
         // The "tone" element has a volume property either way: the tone generator, or a volume element after the clip.
         var source = clip is null
@@ -131,6 +141,35 @@ public sealed class FakeClient : IDisposable
     /// the offer, the viewer's SDP munging, a non-trickle answer, and server candidates never fetched.
     /// </summary>
     public bool ViewerStyle { get; }
+
+    /// <summary>Completes when the data channel (viewer style: "SLData") is open.</summary>
+    public Task DataChannelOpen => _dataOpen.Task;
+
+    /// <summary>The text messages the server has sent on the data channel so far.</summary>
+    public IReadOnlyList<string> DataMessages
+    {
+        get
+        {
+            lock (_dataMessages)
+            {
+                return [.. _dataMessages];
+            }
+        }
+    }
+
+    /// <summary>Sends a text message on the data channel; false if it is not open.</summary>
+    public bool SendData(string text) => _rtc.SendData(text);
+
+    /// <summary>
+    /// What a viewer sends as it moves (llvoicewebrtc.cpp sendPositionUpdate): avatar and camera, global coordinates
+    /// in centimetres, quaternions ×100, all as integers.
+    /// </summary>
+    public bool SendViewerPose(Rooms.Vec3 avatar, Rooms.Quat avatarRotation, Rooms.Vec3 camera, Rooms.Quat cameraRotation)
+    {
+        static string P(Rooms.Vec3 v) => $"{{\"x\":{(int)(v.X * 100)},\"y\":{(int)(v.Y * 100)},\"z\":{(int)(v.Z * 100)}}}";
+        static string Q(Rooms.Quat q) => $"{{\"x\":{(int)(q.X * 100)},\"y\":{(int)(q.Y * 100)},\"z\":{(int)(q.Z * 100)},\"w\":{(int)(q.W * 100)}}}";
+        return SendData($"{{\"sp\":{P(avatar)},\"sh\":{Q(avatarRotation)},\"lp\":{P(camera)},\"lh\":{Q(cameraRotation)}}}");
+    }
 
     /// <summary>The server's answer SDP (once connected).</summary>
     public string? AnswerSdp { get; private set; }

@@ -18,6 +18,8 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
 
     public event Action<Guid, Guid, ParticipantState>? ParticipantStateChanged;
 
+    public event Action<Guid, Guid, string>? ParticipantData;
+
     public void RoomCreated(RoomSnapshot room) => _rooms.TryAdd(room.Id, new RoomEntry(room));
 
     public void RoomDeleted(Guid roomId)
@@ -143,6 +145,7 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
         var room = entry.Room;
         var pipeline = new RoomPipeline(room, options.Value, log);
         pipeline.StateChanged += (pid, state) => ParticipantStateChanged?.Invoke(room.Id, pid, state);
+        pipeline.DataReceived += (pid, text) => ParticipantData?.Invoke(room.Id, pid, text);
         log.LogInformation("Room {RoomId}: media started", room.Id);
         return pipeline;
     }

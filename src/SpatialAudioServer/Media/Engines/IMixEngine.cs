@@ -74,12 +74,19 @@ internal sealed class MixEngineContext(
 
     /// <summary>
     /// How <paramref name="source"/> sounds to <paramref name="listener"/>, including the source's gain/mute. Sources are
-    /// heard from their position; listeners hear from their listener pose if they have one, else their own.
+    /// heard from their position; listeners hear from their listener pose if they have one, else their own. A viewer's
+    /// own report (tethered rooms) is used within the tethers (<see cref="Spatial.EffectivePose"/>).
     /// </summary>
-    public Spatial.Rendering Render(ParticipantSnapshot source, ParticipantSnapshot listener) =>
-        (Spatial?.Render(source.Position, listener.ListenerPosition ?? listener.Position, listener.ListenerOrientation ?? listener.Orientation)
-            ?? Media.Spatial.Rendering.Centre)
-            .Scale(source.Muted ? 0 : source.Gain);
+    public Spatial.Rendering Render(ParticipantSnapshot source, ParticipantSnapshot listener)
+    {
+        if (Spatial is null)
+        {
+            return Media.Spatial.Rendering.Centre.Scale(source.Muted ? 0 : source.Gain);
+        }
+        var from = Media.Spatial.EffectivePose.Of(source, Options.Spatial);
+        var to = Media.Spatial.EffectivePose.Of(listener, Options.Spatial);
+        return Spatial.Render(from.Speaker, to.Listener, to.ListenerOrientation).Scale(source.Muted ? 0 : source.Gain);
+    }
 
     public Guid RoomId { get; } = roomId;
 

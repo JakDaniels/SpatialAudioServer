@@ -218,8 +218,9 @@ async function startCall(participantId, joinToken, roomName, displayName, roomId
     const config = await request("GET", `/signal/${participantId}/config`, { bearer: joinToken });
     call.iceServers = config.iceServers;
     // Show Facing when this participant may turn itself (spatial rooms by default). Starts facing east.
-    $("facingControl").hidden = config.clientPose !== "orientation";
-    if (config.clientPose === "orientation") {
+    const mayTurn = config.clientPose === "orientation" || config.clientPose === "tethered";
+    $("facingControl").hidden = !mayTurn;
+    if (mayTurn) {
       $("facing").value = 0;
       $("facingLabel").textContent = facingName(0);
       log("you can turn with Facing (you face east to start)");

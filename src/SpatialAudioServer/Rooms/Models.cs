@@ -11,8 +11,6 @@ public sealed record Quat(double X, double Y, double Z, double W);
 /// <summary>
 /// What a participant may change about its own pose through signalling (its session token), as opposed to the control
 /// API, which may change anything. Spatial rooms default to <see cref="Orientation"/>, others to <see cref="None"/>.
-/// (Planned with the SL viewer work, PLAN.md Phase 7: tethered, where the listening position may move within a radius
-/// of the server-set position; and free.)
 /// </summary>
 public enum ClientPose
 {
@@ -21,7 +19,18 @@ public enum ClientPose
 
     /// <summary>The participant may turn (set its listener orientation), not move: it cannot go and eavesdrop.</summary>
     Orientation,
+
+    /// <summary>
+    /// SL/OpenSim rooms: the viewer reports where its avatar and its camera are (SLData <c>sp/sh/lp/lh</c>), and the
+    /// server uses that only near the position the control API (the simulator) gives: the avatar is heard from the
+    /// viewer's position while it is within <c>Media:Spatial:SpeakerTether</c> of the simulator's, otherwise from the
+    /// simulator's; the camera hears from up to <c>Media:Spatial:ListenerTether</c> away (SL's camera tether).
+    /// </summary>
+    Tethered,
 }
+
+/// <summary>Where a viewer says its avatar (speaker) and its camera (listener) are, in room coordinates.</summary>
+public sealed record ClientPoseReport(Vec3 SpeakerPosition, Quat SpeakerOrientation, Vec3 ListenerPosition, Quat ListenerOrientation);
 
 public enum ParticipantState
 {
@@ -59,7 +68,8 @@ public sealed record ParticipantSnapshot(
     ParticipantState State,
     Vec3? ListenerPosition = null,
     Quat? ListenerOrientation = null,
-    bool ClientNamed = false);
+    bool ClientNamed = false,
+    ClientPoseReport? ClientReport = null);
 
 /// <param name="Engine">Mix engine name (see <c>GET /api/status</c>); null uses the server default (Media:Engine).</param>
 /// <param name="Spatial">Mix by participant position (distance and direction); fixed for the room's life. Default off.</param>
@@ -85,6 +95,15 @@ public sealed record AddParticipantCommand(
 /// <param name="ListenerOrientation">Which way it faces for hearing, if not <paramref name="Orientation"/>.</param>
 public sealed record UpdateParticipantCommand(
     bool? Muted, double? Gain, Vec3? Position, Quat? Orientation, Vec3? ListenerPosition = null, Quat? ListenerOrientation = null);
+
+/// <summary>One participant's new pose in a <see cref="PoseBatchCommand"/>: by our id or by its external id.</summary>
+public sealed record PoseUpdate(Guid? ParticipantId, string? ExternalId, Vec3? Position, Quat? Orientation);
+
+/// <summary>Many participants' poses at once (the simulator's avatar positions, a few times a second).</summary>
+public sealed record PoseBatchCommand(IReadOnlyList<PoseUpdate>? Poses);
+
+/// <param name="Unknown">The ids or external ids given that are not in the room (they left: stop sending them).</param>
+public sealed record PoseBatchResult(int Updated, IReadOnlyList<string> Unknown);
 
 /// <summary>A participant's change to its own pose (signalling, session token), within the room's <see cref="ClientPose"/>.</summary>
 public sealed record SelfPoseCommand(Quat? ListenerOrientation, Vec3? ListenerPosition = null);
