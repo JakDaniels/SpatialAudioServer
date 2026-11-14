@@ -71,6 +71,7 @@ async function loadRooms() {
       : rooms.map(r => `<option value="${r.id}"${r.id === remembered ? " selected" : ""}>` +
           `${escapeHtml(r.name)} (${r.participantCount} in, ${r.engine}${r.spatial ? ", spatial" : ""})</option>`).join("");
     knownRooms = new Map(rooms.map(r => [r.id, r]));
+    await loadPlaces();
     log(`${rooms.length} room(s); server ${status.version}, ${status.gstreamer.version ?? "GStreamer off"}`);
   } catch (e) {
     log(`error: ${e.message}`);
@@ -92,11 +93,47 @@ async function createRoom() {
   } catch (e) { log(`error: ${e.message}`); }
 }
 
+// Spatial rooms: where to stand. The centre, or next to someone already there (e.g. an OpenSim avatar, which uses
+// global coordinates, so the centre is far from everyone): 2 m west of them, facing east towards them.
+const STAND_OFF = 2;
+let places = new Map();
+
+async function loadPlaces() {
+  const roomId = $("room").value;
+  const spatial = knownRooms.get(roomId)?.spatial === true;
+  $("placeField").hidden = !spatial;
+  places = new Map();
+  let options = `<option value="">at the centre (0, 0, 0)</option>`;
+  if (spatial) {
+    try {
+      const list = await request("GET", `/api/rooms/${roomId}/participants`, { apiKey: apiKey() });
+      for (const p of list.filter(p => p.position)) {
+        places.set(p.id, p.position);
+        const { x, y, z } = p.position;
+        options += `<option value="${p.id}">next to ${escapeHtml(p.displayName)} ` +
+          `(${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})</option>`;
+      }
+    } catch (e) { log(`error: ${e.message}`); }
+  }
+  const previous = $("place").value;
+  $("place").innerHTML = options;
+  if (places.has(previous)) $("place").value = previous;
+}
+
+function chosenPosition() {
+  const p = places.get($("place").value);
+  return p ? { x: p.x - STAND_OFF, y: p.y, z: p.z } : { x: 0, y: 0, z: 0 };
+}
+
+function positionText({ x, y, z }) {
+  return `(${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`;
+}
+
 // Rooms from the last listing, by id (test mode), and the server's default engines.
 let knownRooms = new Map();
 const serverDefaults = { plain: null, spatial: null };
 
-// Spatial rooms: the tester stands at the centre (0, 0, 0). SL axes: x east, y north, z up; facing is the turn
+// Spatial rooms: you stand where Stand says (the centre by default). SL axes: x east, y north, z up; facing is the turn
 // left from east, as a rotation about z.
 function facingQuaternion(degrees) {
   const half = degrees * Math.PI / 360;
@@ -115,11 +152,11 @@ async function addParticipant(displayName, placed = false, clientNamed = false) 
   store(ROOM_STORE, roomId);
   const spatial = knownRooms.get(roomId)?.spatial === true;
   const body = spatial && placed
-    ? { displayName, position: { x: 0, y: 0, z: 0 }, orientation: facingQuaternion(0) } // the centre, facing east
+    ? { displayName, position: chosenPosition(), orientation: facingQuaternion(0) } // see loadPlaces; facing east
     : { displayName };
   if (clientNamed) body.clientNamed = true;
   const join = await request("POST", `/api/rooms/${roomId}/participants`, { apiKey: apiKey(), body });
-  return { ...join, roomId, spatial, roomName: $("room").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") ?? "" };
+  return { ...join, roomId, spatial, position: body.position, roomName: $("room").selectedOptions[0]?.textContent.replace(/ \(.*\)$/, "") ?? "" };
 }
 
 // Turning: the participant's own listener orientation, sent with its session token (so invited guests can turn too)
@@ -146,14 +183,14 @@ async function joinFromSetup() {
   try {
     const join = await addParticipant(name, true);
     $("setup").hidden = true;
-    if (join.spatial) log("spatial room: you are at (0, 0, 0)");
+    if (join.spatial) log(`spatial room: you are at ${positionText(join.position)}`);
     await startCall(join.participantId, join.joinToken, join.roomName, name, join.roomId);
   } catch (e) { log(`error: ${e.message}`); }
 }
 
 async function invite() {
   try {
-    const join = await addParticipant("Guest", true, true); // spatial rooms: placed at the centre; chooses its own name
+    const join = await addParticipant("Guest", true, true); // spatial rooms: placed where Stand says; chooses its own name
     const url = `${location.origin}/client/?participant=${join.participantId}&token=${encodeURIComponent(join.joinToken)}` +
       `&room=${encodeURIComponent(join.roomName)}`;
     $("inviteLink").hidden = false;
@@ -433,6 +470,7 @@ $("newRoomSpatial").onchange = () => {
   if (engine) $("newRoomEngine").value = engine;
 };
 $("refreshRooms").onclick = loadRooms;
+$("room").onchange = loadPlaces;
 $("apiKey").onchange = loadRooms;
 
 // Tell the server on the way out (tab closed or navigated away), so the participant does not linger.
