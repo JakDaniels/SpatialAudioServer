@@ -14,6 +14,9 @@
   color-scheme: light dark;
 }
 
+/* The hidden attribute wins over display rules such as .grid label { display: flex }. */
+[hidden] { display: none !important; }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #15181b;
