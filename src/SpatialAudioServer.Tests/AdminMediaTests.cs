@@ -50,7 +50,7 @@ public sealed class AdminMediaTests() : MediaTestBase(SpatialAudioServer.Media.E
     }
 
     [Fact]
-    public async Task The_pipeline_graph_downloads_and_renders()
+    public async Task The_pipeline_graph_and_its_elements_are_served()
     {
         var room = await CreateRoomAsync();
         var client = await JoinAsync(room.Id, 0);
@@ -63,11 +63,19 @@ public sealed class AdminMediaTests() : MediaTestBase(SpatialAudioServer.Media.E
         Assert.StartsWith("digraph", text.TrimStart());
         Assert.Contains("GstWebRTCBin", text);
 
-        var svg = await admin.GetAsync($"/api/admin/rooms/{room.Id}/graph.svg");
-        Assert.True(svg.StatusCode is HttpStatusCode.OK or HttpStatusCode.NotImplemented, $"graph.svg: {svg.StatusCode}");
-        if (svg.StatusCode == HttpStatusCode.OK)
-        {
-            Assert.Contains("<svg", await svg.Content.ReadAsStringAsync());
-        }
+        var graph = await admin.GetFromJsonAsync<PipelineGraph>($"/api/admin/rooms/{room.Id}/graph");
+        var webrtc = graph!.Elements.Single(e => e.Factory == "webrtcbin");
+        Assert.DoesNotContain(graph.Elements, e => e.Parent is not null);
+        var expanded = await admin.GetFromJsonAsync<PipelineGraph>(
+            $"/api/admin/rooms/{room.Id}/graph?expand={Uri.EscapeDataString(webrtc.Path)}");
+        Assert.Contains(expanded!.Elements, e => e.Parent == webrtc.Path);
+
+        var details = await admin.GetFromJsonAsync<GraphElementDetails>(
+            $"/api/admin/rooms/{room.Id}/graph/element?path={Uri.EscapeDataString(webrtc.Path)}");
+        Assert.Equal("webrtcbin", details!.Factory);
+        Assert.Contains(details.Properties, p => p.Name == "bundle-policy");
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await admin.GetAsync($"/api/admin/rooms/{room.Id}/graph/element?path=nothing")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Server.CreateClient().GetAsync($"/api/admin/rooms/{room.Id}/graph")).StatusCode);
     }
 }

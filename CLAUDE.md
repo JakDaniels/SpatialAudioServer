@@ -34,12 +34,13 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   (`Media:SpatialEngine`; see PLAN.md Phase 6). Engine tuning parked on the test VM; the server stays an MCU
   (no client-side spatialisation: SL/OpenSim viewers need one mixed stream). `--delete-existing-rooms` start-up switch for clean test runs.
 - **Phase 4 (admin UI) first version done:** `/admin/` (password: `dotnet run --project src/SpatialAudioServer -- admin
-  set-password`); rooms, participants with levels and WebRTC stats, mute/gain/kick, event log, pipeline graph.
+  set-password`); rooms, participants with levels and WebRTC stats, mute/gain/kick, event log, pipeline view
+  (`/admin/graph.html`: ELK layout of a JSON snapshot, summary blocks per participant stage).
 - **Client-set poses (part done, rest for discussion with SL viewers, PLAN.md Phase 7):** listener vs speaker pose,
   per-room `clientPose` (`none`/`orientation`), `PATCH /signal/{pid}/pose` with the session token (guests can turn).
 - **Phase 5 (hardening) under way** (PLAN.md Phase 5): media on demand (`Media:IdleRoomTimeout`), stale joins removed at
   token expiry, graceful shutdown, signalling rate limits, input limits, security headers, run docs in
-  `docs/running.md` (Linux + Windows). No Dockerfile for now; the Graphviz graph is parked. Windows run done 2026-11-14 (server + load tests pass;
+  `docs/running.md` (Linux + Windows). No Dockerfile for now. Windows run done 2026-11-14 (server + load tests pass;
   results in `docs/benchmarks.md`, which holds all benchmark numbers: keep PLAN.md to conclusions).
   Parked: the intermittent pairchains test failure.
 

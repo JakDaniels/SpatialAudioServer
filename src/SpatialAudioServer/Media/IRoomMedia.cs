@@ -38,6 +38,13 @@ public interface IRoomMedia
 
     /// <summary>The room's GStreamer pipeline as Graphviz .dot text; null without media or while the room's media is idle.</summary>
     Task<string?> PipelineDotAsync(Guid roomId);
+
+    /// <summary>The room's pipeline for the admin view (bins in <paramref name="expand"/> with their children); null without
+    /// media or while idle.</summary>
+    Task<PipelineGraph?> PipelineGraphAsync(Guid roomId, IReadOnlySet<string> expand);
+
+    /// <summary>One element's properties; null without media, while idle, or if no element has that path.</summary>
+    Task<GraphElementDetails?> ElementDetailsAsync(Guid roomId, string path);
 }
 
 /// <param name="LevelDb">Incoming audio level, dBFS (peak-held RMS), or null when the engine does not measure it or no
@@ -95,6 +102,10 @@ public sealed class NullRoomMedia : IRoomMedia
     public Task<RoomLiveStats?> LiveStatsAsync(Guid roomId) => Task.FromResult<RoomLiveStats?>(null);
 
     public Task<string?> PipelineDotAsync(Guid roomId) => Task.FromResult<string?>(null);
+
+    public Task<PipelineGraph?> PipelineGraphAsync(Guid roomId, IReadOnlySet<string> expand) => Task.FromResult<PipelineGraph?>(null);
+
+    public Task<GraphElementDetails?> ElementDetailsAsync(Guid roomId, string path) => Task.FromResult<GraphElementDetails?>(null);
 }
 
 public sealed class MediaUnavailableException() : Exception("Media is disabled on this server (Media:Enabled=false).");

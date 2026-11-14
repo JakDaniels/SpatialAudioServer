@@ -98,6 +98,12 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
     public async Task<string?> PipelineDotAsync(Guid roomId) =>
         PipelineOf(roomId, out _) is { } pipeline ? await pipeline.PipelineDotAsync() : null;
 
+    public async Task<PipelineGraph?> PipelineGraphAsync(Guid roomId, IReadOnlySet<string> expand) =>
+        PipelineOf(roomId, out _) is { } pipeline ? await pipeline.GraphAsync(expand) : null;
+
+    public async Task<GraphElementDetails?> ElementDetailsAsync(Guid roomId, string path) =>
+        PipelineOf(roomId, out _) is { } pipeline ? await pipeline.ElementDetailsAsync(path) : null;
+
     /// <summary>For tests and stats: (source, listener) pairs the room's engine is mixing.</summary>
     internal async Task<int> MixedPairsAsync(Guid roomId) =>
         PipelineOf(roomId, out _) is { } pipeline ? await pipeline.MixedPairsAsync() : 0;

@@ -96,6 +96,14 @@ internal sealed class RoomPipeline : IDisposable
     public Task<string> PipelineDotAsync() =>
         _worker.InvokeAsync(() => Global.DebugBinToDotData(_pipeline, DebugGraphDetails.All));
 
+    /// <summary>A snapshot for the admin pipeline view (bins in <paramref name="expand"/> with their children), taken on the worker.</summary>
+    public Task<PipelineGraph> GraphAsync(IReadOnlySet<string> expand) =>
+        _worker.InvokeAsync(() => PipelineGraphReader.Read(_pipeline, EngineName, _participants.Keys.ToList(), RoomId, expand));
+
+    /// <summary>One element's properties, or null if there is no element at that path.</summary>
+    public Task<GraphElementDetails?> ElementDetailsAsync(string path) =>
+        _worker.InvokeAsync(() => PipelineGraphReader.Details(_pipeline, path));
+
     public void AddParticipant(ParticipantSnapshot participant) => _worker.Post(() =>
     {
         if (_participants.TryAdd(participant.Id, new ParticipantMedia(participant.Id)))

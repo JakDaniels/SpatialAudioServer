@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline View</title>
+<link rel="stylesheet" href="../client/client.css">
+<link rel="stylesheet" href="graph.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="title">
+    <h1 id="title">Pipeline</h1>
+    <p class="sub" id="statusLine">Loading…</p>
+  </div>
+  <div class="tools">
+    <button id="expandAll" type="button" title="Show the elements inside every block">Expand all</button>
+    <button id="collapseAll" type="button" title="Back to one block per stage">Collapse all</button>
+    <select id="focus" title="Highlight one participant's blocks and their neighbours"><option value="">Everyone</option></select>
+    <button id="fit" type="button" title="Fit the graph to the window">Fit</button>
+    <label class="check" title="Refresh every 2 s"><input id="auto" type="checkbox" checked> Live</label>
+    <a id="dot" class="button" download title="GStreamer's own dump of the whole pipeline">.dot</a>
+  </div>
+</header>
+
+<div class="stage">
+  <svg id="canvas" aria-label="Pipeline graph">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" class="arrowhead"></path>
+      </marker>
+    </defs>
+    <g id="viewport"></g>
+  </svg>
+  <p id="empty" class="empty" hidden></p>
+  <aside id="panel" hidden>
+    <div class="panel-head">
+      <h2 id="panelTitle"></h2>
+      <button id="panelClose" type="button" class="small" aria-label="Close">✕</button>
+    </div>
+    <div id="panelBody"></div>
+  </aside>
+</div>
+
+<div id="tip" role="tooltip" hidden></div>
+
+<details class="legend">
+  <summary>Key</summary>
+  <ul>
+    <li><i class="swatch kind-receive"></i>Receive (WebRTC in)</li>
+    <li><i class="swatch kind-decode"></i>Decode</li>
+    <li><i class="swatch kind-room"></i>Room input</li>
+    <li><i class="swatch kind-cluster"></i>Shared mix</li>
+    <li><i class="swatch kind-personal"></i>Talker's own mix</li>
+    <li><i class="swatch kind-listener"></i>Listener's mix</li>
+    <li><i class="swatch kind-send"></i>Send (WebRTC out)</li>
+  </ul>
+  <p class="hint">Click for details, double-click to open or close a block. Dashed wires are not negotiated yet. Scroll to zoom, drag to move.</p>
+</details>
+
+<script src="vendor/elkjs/elk-api.js"></script>
+<script src="graph.js"></script>
+</body>
+</html>

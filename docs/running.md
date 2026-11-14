@@ -13,7 +13,7 @@ control API, signalling, the test client (`/client/`) and the admin UI (`/admin/
 ### Linux
 
 ```bash
-scripts/setup-ubuntu.sh        # GStreamer + plugins, .NET SDK, graphviz, sqlite3; prints a plugin check
+scripts/setup-ubuntu.sh        # GStreamer + plugins, .NET SDK, sqlite3; prints a plugin check
 ```
 
 ### Windows
@@ -34,8 +34,6 @@ scripts/setup-ubuntu.sh        # GStreamer + plugins, .NET SDK, graphviz, sqlite
 
    The binding finds GStreamer by itself (registry, the installer's environment variables, the usual install folders,
    `PATH`). The server checks every element it needs at start-up and refuses to start, naming what is missing.
-
-Graphviz is optional (the admin UI's rendered pipeline graph; parked for now).
 
 ## 2. Build and start
 
