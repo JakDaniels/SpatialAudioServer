@@ -107,7 +107,11 @@ app.Use((http, next) =>
 });
 // wwwroot: the test web client at /client/ (and later the admin UI). Static, no build step, no auth.
 app.UseDefaultFiles();
-app.UseStaticFiles();
+// no-cache: browsers revalidate (ETag, a 304 when unchanged), so after an upgrade they never mix new pages with old scripts.
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache",
+});
 app.MapGet("/", () => Results.Redirect("/client/")).ExcludeFromDescription();
 app.UseStatusCodePages();
 app.UseRateLimiter();
