@@ -500,9 +500,10 @@ tested without GStreamer.
    - Viewer ICE uses UDP ports 60000–60100 and SL's STUN servers (`stun{1..3}.<grid>.secondlife.io:3478`).
    - **Data channel (JSON) viewer → server**: positions every ≥ 0.1 s when changed:
      `{"sp":{x,y,z}, "sh":{x,y,z,w}, "lp":{x,y,z}, "lh":{x,y,z,w}}` = speaker (avatar) position/rotation and
-     listener (camera, tethered to within 50 m of the avatar) position/rotation, region coordinates in **cm** and
-     quaternions ×100, as integers. Also `{"j":{"p":true}}` join (p = primary region), `{"ug":{"<agent>":gain×220}}`
-     per-peer gain, `{"m":{"<agent>":bool}}` per-peer mute. Server positions are meant to be "tethered" to the
+     listener (camera, tethered to within 50 m of the avatar) position/rotation, **global (grid) coordinates** in
+     **cm** and quaternions ×100, as integers, the same values on every connection (own and neighbouring regions).
+     Also `{"j":{"p":true}}` join (p = primary region), `{"ug":{"<agent>":gain}}` per-peer gain (volume × 220 when
+     changed, but × 200 for the initial values sent on a join), `{"m":{"<agent>":bool}}` per-peer mute. Server positions are meant to be "tethered" to the
      simulator's authoritative avatar positions (anti-eavesdropping).
    - **Data channel server → viewer**: object keyed by agent UUID: `j` {p} joined, `l` true left, `p` level 0–128,
      `v` speaking, `m` moderator-muted, `V` server version string.
@@ -547,6 +548,59 @@ tested without GStreamer.
      hfc_male/female. Spatial room mode places bots on rings of the 8 compass points (5, 15, 25, 35 m; decided over
      16-point compass, bearings or clock positions): every bot's "North-west, behind, to your left. 15 metres." is
      exact, and the outer rings test distance.
+   - **Plan for the OpenSim side (decided 2026-11-14).** Studied `OpenSim/Addons/os-webrtc-janus` (part of OpenSim
+     master; `docs/reference/opensim`, git-ignored) and the Janus back end it ships.
+     - **What exists:** `WebRtcVoiceRegionModule` serves the viewer's `ProvisionVoiceAccountRequest`,
+       `VoiceSignalingRequest` and `ChatSessionRequest` capabilities, checks estate/parcel voice permissions, bans,
+       child agents and estate managers, cleans up duplicate sessions, logouts and leaving avatars, and sets the
+       `VoiceServerType=webrtc` simulator feature. It loads its back end from configuration
+       (`[WebRtcVoice] SpatialVoiceService = Dll:Class`, an `IWebRtcVoiceService` with `IVoiceViewerSession`s in a
+       static registry). The Janus back end (sessions, AudioBridge rooms) is what we replace. The Janus version has no
+       spatial audio, white dots, mute or per-peer volume because Janus ignores the SLData channel; for us that
+       channel ends at our webrtcbin, so those are server work.
+     - **Decided:** (1) **plug in under OpenSim's region module** (no fork): a new back end plus a small companion
+       region module, so upstream keeps the capability/permission handling. (2) The module is its own repository,
+       **`os-webrtc-sas`** (MPL-2.0, github JakDaniels/os-webrtc-sas), cloned into an OpenSim tree's
+       `addon-modules/os-webrtc-sas` (here: `docs/reference/opensim/addon-modules/`) and built by OpenSim's prebuild
+       (`addon-modules/*/prebuild*.xml`); net8.0 like OpenSim, so it shares no code with the server and talks HTTP
+       only. (3) **First milestone: region and parcel voice** (`channel_type: local`); P2P, group and ad-hoc
+       (`multiagent`) later. (4) Against **OpenSim master**, LAN only, with the **.NET 8 runtime installed** next to
+       .NET 10. (5) A **speaker** is heard from the viewer's own (low-latency) position while it stays within a few
+       metres of the simulator's position for the avatar, otherwise from the simulator's; the **listener** may be
+       up to 50 m from it (SL's camera tether). (6) Test setup spread across LAN machines: OpenSim on the dev machine
+       (Ubuntu 26.04), Firestorm on the Ubuntu 22.04 machine, our server on the Windows machine; so addresses and
+       firewalls matter from the start.
+     - **Mapping:** provision with an offer → `PUT /api/rooms/by-external/{room}` (`spatial: true`) → `POST
+       …/participants` (`externalId` = avatar UUID, display name, global position) → `POST /signal/{pid}/offer`
+       (`trickle:false`, join token) → `{jsep: answer, viewer_session}`. Room external ids: the region's estate
+       channel and parcels using it → `region/{regionId}`; a parcel with its own channel → `parcel/{regionId}/{parcel
+       GlobalID}` (stable across subdivide/join, unlike the local id). `VoiceSignalingRequest` candidates/completed →
+       `POST /signal/{pid}/ice` (session token); logout, leaving or a duplicate → `DELETE /signal/{pid}`. A re-provision
+       by the same avatar replaces its participant (existing `externalId` rule). Join and session tokens stay in the
+       simulator.
+     - **Module work (`os-webrtc-sas`):** `prebuild.xml`; `SasVoiceService : IWebRtcVoiceService` and its viewer
+       session (config `[SasWebRtcVoice]`: server URL, API key, timeouts, accept a self-signed certificate); a
+       companion `ISharedRegionModule` giving the back end what the plug-in interface lacks: region name and global
+       origin, avatar names, parcels, and the simulator's avatar positions pushed by `PATCH` every 250–500 ms (global
+       = region origin + local) for avatars with voice sessions; console commands (`sas status`, `sas rooms`); an
+       example `.ini`, README and build/install notes. Blocking HTTP calls (the capability handlers are synchronous)
+       done without the `.Result` deadlock pattern the Janus code uses. The Robust/grid route is not needed: every
+       simulator calls the server directly.
+     - **Server work:** (1) read the **SLData channel**: `sp/sh/lp/lh` through the pose path under a new
+       `clientPose: tethered` (speaker near the simulator's position, listener within 50 m), `j` join, `m` per-peer
+       mute, `ug` per-peer volume; (2) write to it, keyed by avatar UUID: `j`/`l` on join and leave, `p` level and `v`
+       speaking at a modest rate, `m` when muted by us, `V` version to the joiner (white dots, speaker list,
+       indicators); (3) **per-listener mute and volume of one source** on top of the spatial gain (matrix
+       coefficients; pairchains' amplify); (4) SL rooms in **global coordinates**, so neighbouring regions' rooms
+       agree (a viewer also connects to nearby regions as a non-primary listener); (5) match SL's distance model.
+     - **Testing:** viewer-style fake clients extended to send and check SLData messages; then OpenSim standalone +
+       Firestorm: one region with two avatars; parcel voice and voice-off parcels; crossing into a neighbouring
+       region; logout, crash and reconnect.
+     - **Order:** (a) module skeleton that builds in the OpenSim tree and loads under the core module; (b) provision
+       and signalling → audio between two Firestorm viewers in one region (non-spatial mix is fine at first);
+       (c) server SLData: join/leave/levels/speaking (white dots); (d) positions: simulator push + viewer `sp/lp` with
+       tethering, global coordinates, then neighbouring regions; (e) parcels; (f) per-peer mute/volume; (g) distance
+       model by ear against SL.
 
 ## Risks / things to verify
 
