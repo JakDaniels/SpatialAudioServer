@@ -40,21 +40,31 @@ public static class AdminApi
                 : NoPipeline();
         });
 
-        // Rendered with Graphviz on the server when it is installed (501 otherwise: use graph.dot).
-        admin.MapGet("/rooms/{roomId:guid}/graph.svg", async (Guid roomId, RoomManager rooms, IRoomMedia media, CancellationToken cancel) =>
+        // The pipeline view (/admin/graph.html): elements, pads and links, top-level elements tagged with their summary
+        // block. ?expand=path (repeatable) also lists that bin's children.
+        admin.MapGet("/rooms/{roomId:guid}/graph", async (Guid roomId, string[]? expand, RoomManager rooms, IRoomMedia media) =>
         {
             rooms.GetRoom(roomId);
-            if (await media.PipelineDotAsync(roomId) is not { } dot)
+            if (expand is { Length: > MaxExpanded })
             {
-                return NoPipeline();
+                return Results.Problem($"At most {MaxExpanded} bins can be expanded.", statusCode: StatusCodes.Status400BadRequest);
             }
-            var svg = await Graphviz.RenderSvgAsync(dot, cancel);
-            return svg is null
-                ? Results.Problem("Graphviz ('dot') is not installed on the server; download graph.dot instead.",
-                    statusCode: StatusCodes.Status501NotImplemented)
-                : Results.Text(svg, "image/svg+xml", System.Text.Encoding.UTF8);
+            return await media.PipelineGraphAsync(roomId, (expand ?? []).ToHashSet(StringComparer.Ordinal)) is { } graph
+                ? Results.Ok(graph)
+                : NoPipeline();
+        });
+
+        // Every readable property of one element (?path= as in the graph).
+        admin.MapGet("/rooms/{roomId:guid}/graph/element", async (Guid roomId, string path, RoomManager rooms, IRoomMedia media) =>
+        {
+            rooms.GetRoom(roomId);
+            return await media.ElementDetailsAsync(roomId, path) is { } details
+                ? Results.Ok(details)
+                : Results.Problem($"No element '{path}' (or the room has no pipeline).", statusCode: StatusCodes.Status404NotFound);
         });
     }
+
+    private const int MaxExpanded = 200;
 
     private static IResult NoPipeline() =>
         Results.Problem("The room has no pipeline: nobody is in it (media runs only while it has participants), or media is " +
@@ -62,51 +72,4 @@ public static class AdminApi
 
     private static IResult MediaDisabled() =>
         Results.Problem("Media is disabled on this server (Media:Enabled=false).", statusCode: StatusCodes.Status404NotFound);
-}
-
-/// <summary>Renders .dot to SVG with Graphviz's <c>dot</c>, if it is on the PATH.</summary>
-public static class Graphviz
-{
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
-
-    /// <summary>The SVG, or null when <c>dot</c> is not installed.</summary>
-    public static async Task<string?> RenderSvgAsync(string dot, CancellationToken cancel)
-    {
-        System.Diagnostics.Process process;
-        try
-        {
-            process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("dot", "-Tsvg")
-            {
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            }) ?? throw new InvalidOperationException("dot did not start.");
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            return null; // not installed
-        }
-        using (process)
-        {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-            timeout.CancelAfter(Timeout);
-            try
-            {
-                var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
-                var errors = process.StandardError.ReadToEndAsync(timeout.Token);
-                await process.StandardInput.WriteAsync(dot.AsMemory(), timeout.Token);
-                process.StandardInput.Close();
-                await process.WaitForExitAsync(timeout.Token);
-                return process.ExitCode == 0
-                    ? await output
-                    : throw new InvalidOperationException($"dot failed ({process.ExitCode}): {await errors}");
-            }
-            catch (OperationCanceledException)
-            {
-                process.Kill(entireProcessTree: true);
-                throw new TimeoutException($"dot did not finish within {Timeout.TotalSeconds:F0} s.");
-            }
-        }
-    }
 }

@@ -5,13 +5,16 @@ namespace SpatialAudioServer.Media;
 
 /// <summary>
 /// Minimal raw GObject property access for objects the binding has no wrapper type for (libnice's GstWebRTCNice
-/// and NiceAgent). Reading those through the binding's generic wrappers over-releases them and crashes
-/// (GST_IS_WEBRTC_ICE assertion), so this goes straight to GLib with non-variadic calls and manages refs itself.
+/// and NiceAgent), and for reading any element's properties as text (the admin pipeline view). Reading such objects
+/// through the binding's generic wrappers over-releases them and crashes (GST_IS_WEBRTC_ICE assertion), so this goes
+/// straight to GLib with non-variadic calls and manages refs itself.
 /// </summary>
 internal static unsafe class NativeGObject
 {
     private const nuint GTypeBoolean = 5 << 2;
     private const nuint GTypeObject = 20 << 2;
+    private const uint ParamReadable = 1;
+    private const uint ParamDeprecated = 1u << 31;
 
     private static readonly Api? Functions = Load();
 
@@ -51,6 +54,96 @@ internal static unsafe class NativeGObject
         }
         f.ValueUnset(&value);
         return true;
+    }
+
+    /// <summary>
+    /// Every readable, non-deprecated property of the object as (name, value as text), in the class's order. Values
+    /// are GLib's own rendering (<c>g_strdup_value_contents</c>): strings quoted, enums by name, objects as
+    /// "((Type*) address)". Long values are cut to <paramref name="maxLength"/> characters.
+    /// </summary>
+    public static IReadOnlyList<(string Name, string Value)> ReadProperties(nint obj, int maxLength = 400)
+    {
+        var result = new List<(string, string)>();
+        if (Functions is not { } f || obj == 0)
+        {
+            return result;
+        }
+        uint count;
+        var specs = f.ListProperties(*(nint*)obj, &count);
+        try
+        {
+            for (var i = 0; i < count; i++)
+            {
+                var spec = ((nint*)specs)[i];
+                var flags = *(uint*)(spec + 2 * sizeof(nint)); // GParamSpec: g_type_instance, name, flags, value_type…
+                if ((flags & ParamReadable) == 0 || (flags & ParamDeprecated) != 0)
+                {
+                    continue;
+                }
+                var name = Marshal.PtrToStringUTF8(f.ParamSpecGetName(spec)) ?? "";
+                var type = *(nuint*)(spec + 3 * sizeof(nint));
+                result.Add((name, ValueText(f, obj, f.ParamSpecGetName(spec), type, maxLength)));
+            }
+        }
+        finally
+        {
+            f.Free(specs);
+        }
+        return result;
+    }
+
+    /// <summary>One property as text (as <see cref="ReadProperties"/>), or null if the object has no such readable property.</summary>
+    public static string? ReadProperty(nint obj, string name, int maxLength = 400)
+    {
+        if (Functions is not { } f || obj == 0)
+        {
+            return null;
+        }
+        fixed (byte* n = Utf8(name))
+        {
+            var spec = f.FindProperty(*(nint*)obj, (nint)n);
+            if (spec == 0 || (*(uint*)(spec + 2 * sizeof(nint)) & ParamReadable) == 0)
+            {
+                return null;
+            }
+            return ValueText(f, obj, (nint)n, *(nuint*)(spec + 3 * sizeof(nint)), maxLength);
+        }
+    }
+
+    /// <summary>The name of the GstObject held in an object-typed property (e.g. input-selector's active-pad), or null.</summary>
+    public static string? ReadObjectName(nint obj, string property)
+    {
+        var held = GetObjectProperty(obj, property);
+        if (held == 0)
+        {
+            return null;
+        }
+        try
+        {
+            return ReadProperty(held, "name")?.Trim('"');
+        }
+        finally
+        {
+            Unref(held);
+        }
+    }
+
+    private static string ValueText(Api f, nint obj, nint name, nuint type, int maxLength)
+    {
+        GValue value = default;
+        f.ValueInit(&value, type);
+        f.GetProperty(obj, name, &value);
+        var text = f.ValueContents(&value);
+        f.ValueUnset(&value);
+        var result = Marshal.PtrToStringUTF8(text) ?? "";
+        f.Free(text);
+        // Enums and flags come as "((TypeName) VALUE_NAME)": keep the value. Objects ("((Type*) 0x…)") stay as they are.
+        if (result.StartsWith("((", StringComparison.Ordinal) && result.EndsWith(')') && result.IndexOf(") ", StringComparison.Ordinal) is > 2 and var close
+            && result[close - 1] != '*')
+        {
+            result = result[(close + 2)..^1];
+        }
+        return result.Length > maxLength ? result[..maxLength] + "…" : result;
     }
 
     public static void Unref(nint obj)
@@ -108,6 +201,15 @@ internal static unsafe class NativeGObject
             (delegate* unmanaged<nint, nint, GValue*, void>)NativeLibrary.GetExport(lib, "g_object_set_property");
         public readonly delegate* unmanaged<nint, nint, nint> FindProperty =
             (delegate* unmanaged<nint, nint, nint>)NativeLibrary.GetExport(lib, "g_object_class_find_property");
+        public readonly delegate* unmanaged<nint, uint*, nint> ListProperties =
+            (delegate* unmanaged<nint, uint*, nint>)NativeLibrary.GetExport(lib, "g_object_class_list_properties");
+        public readonly delegate* unmanaged<nint, nint> ParamSpecGetName =
+            (delegate* unmanaged<nint, nint>)NativeLibrary.GetExport(lib, "g_param_spec_get_name");
+        public readonly delegate* unmanaged<GValue*, nint> ValueContents =
+            (delegate* unmanaged<GValue*, nint>)NativeLibrary.GetExport(lib, "g_strdup_value_contents");
+        public readonly delegate* unmanaged<nint, void> Free = (delegate* unmanaged<nint, void>)NativeLibrary.GetExport(
+            NativeLibrary.TryLoad("libglib-2.0.so.0", out var glib) || NativeLibrary.TryLoad("glib-2.0-0.dll", out glib)
+                || NativeLibrary.TryLoad("libglib-2.0.0.dylib", out glib) ? glib : lib, "g_free");
         public readonly delegate* unmanaged<nint, void> ObjectUnref =
             (delegate* unmanaged<nint, void>)NativeLibrary.GetExport(lib, "g_object_unref");
     }

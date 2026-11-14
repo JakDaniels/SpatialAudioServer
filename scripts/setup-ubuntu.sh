@@ -9,7 +9,7 @@ sudo apt-get install -y \
   gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
   libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
   gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gir1.2-gst-plugins-bad-1.0 \
-  graphviz sqlite3
+  sqlite3
 # .NET SDK: 26.04 should have dotnet-sdk-10.0 in the archive; 24.04 has 8.0. Install whichever exists.
 sudo apt-get install -y dotnet-sdk-10.0 || sudo apt-get install -y dotnet-sdk-8.0
 echo "--- versions"

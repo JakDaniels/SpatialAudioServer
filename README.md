@@ -20,7 +20,7 @@ OpenSim region module, still to come) and for web browsers.
 - **Spatial audio:** gain by distance and left/right pan from positions and facing; clients can turn their own
   listener with their session token.
 - **Admin UI** (`/admin/`, own password): rooms, live participant levels and WebRTC stats, mute, gain and kick, an
-  event log and session history.
+  event log and session history, and a live view of each room's GStreamer pipeline as blocks and wires.
 - **Test web client** (`/client/`): join from a browser with a join link, or create rooms in test mode with an API key.
 - **Operational hardening:** rooms persist in SQLite; a room's media runs only while someone is in it; dead
   connections and unused joins are removed; graceful shutdown; signalling rate limits and input limits; runs as a
@@ -63,4 +63,5 @@ Tests: `dotnet test src`.
 
 ## Licence
 
-Apache-2.0, see [LICENSE](LICENSE).
+Apache-2.0, see [LICENSE](LICENSE). The admin UI includes [elkjs](https://github.com/kieler/elkjs) for graph layout,
+unmodified, under its own licence (EPL-2.0; `src/SpatialAudioServer/wwwroot/admin/vendor/elkjs/`).

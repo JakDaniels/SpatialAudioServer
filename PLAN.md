@@ -77,7 +77,8 @@ Rules for the pipeline code:
   `pad-added`, `notify::connection-state`) arrive on GStreamer threads and only enqueue work.
 - Each pipeline's bus is watched on its own thread (`BusWatcher`; no GLib main loop): errors, state changes,
   latency recalculation.
-- The pipeline graph (`.dot`) is available on demand from the admin API.
+- The pipeline is visible in the admin UI's pipeline view (JSON snapshot from the room's worker), and GStreamer's own
+  `.dot` dump can be downloaded.
 
 ### WebRTC specifics
 - Server is the SDP **answerer**: browser creates the offer (audio sendrecv, Opus), server returns the answer.
@@ -177,7 +178,7 @@ Static page(s) under `wwwroot/admin`, vanilla JS, polling `/api/admin/*` (or SSE
 - Room detail: participants with display name, external id, ICE/connection state, muted, gain, position,
   inbound level meter (via `level` element messages), bitrate/packet loss (webrtcbin `get-stats`).
 - Actions: create/delete room, kick/mute participant.
-- Event log, server status, download pipeline `.dot`/rendered graph.
+- Event log, server status, pipeline view (blocks and wires, see Phase 4), download pipeline `.dot`.
 
 Also a minimal **test web client** (`wwwroot/client`): join via token, mic capture, plays the mix, shows
 connection state. Used for manual testing and as the reference for real clients.
@@ -353,8 +354,7 @@ tested without GStreamer.
      deleted room's teardown running concurrently).
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.
    **First version done 2026-11-13** (`/admin/`). Decided: password via CLI with the hash in SQLite; an admin session
-   may use the whole control API, admin-only endpoints need the session; graph rendered server-side when Graphviz is
-   installed.
+   may use the whole control API, admin-only endpoints need the session.
    - **Password:** `SpatialAudioServer admin set-password` (no echo, twice; or piped on stdin) stores a PBKDF2-SHA256
      hash (210k iterations) in the new `settings` table (migration 5); `Admin:PasswordHash` (from `admin
      hash-password`) wins when set; `admin clear-password`. Start-up warns when none is set.
@@ -365,19 +365,35 @@ tested without GStreamer.
    - **Admin-only endpoints** (`/api/admin/…`): `events` (?room, ?before paging, ?limit), `rooms/{id}/sessions`,
      `rooms/{id}/live` (engine counters + per participant: input level dBFS, peak-held RMS from `RoomInterleave` for
      both matrix engines, none for pairchains; webrtcbin get-stats: packets/bytes in and out, loss, jitter, RTT,
-     client-reported loss, ICE candidate types), `rooms/{id}/graph.dot`, `rooms/{id}/graph.svg` (Graphviz `dot`, 501
-     if absent). get-stats is emitted on the room worker and the replies awaited off it, so a participant leaving
+     client-reported loss, ICE candidate types), `rooms/{id}/graph` and `rooms/{id}/graph/element` (pipeline view,
+     below), `rooms/{id}/graph.dot` (GStreamer's dump). get-stats is emitted on the room worker and the replies awaited off it, so a participant leaving
      meanwhile cannot free the element under the call.
    - **UI** (`wwwroot/admin`, reuses the client's CSS): sign-in, status line (version, rooms, memory, CPU), rooms
      table + create (engine, spatial, max) / delete, room view (participants: state, level meter, kbit/s in/out
-     from byte deltas, loss, jitter, RTT, path, position, gain; mute/unmute, kick; invite link; pipeline graph and
+     from byte deltas, loss, jitter, RTT, path, position, gain; mute/unmute, kick; invite link; pipeline view and
      .dot; session history), event log for all rooms or the selected one, with paging. Polls: room 1 s, rooms 3 s,
      status and events 5 s. Checked in headless Chrome with speaking bots (screenshots).
    - Tests: `AdminAuthTests` (hashing, login, throttle, logout, cookie flags, config precedence, admin ⊇ API, API
-     key ≠ admin), `AdminMediaTests` (levels of talking vs silent clients, connection stats, graph).
+     key ≠ admin), `AdminMediaTests` (levels of talking vs silent clients, connection stats, graph endpoints).
+   - **Pipeline view (2026-11-14)**, `/admin/graph.html?room=…` (the room view's "Pipeline" button):
+     - `GET /api/admin/rooms/{id}/graph[?expand=bin path…]`: top-level elements with pads (negotiated caps), links,
+       state and a few live properties (queue fill, selector input, connection state, encoder bitrate); a bin's
+       children only when its path is in `expand`. Taken on the room worker (`PipelineGraphReader`).
+       `…/graph/element?path=` returns every readable property of one element, read with raw GObject calls
+       (`NativeGObject.ReadProperties`), so webrtcbin's libnice objects are never wrapped by the binding.
+     - Each top-level element is put in a **summary block** from the names the engines give their elements: a
+       participant's receive, decode, own mix (talker) and listener's mix, the room input, each shared mix
+       (cluster). `GraphSuite` (per engine) fails if an element lands in no block.
+     - The page lays the graph out with **ELK** (elkjs 0.12.1, EPL-2.0, vendored unmodified in
+       `wwwroot/admin/vendor/elkjs`, runs in a worker) and draws SVG blocks with pads as ports and orthogonal wires.
+       Summary first; a block or bin opens in place (double-click). A participant's webrtcbin is drawn twice
+       (receive on the left, send on the right) so audio reads left to right. Hover: caps of a wire or pad, live
+       values; click: side panel with what the block does, pads and links, all properties. Highlight one
+       participant's blocks and their neighbours; pan/zoom/fit; refreshes every 2 s and lays out again only when
+       the structure changes.
 5. **Hardening.** Limits, input validation, token expiry, rate limiting, graceful shutdown, Dockerfile,
    Windows/Linux run docs, load test using the GStreamer fake-client tool.
-   **Started 2026-11-14.** Decided: no Dockerfile for now; the Graphviz graph is parked (output not good enough);
+   **Started 2026-11-14.** Decided: no Dockerfile for now;
    participants who never connect are removed when their join token expires; an empty room's media stops after 30 s.
    - **Media on demand:** a room's pipeline starts with its first participant and stops once the room has been empty
      for `Media:IdleRoomTimeout` (30 s; 0 = at once), so stored rooms cost nothing. `RoomMediaStats.running`; the

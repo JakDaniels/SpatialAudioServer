@@ -172,7 +172,7 @@ function selectRoom(id) {
   $("room").hidden = false;
   $("history").hidden = true;
   $("inviteLink").hidden = true;
-  $("graphSvg").href = `/api/admin/rooms/${id}/graph.svg`;
+  $("graphView").href = `graph.html?room=${id}`;
   $("graphDot").href = `/api/admin/rooms/${id}/graph.dot`;
   for (const row of $("rooms").tBodies[0].rows) row.classList.toggle("selected", row.dataset.room === id);
   resetEvents();
