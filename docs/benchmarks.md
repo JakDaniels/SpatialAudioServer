@@ -51,21 +51,10 @@ detection at 50 Hz spacing, not a routing fault: no self chain exists) came from
 Finding: cost is ~0.9–1% of a core per chain and chains grow as N(N−1): 32 people = 992 chains ≈ 9 cores. Threads
 also grow as N² (each chain's queue is a streaming thread: ~1,500 for one 32-person room).
 
-## 2026-11-12: engine comparison (N6005, server and tool on one box)
+## 2026-11-12: matrix vs pairchains (N6005, server and tool on one box)
 
-`--engine pairchains,pairchains-lite`, 15 s (`pairchains-lite`: no per-chain queue/audioamplify; since removed):
-
-| participants | engine | server CPU | threads | heard min |
-|---|---|---|---|---|
-| 8 | pairchains | 54% of 1 core | 173 | 100% |
-| 8 | pairchains-lite | 57% of 1 core | 117 | 100% |
-| 16 | pairchains | 204% of 1 core (51% of 4) | 445 | 100% |
-| 16 | pairchains-lite | 121% of 1 core (30% of 4) | 204 | 100% |
-
-Dropping the per-chain queue threads saves ~40% at 16, but the cost is still per pair (lite at 32 ≈ 5 cores).
-
-The `matrix` engine on the same box, 16 people, 15–20 s: matrix 90–123% of one core / ~190 threads; pairchains-lite
-114–127% / ~204; pairchains ~205–212% / 445. 24 people on matrix: 186% (with the tool using another 173%, so
+16 people, 15–20 s: matrix 90–123% of one core / ~190 threads; pairchains
+~205–212% / 445. 24 people on matrix: 186% (with the tool using another 173%, so
 inflated). The remaining cost looks per participant (decode, encode, SRTP, jitter buffer), not per pair. One
 cold-server 16-person matrix run failed the 2% self/leak check (later runs 0.0–0.2%).
 
@@ -76,10 +65,8 @@ cold-server 16-person matrix run failed the 2% self/leak check (later runs 0.0�
 | people | engine | server CPU | threads | result |
 |---|---|---|---|---|
 | 16 | matrix | 85% of 1 core (21% of 4) | 192 | PASS |
-| 16 | pairchains-lite | 116% (29%) | 207 | PASS |
 | 16 | pairchains | 176% (44%) | 446 | PASS |
 | 32 | matrix | **310% (78% of 4)** | 352 | PASS (self max 0.7%) |
-| 32 | pairchains-lite | 359% (90%) | 383 | FAIL: nothing heard (overloaded) |
 
 Per-person cost rose from 5.3% of a core at 16 to 9.7% at 32; the matrix arithmetic is negligible, so probably
 contention (VM, ~80% busy, cache). Per-thread CPU at 16 (matrix, from /proc thread names): listener threads (matrix
