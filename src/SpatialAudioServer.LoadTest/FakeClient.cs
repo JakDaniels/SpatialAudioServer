@@ -273,9 +273,13 @@ public sealed class FakeClient : IDisposable
                     Interlocked.Increment(ref _remoteCandidates);
                 }
                 received = remote.Next;
-                if (remote.Complete && local.Complete && remote.State == Rooms.ParticipantState.Connected)
+                if (remote.Complete)
                 {
-                    await Task.Delay(500, cancel); // nothing left to exchange; idle until disposed
+                    // The server has no more candidates, so its long-poll now returns at once: pace the loop (it
+                    // still sends our own late candidates and notices removal). Without this it spins until
+                    // connected and runs into the signalling rate limit.
+                    var idle = local.Complete && remote.State == Rooms.ParticipantState.Connected;
+                    await Task.Delay(idle ? 500 : 200, cancel);
                 }
             }
         }
