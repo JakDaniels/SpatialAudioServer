@@ -25,6 +25,7 @@ internal sealed class RoomPipeline : IDisposable
     private readonly IMixEngine _engine;
     private readonly ConcurrentDictionary<Guid, ParticipantMedia> _participants = new();
     private readonly BusWatcher _bus;
+    private readonly ViewerData _viewers;
     private int _disposed;
 
     public RoomPipeline(RoomSnapshot room, MediaOptions options, ILogger log)
@@ -43,6 +44,8 @@ internal sealed class RoomPipeline : IDisposable
         _bus = new BusWatcher(_pipeline, $"room-{roomId.ToString()[..8]}", log);
         Spatial = room.Spatial;
         _engine = MixEngines.Create(room.Engine, new MixEngineContext(roomId, room.MaxParticipants, _pipeline, _worker, options, log, room.Spatial));
+        _viewers = new ViewerData(_worker, options, () => _engine.InputLevels,
+            id => _participants.TryGetValue(id, out var p) ? p.Endpoint?.Rtc : null);
     }
 
     public Guid RoomId { get; }
@@ -112,6 +115,7 @@ internal sealed class RoomPipeline : IDisposable
         if (_participants.TryAdd(participant.Id, new ParticipantMedia(participant.Id)))
         {
             _engine.ParticipantAdded(participant);
+            _viewers.Added(participant);
         }
     });
 
@@ -129,6 +133,7 @@ internal sealed class RoomPipeline : IDisposable
         {
             RemoveEndpoint(p);
             _engine.ParticipantRemoved(participantId);
+            _viewers.Removed(participantId);
             _log.LogInformation("Room {RoomId}: participant {ParticipantId} media removed", RoomId, participantId);
         }
     });
@@ -213,6 +218,7 @@ internal sealed class RoomPipeline : IDisposable
         {
             _log.LogError(ex, "Room {RoomId}: teardown failed", RoomId);
         }
+        _viewers.Dispose();
         _worker.Dispose();
         _bus.Dispose();
         _pipeline.Dispose();
@@ -247,10 +253,21 @@ internal sealed class RoomPipeline : IDisposable
             RoomId, p.Id, rtc.DataChannelLabel);
         rtc.DataMessage += text =>
         {
-            if (!endpoint.Removed)
+            if (endpoint.Removed)
             {
-                DataReceived?.Invoke(p.Id, text);
+                return;
             }
+            if (text.Contains("\"j\"", StringComparison.Ordinal) && SlData.Parse(text) is { Joined: true })
+            {
+                _worker.Post(() =>
+                {
+                    if (!endpoint.Removed)
+                    {
+                        _viewers.ViewerJoined(p.Id);
+                    }
+                });
+            }
+            DataReceived?.Invoke(p.Id, text);
         };
         // Only webrtcbin starts now; the engine starts its send branch once it is linked to the negotiated transceiver.
         rtc.Element.SyncStateWithParent();
@@ -286,6 +303,7 @@ internal sealed class RoomPipeline : IDisposable
         {
             endpoint.Removed = true; // no source can be attached from here on
         }
+        _viewers.EndpointRemoved(p.Id);
         if (endpoint.ListenerAttached || endpoint.SourceAttached)
         {
             _engine.Disconnect(p.Id);

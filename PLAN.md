@@ -352,6 +352,11 @@ tested without GStreamer.
      the fresh second room one direction (fake2 → fake3) never came up within 20 s while the other worked; 12/12
      passes when re-run alone. Not yet diagnosed (candidates: a rare ingress/answer race, or interference from the
      deleted room's teardown running concurrently).
+   - **Parked: one test-host crash (2026-11-15).** One full run died with "Fatal error. Internal CLR error.
+     (0x80131506)" and no other output, so the test it was in is unknown; the next three full runs passed (148/148).
+     It came with the data channel work (handlers on viewers' SLData channels, server and fake clients), so that is
+     the first suspect, though the binding's handler release looked safe on reading. If it recurs: `dotnet test src
+     --blame-crash` names the test and keeps a dump.
 4. **Admin UI.** Rooms/participants views, levels/stats, kick/mute, event log, pipeline graph.
    **First version done 2026-11-13** (`/admin/`). Decided: password via CLI with the hash in SQLite; an admin session
    may use the whole control API, admin-only endpoints need the session.
@@ -509,7 +514,12 @@ tested without GStreamer.
      `v` speaking, `m` moderator-muted, `V` server version string.
    - Covered by `ViewerCompatibilityTests` (viewer-style fake clients: SLData channel, the munging byte for byte,
      `trickle:false`, never fetching server candidates) and `SdpTests`. The server reads SLData (2026-11-14): poses in
-     tethered rooms (below); `j`, `m` and `ug` are logged only, for now. Not yet: writing to the viewer.
+     tethered rooms (below); `m` and `ug` are logged only, for now. It writes to viewers (`Media/ViewerData.cs`,
+     2026-11-15): on a viewer's `j`, everyone in the room (`j {p:true}`, itself included) and `V` under its own
+     UUID; `j`/`l` to listening viewers as others join and leave; every 200 ms the `p` (level × 128, −60…0 dBFS)
+     and `v` (above `Media:VadThresholdDb`, with `VadHangoverMs`) that changed. Keys are avatar UUIDs; browsers and
+     bots (no UUID external id) are keyed by participant id and show as unknown avatars. Engines without input
+     levels (pairchains) send no `p`/`v`. Everyone is announced as primary: neighbouring regions come later.
    - **Client-set poses (decided in part 2026-11-13; FOR DISCUSSION AND DECISION when testing with SL viewers).**
      The question: may participants set their own position/orientation, and how does that fit security? Positions
      decide what you hear in a spatial room, so a client that can move anywhere can walk up to any conversation
@@ -602,7 +612,8 @@ tested without GStreamer.
        region; logout, crash and reconnect.
      - **Progress (2026-11-14):** (a) and (b) done: Firestorm 7.2 (Windows) talks and hears bots in stereo. Then,
        by choice, reading SLData from (c) and the first part of (d): simulator position push, viewer `sp/lp` in
-       tethered rooms. Next: the rest of (c) (writing to the viewer), neighbouring regions.
+       tethered rooms. Then the rest of (c) (2026-11-15): writing `j/l/p/v/V` to viewers. Next: neighbouring
+       regions; (f) per-peer mute/volume.
      - **Order:** (a) module skeleton that builds in the OpenSim tree and loads under the core module; (b) provision
        and signalling → audio between two Firestorm viewers in one region (non-spatial mix is fine at first);
        (c) server SLData: join/leave/levels/speaking (white dots); (d) positions: simulator push + viewer `sp/lp` with

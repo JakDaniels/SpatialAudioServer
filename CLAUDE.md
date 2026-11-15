@@ -42,13 +42,14 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 - **Phase 7 (SL/OpenSim) under way** (PLAN.md Phase 7, "Plan for the OpenSim side"): a back end for OpenSim's
   own WebRTC region module, in the separate repo `os-webrtc-sas` (cloned at `docs/reference/opensim/addon-modules/`,
   OpenSim master, net8). Working with Firestorm 7.2 (on the Windows machine; 22.04's glibc is too old): region and
-  parcel voice, simulator position push (`POST …/poses`), the server reads SLData. Next: writing SLData to the viewer.
+  parcel voice, simulator position push (`POST …/poses`), the server reads SLData and writes `j/l/p/v/V` to viewers
+  (`Media/ViewerData.cs`). Next: neighbouring regions, per-peer mute/volume.
   Test OpenSim standalone runs in `screen -S opensim` from `docs/reference/opensim/bin` (avatars Test One/Test Two).
 - **Phase 5 (hardening) under way** (PLAN.md Phase 5): media on demand (`Media:IdleRoomTimeout`), stale joins removed at
   token expiry, graceful shutdown, signalling rate limits, input limits, security headers, run docs in
   `docs/running.md` (Linux + Windows). No Dockerfile for now. Windows run done 2026-11-14 (server + load tests pass;
   results in `docs/benchmarks.md`, which holds all benchmark numbers: keep PLAN.md to conclusions).
-  Parked: the intermittent pairchains test failure.
+  Parked: the intermittent pairchains test failure; one unexplained test-host crash (PLAN.md Phase 5).
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.
