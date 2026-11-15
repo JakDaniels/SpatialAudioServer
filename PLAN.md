@@ -672,8 +672,10 @@ tested without GStreamer.
        (fixed there; not ours). Declines: the callee's `decline p2p voice` (also sent when its 30 s incoming-call
        dialog runs out) now reaches the caller as `ChatterBoxSessionAgentListUpdates` with the callee's
        `can_voice_chat: false`, which the viewer shows as declined and ends the call. Open: ringing across simulators; group calls
-       (this SQLite standalone has no groups: OpenSim's groups V2 need MySQL or PostgreSQL); whether call rooms
-       should use `matrix` rather than the non-spatial default `matrix-shared` (not shown to matter here).
+       (this SQLite standalone has no groups: OpenSim's groups V2 need MySQL or PostgreSQL). Call rooms keep the
+       non-spatial default `matrix-shared`: re-tested after the PulseAudio fix, speech both ways is clean. One
+       Firestorm crash (Windows, Test One calling) came right after a server restart, between `call` and joining the
+       call room; not repeatable since, put down to the viewer meeting a restarted voice server mid-reconnect.
 8. **(Ideas, not started; FOR DISCUSSION AND DECISION) In-world presence and voice agents (OpenSim NPCs).**
    Written up 2026-11-15 before any implementation. The principle: **OpenSim decides who exists in the region and
    what voice it has; the audio server only carries the sound.** The audio server never creates anything in a
