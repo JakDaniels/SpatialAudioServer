@@ -6,7 +6,7 @@ Clients connect with WebRTC. The server mixes the audio itself and sends each li
 else in the room, without their own voice (mix-minus). In a spatial room each voice is placed by where the speaker
 stands and which way the listener faces. Rooms and participants are managed by another program, for example a
 virtual-world region, through a JSON HTTP API. The aim is voice for Second Life / OpenSimulator viewers (through an
-OpenSim region module, still to come) and for web browsers.
+OpenSim region module, here: https://github.com/JakDaniels/os-webrtc-sas) and for web browsers.
 
 ## Features
 
