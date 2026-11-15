@@ -48,6 +48,10 @@ public sealed partial class WebRtcBin : IDisposable
                 lock (_candidates)
                 {
                     _candidates.Add(new IceCandidate(index, candidate));
+                    if (_publicAddress is { } address && PublicCopy(candidate, address) is { } copy)
+                    {
+                        _candidates.Add(new IceCandidate(index, copy));
+                    }
                     SignalCandidates();
                 }
             }
@@ -93,6 +97,54 @@ public sealed partial class WebRtcBin : IDisposable
     }
 
     public Element Element { get; }
+
+    /// <summary>The host's public address (1:1 NAT): local host candidates are also given with it.</summary>
+    private System.Net.IPAddress? _publicAddress;
+
+    /// <summary>
+    /// Applies <c>Media:Network</c>: the ICE agent's port range (GstWebRTCICE min/max-rtp-port) and the public address
+    /// that local host candidates are copied with. Call before negotiating.
+    /// </summary>
+    public void ConfigureNetwork(Configuration.MediaNetworkOptions network)
+    {
+        if (network.MinPort != 0 || network.MaxPort != 0)
+        {
+            var ice = NativeGObject.GetObjectProperty(Element.Handle, "ice-agent");
+            try
+            {
+                // max first: the agent warns (and keeps the old value) when min would exceed the current max.
+                NativeGObject.SetUIntProperty(ice, "max-rtp-port", network.MaxPort);
+                NativeGObject.SetUIntProperty(ice, "min-rtp-port", network.MinPort);
+            }
+            finally
+            {
+                NativeGObject.Unref(ice);
+            }
+        }
+        _publicAddress = System.Net.IPAddress.TryParse(network.PublicAddress, out var address) ? address : null;
+    }
+
+    /// <summary>
+    /// A local host candidate ("candidate:1 1 UDP 2015363327 10.0.0.5 40012 typ host") as clients reach it through
+    /// 1:1 NAT: the same with <paramref name="publicAddress"/>, its own foundation and a slightly lower priority (so a
+    /// client on the same network still prefers the direct address). Null for anything else (another address family,
+    /// server-reflexive or relayed candidates, the public address itself).
+    /// </summary>
+    public static string? PublicCopy(string candidate, System.Net.IPAddress publicAddress)
+    {
+        var parts = candidate.Split(' ');
+        var typ = Array.IndexOf(parts, "typ");
+        if (parts.Length < 8 || typ != 6 || parts[7] != "host" || !parts[0].StartsWith("candidate:", StringComparison.Ordinal)
+            || !System.Net.IPAddress.TryParse(parts[4], out var local) || local.AddressFamily != publicAddress.AddressFamily
+            || local.Equals(publicAddress) || !uint.TryParse(parts[3], out var priority))
+        {
+            return null;
+        }
+        parts[0] += "9"; // a foundation of its own (ICE foundations group candidates of the same base and type)
+        parts[3] = Math.Max(1, priority - 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        parts[4] = publicAddress.ToString();
+        return string.Join(' ', parts);
+    }
 
     /// <summary>Raised on webrtcbin's thread.</summary>
     public event Action<WebRTCPeerConnectionState>? ConnectionStateChanged;

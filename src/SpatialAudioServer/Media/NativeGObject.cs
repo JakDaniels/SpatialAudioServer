@@ -12,6 +12,7 @@ namespace SpatialAudioServer.Media;
 internal static unsafe class NativeGObject
 {
     private const nuint GTypeBoolean = 5 << 2;
+    private const nuint GTypeUInt = 7 << 2;
     private const nuint GTypeObject = 20 << 2;
     private const uint ParamReadable = 1;
     private const uint ParamDeprecated = 1u << 31;
@@ -48,6 +49,24 @@ internal static unsafe class NativeGObject
         GValue value = default;
         f.ValueInit(&value, GTypeBoolean);
         f.ValueSetBoolean(&value, on ? 1 : 0);
+        fixed (byte* n = Utf8(name))
+        {
+            f.SetProperty(obj, (nint)n, &value);
+        }
+        f.ValueUnset(&value);
+        return true;
+    }
+
+    /// <summary>Sets an unsigned integer property if the object has it. Returns whether it was set.</summary>
+    public static bool SetUIntProperty(nint obj, string name, uint number)
+    {
+        if (Functions is not { } f || obj == 0 || !HasProperty(obj, name))
+        {
+            return false;
+        }
+        GValue value = default;
+        f.ValueInit(&value, GTypeUInt);
+        f.ValueSetUInt(&value, number);
         fixed (byte* n = Utf8(name))
         {
             f.SetProperty(obj, (nint)n, &value);
@@ -195,6 +214,8 @@ internal static unsafe class NativeGObject
             (delegate* unmanaged<GValue*, nint>)NativeLibrary.GetExport(lib, "g_value_dup_object");
         public readonly delegate* unmanaged<GValue*, int, void> ValueSetBoolean =
             (delegate* unmanaged<GValue*, int, void>)NativeLibrary.GetExport(lib, "g_value_set_boolean");
+        public readonly delegate* unmanaged<GValue*, uint, void> ValueSetUInt =
+            (delegate* unmanaged<GValue*, uint, void>)NativeLibrary.GetExport(lib, "g_value_set_uint");
         public readonly delegate* unmanaged<nint, nint, GValue*, void> GetProperty =
             (delegate* unmanaged<nint, nint, GValue*, void>)NativeLibrary.GetExport(lib, "g_object_get_property");
         public readonly delegate* unmanaged<nint, nint, GValue*, void> SetProperty =

@@ -77,6 +77,10 @@ For testing, a fixed key can be set in configuration instead (`Auth:ApiKeys`, se
 |---|---|---|
 | `Server:HttpPort`, `Server:HttpsPort` | 5000, 5001 | 0 turns one off |
 | `Server:CertificatePath`, `CertificatePassword` | unset | a real PFX; unset = self-signed dev certificate in `data/devcert.pfx` |
+| `Server:CertificateKeyPath` | unset | with a PEM `CertificatePath` (e.g. Let's Encrypt's `fullchain.pem`): its `privkey.pem` |
+| `Server:ListenAddress` | all interfaces | e.g. `127.0.0.1` behind a reverse proxy |
+| `Server:TrustedProxies` | `[]` | reverse proxies whose `X-Forwarded-For`/`-Proto` are believed ([internet.md](internet.md)) |
+| `Admin:AllowedNetworks`, `Auth:AllowedNetworks` | `[]` (anywhere) | where the admin UI / the control API may be used from; others get 404 |
 | `Storage:DatabasePath` | `data/spatialaudio.db` | rooms, keys, history |
 | `Auth:ApiKeys` | `[]` | fixed control-API keys (never stored) |
 | `Auth:JoinTokenLifetime` | 5 min | a participant who has not connected by then is removed (`join-expired`) |
@@ -89,6 +93,9 @@ For testing, a fixed key can be set in configuration instead (`Auth:ApiKeys`, se
 | `Media:DeadConnectionTimeout` | 10 s | a connection failed/disconnected this long is removed (`connection-lost`) |
 | `Media:Engine`, `Media:SpatialEngine` | `matrix-shared`, `matrix` | default mix engine for new rooms |
 | `Media:IceServers` | `[]` | STUN/TURN (not needed on a LAN) |
+| `Media:Network:MinPort`, `MaxPort` | any | the media port range (UDP and ICE-TCP), for firewalls |
+| `Media:Network:PublicAddress` | unset | the public address behind 1:1 NAT: host candidates are also given with it |
+| `Media:Spatial:DistanceModel`, `ReferenceDistance`, `Rolloff`, `MaxRange`, `Profiles` | exponential, 2 m, 1, 60 m | distance curve; rooms may name a profile (`outdoor`, `meeting`) |
 | `Media:OpusComplexity`, `OpusFrameMs`, `OpusBitrate` | 5, 40, 64000 | per listener's mix |
 
 ## 4. Network
@@ -102,8 +109,9 @@ For testing, a fixed key can be set in configuration instead (`Auth:ApiKeys`, se
     (with `dotnet run` it is `src\SpatialAudioServer\bin\Debug\net10.0\SpatialAudioServer.exe`), or add a rule:
     `New-NetFirewallRule -DisplayName SpatialAudioServer -Direction Inbound -Program C:\sas\SpatialAudioServer.exe -Action Allow -Profile Private`.
     Check the network is set to Private, not Public.
-- Rate limits use the TCP peer address. Behind a reverse proxy every client would share the proxy's address, so
-  forwarded headers would need configuring first (not needed while LAN-only).
+- Rate limits use the client's address. Behind a reverse proxy, list it in `Server:TrustedProxies`, or every client
+  shares the proxy's address.
+- **On the internet** (TLS, the media port range, NAT, TURN, hardening): see [internet.md](internet.md).
 
 ## 5. Running as a service
 

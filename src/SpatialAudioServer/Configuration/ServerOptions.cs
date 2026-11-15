@@ -11,13 +11,32 @@ public sealed class ServerOptions
     /// <summary>HTTPS port on all interfaces; 0 disables it. Browsers need HTTPS for the microphone off localhost.</summary>
     public int HttpsPort { get; set; } = 5001;
 
-    /// <summary>PFX certificate to use. When unset, a self-signed development certificate is generated.</summary>
+    /// <summary>
+    /// Only listen on this address (e.g. "127.0.0.1" behind a reverse proxy on the same host). Unset: all interfaces.
+    /// </summary>
+    public string? ListenAddress { get; set; }
+
+    /// <summary>
+    /// The certificate: a PFX (with <see cref="CertificatePassword"/>), or a PEM certificate chain (e.g. Let's
+    /// Encrypt's fullchain.pem) with its key in <see cref="CertificateKeyPath"/>. Read at start-up, so restart after
+    /// a renewal. When unset, a self-signed development certificate is generated.
+    /// </summary>
     public string? CertificatePath { get; set; }
 
     public string? CertificatePassword { get; set; }
 
+    /// <summary>The PEM private key (e.g. privkey.pem) for a PEM <see cref="CertificatePath"/>.</summary>
+    public string? CertificateKeyPath { get; set; }
+
     /// <summary>Where the generated development certificate is kept (relative to the content root).</summary>
     public string DevCertificatePath { get; set; } = "data/devcert.pfx";
+
+    /// <summary>
+    /// Reverse proxies (addresses or CIDR ranges, e.g. "127.0.0.1", "10.0.0.0/8") whose X-Forwarded-For and
+    /// X-Forwarded-Proto are believed, so rate limits, the admin login throttle and the network allow-lists see the
+    /// client's address. Empty: forwarded headers are ignored (a client could otherwise claim any address).
+    /// </summary>
+    public List<string> TrustedProxies { get; set; } = [];
 }
 
 /// <summary>Section "Storage".</summary>
@@ -43,6 +62,12 @@ public sealed class AdminOptions
 
     /// <summary>An admin session lasts this long after its last request.</summary>
     public TimeSpan SessionLifetime { get; set; } = TimeSpan.FromHours(8);
+
+    /// <summary>
+    /// Where the admin UI and its API (<c>/admin/</c>, <c>/api/admin/</c>) may be used from: addresses or CIDR
+    /// ranges. Empty: anywhere (the password still applies). Others get 404.
+    /// </summary>
+    public List<string> AllowedNetworks { get; set; } = [];
 }
 
 public sealed class AuthOptions
@@ -57,6 +82,13 @@ public sealed class AuthOptions
 
     /// <summary>How long a participant's one-time join token is valid.</summary>
     public TimeSpan JoinTokenLifetime { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Where the control API (<c>/api/</c>, but not the admin UI's) may be used from: addresses or CIDR ranges, e.g.
+    /// the simulators running the OpenSim module. Empty: anywhere (the API key still applies). Others get 404.
+    /// Client signalling (<c>/signal/</c>) and the web client are not affected.
+    /// </summary>
+    public List<string> AllowedNetworks { get; set; } = [];
 }
 
 /// <summary>Section "Limits". Defaults are the absolute maxima in PLAN.md.</summary>
@@ -157,6 +189,9 @@ public sealed class MediaOptions
     /// </summary>
     public List<IceServerConfig> IceServers { get; set; } = [];
 
+    /// <summary>Where WebRTC media listens and what address it gives clients (internet-facing hosts, NAT).</summary>
+    public MediaNetworkOptions Network { get; set; } = new();
+
     /// <summary>Distance model and cluster grid for spatial rooms.</summary>
     public Media.Spatial.SpatialOptions Spatial { get; set; } = new();
 
@@ -165,6 +200,26 @@ public sealed class MediaOptions
 }
 
 /// <summary>One STUN/TURN server entry, shaped like the browser's RTCIceServer.</summary>
+/// <summary>Section "Media:Network". All off by default, which suits a LAN.</summary>
+public sealed class MediaNetworkOptions
+{
+    /// <summary>
+    /// The UDP (and ICE-TCP) port range for media, so a firewall can open just that: each connection takes a port
+    /// per local address, so allow at least the participant limit (e.g. 40000–40999). 0 and 0: any port.
+    /// </summary>
+    public uint MinPort { get; set; }
+
+    public uint MaxPort { get; set; }
+
+    /// <summary>
+    /// The host's public address when it is behind 1:1 NAT (a cloud VM, a forwarded DMZ host): every local host
+    /// candidate is also given to clients with this address and the same port, so the NAT must keep ports (and
+    /// forward the media range). The local candidates stay, for clients on the same network. Unset: local
+    /// addresses only (STUN in <see cref="MediaOptions.IceServers"/> can find the public one instead).
+    /// </summary>
+    public string? PublicAddress { get; set; }
+}
+
 public sealed class IceServerConfig
 {
     public List<string> Urls { get; set; } = [];

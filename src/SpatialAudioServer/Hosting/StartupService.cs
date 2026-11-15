@@ -65,6 +65,17 @@ internal sealed class StartupService(
                     $"Media:Spatial:Profiles:{name} needs ReferenceDistance > 0, MaxRange ≥ ReferenceDistance, Rolloff > 0 and a DistanceModel.");
             }
         }
+        var network = media.Value.Network;
+        if ((network.MinPort != 0 || network.MaxPort != 0)
+            && (network.MinPort < 1024 || network.MaxPort > 65535 || network.MinPort > network.MaxPort))
+        {
+            throw new InvalidOperationException(
+                $"Media:Network needs 1024 ≤ MinPort ≤ MaxPort ≤ 65535, or both 0 (is {network.MinPort}–{network.MaxPort}).");
+        }
+        if (!string.IsNullOrWhiteSpace(network.PublicAddress) && !System.Net.IPAddress.TryParse(network.PublicAddress, out _))
+        {
+            throw new InvalidOperationException($"Media:Network:PublicAddress '{network.PublicAddress}' is not an IP address.");
+        }
         if (media.Value.DeadConnectionTimeout < TimeSpan.Zero)
         {
             throw new InvalidOperationException(
