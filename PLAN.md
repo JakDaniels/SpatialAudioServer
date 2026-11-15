@@ -642,7 +642,41 @@ tested without GStreamer.
        and signalling → audio between two Firestorm viewers in one region (non-spatial mix is fine at first);
        (c) server SLData: join/leave/levels/speaking (white dots); (d) positions: simulator push + viewer `sp/lp` with
        tethering, global coordinates, then neighbouring regions; (e) parcels; (f) per-peer mute/volume; (g) distance
-       model by ear against SL.
+       model by ear against SL. (g) is postponed (2026-11-15): two viewers at once are awkward to drive; NPC
+       speakers (Phase 8) should make it a one-viewer test. Until then bots placed with `--around` can stand in.
+8. **(Ideas, not started; FOR DISCUSSION AND DECISION) In-world presence and voice agents (OpenSim NPCs).**
+   Written up 2026-11-15 before any implementation. The principle: **OpenSim decides who exists in the region and
+   what voice it has; the audio server only carries the sound.** The audio server never creates anything in a
+   region. An NPC's voice is an ordinary room participant whose viewer key is the NPC's UUID: viewers then show a
+   real avatar with its name and a white dot, and its position comes from the module's existing pose push (NPCs are
+   scene presences). What differs is who is behind the participant.
+   - **(a) Web users as NPCs.** When a browser participant joins a region room, the module (from the room poll it
+     already runs for guest names) creates an NPC for them and ties the participant to the NPC's UUID (the one
+     server change: the integration sets the viewer key; the "(web)" system-user names are then no longer needed
+     for them). The NPC's position is the master: the web client's Stand picker and facing control become "move /
+     turn my NPC", applied in OpenSim, and the server follows the simulator's pose as for any avatar. Removing the
+     participant removes the NPC, and the other way round.
+   - **(b) Voice agents.** An agent needs what any participant has: a listener mix rendered at the NPC's position
+     (distance, direction, mix-minus) and an input placed there. So the agent is a **separate process, an "agent
+     bridge"**, that connects over WebRTC like the load tool's bots (reusing `FakeClient`) and chains speech to
+     text → an AI agent → text to speech. The server stays a plain MCU, with no AI inside it. Who said what: the
+     bridge opens the SLData channel like a viewer and uses the `v` speaking flags (separate per-speaker streams for
+     an agent could be a later server option). Expect about 1–3 s per spoken turn: fine for commands.
+   - **(c) Set-up from OSSL scripts.** A region module can expose functions to scripts
+     (`IScriptModuleComms.RegisterScriptInvocation`, as `modInvoke` uses), so a script can do
+     `key npc = osNpcCreate(...); sasNpcVoice(npc, "assistant");`. `"assistant"` names an **audio profile in the
+     module's ini** (which bridge, speech engines, AI endpoint, credentials), so scripts never hold keys and the
+     region owner decides what exists. The module creates the participant and hands the join to the bridge (a
+     running bridge service told about it, or polling for work). A module console command (e.g. `sas npc add NAME
+     X,Y,Z PROFILE`) would cover tests without scripts.
+   - **Simplest profiles first:** play a file or flite speech through a bridge; this also gives speakers with names,
+     dots and real positions for Phase 7 (g) and for load tests.
+   - **To decide:** privacy (an agent turns nearby speech into text: at least a visible notice, probably a parcel or
+     estate opt-in); whether a web user's moves always go through OpenSim (the NPC as the single source of truth);
+     NPC lifetime (NPCs vanish on a region restart unless a script recreates them); where the bridge lives (its own
+     project, from the load tool's client code); whether agents also take local chat as text.
+   - **Order:** (a) NPCs for web users (module work); (b) the script function and a simple file/flite profile;
+     (c) the speech-to-text → AI → text-to-speech agent.
 
 ## Risks / things to verify
 
