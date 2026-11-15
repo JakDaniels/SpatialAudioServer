@@ -668,9 +668,10 @@ tested without GStreamer.
        ringing works (fixed: a viewer whose IM window is already open sends only `call`, so ringing hangs off `call`,
        skipped when the other party is already in the call), answering, both in one non-spatial room, the room
        deleted at hang-up; bots joined to the call's room were heard clearly, with names. Test Two's sound arrived
-       garbled at −46 dB (a radio played into its microphone on a Linux PC; no packet loss, same with the `matrix`
-       engine), so its capture, not the call path; to recheck with people talking. Open: a decline (or the 30 s
-       incoming-call timeout) is not passed to the caller, who keeps "calling"; ringing across simulators; group calls
+       garbled at −46 dB: PulseAudio on that Linux PC used the wrong microphone input for the call's WebRTC stream
+       (fixed there; not ours). Declines: the callee's `decline p2p voice` (also sent when its 30 s incoming-call
+       dialog runs out) now reaches the caller as `ChatterBoxSessionAgentListUpdates` with the callee's
+       `can_voice_chat: false`, which the viewer shows as declined and ends the call. Open: ringing across simulators; group calls
        (this SQLite standalone has no groups: OpenSim's groups V2 need MySQL or PostgreSQL); whether call rooms
        should use `matrix` rather than the non-spatial default `matrix-shared` (not shown to matter here).
 8. **(Ideas, not started; FOR DISCUSSION AND DECISION) In-world presence and voice agents (OpenSim NPCs).**
