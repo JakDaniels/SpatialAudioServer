@@ -422,6 +422,16 @@ tested without GStreamer.
      started elsewhere (Windows services start in System32). `dotnet publish -r win-x64` checked from Linux (SQLite
      native DLL included); **the Windows run itself is for the user** (GStreamer 1.28 installers are now Inno Setup
      `.exe`, not MSI: choose the full install).
+   - **Internet-facing hosts (2026-11-15):** settings, all off by default (LAN unchanged): `Media:Network:MinPort/
+     MaxPort` (the ICE agent's `min/max-rtp-port`, set as raw GObject properties like the UPnP switch; covers UDP and
+     ICE-TCP passive; tested on a real connection), `Media:Network:PublicAddress` (1:1 NAT, Janus-style: every local
+     host candidate is also given with the public address, same port, its own foundation, priority − 1),
+     `Server:ListenAddress` (e.g. 127.0.0.1 behind a proxy), `Server:CertificateKeyPath` (PEM, e.g. Let's Encrypt,
+     re-loaded as PKCS#12 for Windows), `Server:TrustedProxies` (forwarded headers only from those), and network
+     allow-lists `Admin:AllowedNetworks` (admin UI + `/api/admin`) and `Auth:AllowedNetworks` (control API), others
+     404, signalling and the web client unaffected. Guide: `docs/internet.md` (TLS directly or behind a proxy,
+     firewall, NAT, coturn, hardening, checklist). Still to do: a run on a real public host; TURN tested for real;
+     short-lived TURN credentials (the configured ones are handed to every client).
 6. **Spatial (brought forward 2026-11-13, first version done).** Decided: a per-room `spatial` flag (create/ensure,
    default off, stored: migration 4, shown in room details); `matrix-shared` clusters listeners by rendering; an
    inverse, SL-like distance model.
@@ -682,7 +692,7 @@ tested without GStreamer.
        non-spatial default `matrix-shared`: re-tested after the PulseAudio fix, speech both ways is clean. One
        Firestorm crash (Windows, Test One calling) came right after a server restart, between `call` and joining the
        call room; not repeatable since, put down to the viewer meeting a restarted voice server mid-reconnect.
-8. **(Ideas, not started; FOR DISCUSSION AND DECISION) In-world presence and voice agents (OpenSim NPCs).**
+8. **(Parked 2026-11-15 after (a); ideas otherwise; FOR DISCUSSION AND DECISION) In-world presence and voice agents (OpenSim NPCs).**
    Written up 2026-11-15 before any implementation. The principle: **OpenSim decides who exists in the region and
    what voice it has; the audio server only carries the sound.** The audio server never creates anything in a
    region. An NPC's voice is an ordinary room participant whose viewer key is the NPC's UUID: viewers then show a

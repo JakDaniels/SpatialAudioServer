@@ -70,18 +70,37 @@ builder.WebHost.ConfigureKestrel((context, kestrel) =>
 {
     kestrel.Limits.MaxRequestBodySize = limitOptions.MaxRequestBodyBytes;
     var server = context.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new ServerOptions();
+    var address = server.ListenAddress is { Length: > 0 } listen ? System.Net.IPAddress.Parse(listen) : null;
+    void Listen(int port, Action<Microsoft.AspNetCore.Server.Kestrel.Core.ListenOptions>? configure = null)
+    {
+        if (address is null)
+        {
+            kestrel.ListenAnyIP(port, configure ?? (_ => { }));
+        }
+        else
+        {
+            kestrel.Listen(address, port, configure ?? (_ => { }));
+        }
+    }
     if (server.HttpPort > 0)
     {
-        kestrel.ListenAnyIP(server.HttpPort);
+        Listen(server.HttpPort);
     }
     if (server.HttpsPort > 0)
     {
         var log = kestrel.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger("Certificate");
+        var root = context.HostingEnvironment.ContentRootPath;
         var certificate = server.CertificatePath is { Length: > 0 } path
-            ? System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12FromFile(
-                Path.Combine(context.HostingEnvironment.ContentRootPath, path), server.CertificatePassword)
-            : DevCertificate.LoadOrCreate(Path.Combine(context.HostingEnvironment.ContentRootPath, server.DevCertificatePath), log);
-        kestrel.ListenAnyIP(server.HttpsPort, listen => listen.UseHttps(certificate));
+            ? server.CertificateKeyPath is { Length: > 0 } keyPath
+                // Re-loaded as PKCS#12: on Windows, TLS cannot use the ephemeral key a PEM file loads with.
+                ? System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12(
+                    System.Security.Cryptography.X509Certificates.X509Certificate2.CreateFromPemFile(
+                        Path.Combine(root, path), Path.Combine(root, keyPath))
+                        .Export(System.Security.Cryptography.X509Certificates.X509ContentType.Pkcs12), null)
+                : System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12FromFile(
+                    Path.Combine(root, path), server.CertificatePassword)
+            : DevCertificate.LoadOrCreate(Path.Combine(root, server.DevCertificatePath), log);
+        Listen(server.HttpsPort, listen => listen.UseHttps(certificate));
     }
 });
 
@@ -94,6 +113,7 @@ if (cliCommand)
         : ApiKeyCommand.Run(app.Services, args[1..], Console.Out);
 }
 
+app.UseNetworkAccess(); // forwarded headers from trusted proxies, then the admin / control API allow-lists
 app.UseExceptionHandler();
 app.Use((http, next) =>
 {

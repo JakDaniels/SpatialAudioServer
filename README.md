@@ -28,13 +28,17 @@ OpenSim region module, here: https://github.com/JakDaniels/os-webrtc-sas) and fo
 - **Load tool** (`src/SpatialAudioServer.LoadTest`): fills rooms with fake WebRTC clients that check who hears
   whom and measure the server's CPU, or adds speaking bots to a room for listening tests.
 
-Runs on Linux and Windows (x64). Up to 16 rooms × 32 participants by default; LAN-only for now.
+Runs on Linux and Windows (x64). Up to 16 rooms × 32 participants by default; on a LAN, or on an internet-facing host
+with a fixed media port range, NAT support, TURN and network allow-lists (see [docs/internet.md](docs/internet.md)).
+Not yet tried on a real public host.
 
 ## Status
 
 Under development. Done: the control API, media core and mix engines, signalling and the test web client, the admin
-UI, spatial audio and most of the hardening. Still to come: the OpenSim region module and Second Life viewer
-support, distance profiles, TURN for use beyond the LAN. See the phases in [PLAN.md](PLAN.md).
+UI, spatial audio with distance profiles, the hardening and settings for internet-facing hosts, and Second Life
+viewer support through the OpenSim region add-on (https://github.com/JakDaniels/os-webrtc-sas): region and parcel
+voice, neighbouring regions, group and P2P calls, web users and bots shown in-world as NPCs. Parked: ringing callees
+on other simulators, voice agents. See the phases in [PLAN.md](PLAN.md).
 
 ## Quick start
 
@@ -56,6 +60,7 @@ Tests: `dotnet test src`.
 |---|---|
 | [PLAN.md](PLAN.md) | The specification: architecture, API, decisions and their reasons, phases and progress |
 | [docs/running.md](docs/running.md) | Installing, configuring and running on Linux and Windows, as a service, firewall, load tool |
+| [docs/internet.md](docs/internet.md) | On an internet-facing host: TLS, the media port range, NAT, TURN, hardening |
 | [docs/benchmarks.md](docs/benchmarks.md) | Load-test results: CPU per engine, room counts, test machines |
 | [scripts/loadtest-linux-x64/README.md](scripts/loadtest-linux-x64/README.md) | The self-contained load tool for a separate Linux machine |
 | [docs/gstreamer_acousticspace_design.md](docs/gstreamer_acousticspace_design.md) | Design notes for a possible acoustic-space DSP element |
