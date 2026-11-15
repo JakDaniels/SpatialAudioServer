@@ -514,7 +514,11 @@ tested without GStreamer.
      `v` speaking, `m` moderator-muted, `V` server version string.
    - Covered by `ViewerCompatibilityTests` (viewer-style fake clients: SLData channel, the munging byte for byte,
      `trickle:false`, never fetching server candidates) and `SdpTests`. The server reads SLData (2026-11-14): poses in
-     tethered rooms (below); `m` and `ug` are logged only, for now. It writes to viewers (`Media/ViewerData.cs`,
+     tethered rooms (below); `m` and `ug` (2026-11-15) as the viewer's own per-person mute and volume: kept on
+     the listener as `peers` (by viewer key: avatar UUID, or participant id for browsers and bots), gain = `ug` / 100
+     (the viewer's 0–1 slider × 220, or × 200 for values it restores on a join; capped at 4), and applied in
+     `MixEngineContext.Render`, so every engine has it (matrix-shared puts that listener in a mix of its own).
+     It writes to viewers (`Media/ViewerData.cs`,
      2026-11-15): on a viewer's `j`, everyone in the room (`j {p:true}`, itself included) and `V` under its own
      UUID; `j`/`l` to listening viewers as others join and leave; every 200 ms the `p` (level × 128, −60…0 dBFS)
      and `v` (above `Media:VadThresholdDb`, with `VadHangoverMs`) that changed. Keys are avatar UUIDs; browsers and
@@ -617,8 +621,8 @@ tested without GStreamer.
        region; logout, crash and reconnect.
      - **Progress (2026-11-14):** (a) and (b) done: Firestorm 7.2 (Windows) talks and hears bots in stereo. Then,
        by choice, reading SLData from (c) and the first part of (d): simulator position push, viewer `sp/lp` in
-       tethered rooms. Then the rest of (c) (2026-11-15): writing `j/l/p/v/V` to viewers. Next: neighbouring
-       regions; (f) per-peer mute/volume.
+       tethered rooms. Then the rest of (c) (2026-11-15): writing `j/l/p/v/V` to viewers. Then (f), per-peer mute/volume.
+       Next: a second avatar test; neighbouring regions.
      - **Order:** (a) module skeleton that builds in the OpenSim tree and loads under the core module; (b) provision
        and signalling → audio between two Firestorm viewers in one region (non-spatial mix is fine at first);
        (c) server SLData: join/leave/levels/speaking (white dots); (d) positions: simulator push + viewer `sp/lp` with

@@ -29,6 +29,16 @@ public enum ClientPose
     Tethered,
 }
 
+/// <summary>
+/// How one listener wants one other participant: muted, or at a volume (1 = as mixed), on top of the room's own
+/// gain and mute for that participant. Set by an SL viewer's SLData <c>m</c> and <c>ug</c> (its mute list and the
+/// per-person volume slider), so it only changes that listener's mix.
+/// </summary>
+public sealed record PeerSetting(bool Muted, double Gain)
+{
+    public static readonly PeerSetting Default = new(false, 1);
+}
+
 /// <summary>Where a viewer says its avatar (speaker) and its camera (listener) are, in room coordinates.</summary>
 public sealed record ClientPoseReport(Vec3 SpeakerPosition, Quat SpeakerOrientation, Vec3 ListenerPosition, Quat ListenerOrientation);
 
@@ -69,7 +79,15 @@ public sealed record ParticipantSnapshot(
     Vec3? ListenerPosition = null,
     Quat? ListenerOrientation = null,
     bool ClientNamed = false,
-    ClientPoseReport? ClientReport = null);
+    ClientPoseReport? ClientReport = null,
+    IReadOnlyDictionary<string, PeerSetting>? Peers = null)
+{
+    /// <summary>
+    /// How SL viewers know this participant: its avatar UUID when the external id is one, otherwise its participant
+    /// id (a web browser or bot). Lower case, as viewers write UUIDs. <see cref="Peers"/> is keyed by it.
+    /// </summary>
+    public string ViewerKey => Guid.TryParse(ExternalId, out var avatar) ? avatar.ToString() : Id.ToString();
+}
 
 /// <param name="Engine">Mix engine name (see <c>GET /api/status</c>); null uses the server default (Media:Engine).</param>
 /// <param name="Spatial">Mix by participant position (distance and direction); fixed for the room's life. Default off.</param>

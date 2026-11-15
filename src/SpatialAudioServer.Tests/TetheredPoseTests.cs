@@ -160,6 +160,28 @@ public sealed class TetheredRoomTests : IDisposable
     }
 
     [Fact]
+    public async Task A_viewers_mute_list_and_volumes_are_kept_per_person()
+    {
+        using var server = new ServerFactory(_dir.File("server.db"));
+        var api = server.CreateAuthedClient();
+        var rooms = server.Services.GetRequiredService<RoomManager>();
+        var room = await CreateRoom(api, new { name = "region", spatial = true, clientPose = "tethered" });
+        var viewer = await Join(api, room.Id, Guid.NewGuid().ToString());
+        var other = Guid.NewGuid();
+        var upper = other.ToString().ToUpperInvariant(); // viewers write lower case, but any form is accepted
+
+        rooms.ReceiveClientData(room.Id, viewer.ParticipantId, "{\"m\":{\"" + upper + "\":true},\"ug\":{\"" + upper + "\":220}}");
+        var set = rooms.GetParticipant(room.Id, viewer.ParticipantId).Peers![other.ToString()];
+        rooms.ReceiveClientData(room.Id, viewer.ParticipantId, "{\"m\":{\"" + other + "\":false},\"ug\":{\"" + other + "\":100}}");
+        rooms.ReceiveClientData(room.Id, viewer.ParticipantId, "{\"m\":{\"not-a-uuid\":true},\"ug\":{\"" + Guid.NewGuid() + "\":5000}}");
+
+        Assert.Equal(new PeerSetting(true, 2.2), set);
+        var peers = rooms.GetParticipant(room.Id, viewer.ParticipantId).Peers!;
+        Assert.False(peers.ContainsKey(other.ToString())); // back to normal: forgotten
+        Assert.Equal(Validation.MaxGain, Assert.Single(peers).Value.Gain); // capped; the bad id ignored
+    }
+
+    [Fact]
     public async Task The_simulator_sets_many_poses_at_once_by_external_id()
     {
         using var server = new ServerFactory(_dir.File("server.db"));
