@@ -656,6 +656,17 @@ tested without GStreamer.
      for them). The NPC's position is the master: the web client's Stand picker and facing control become "move /
      turn my NPC", applied in OpenSim, and the server follows the simulator's pose as for any avatar. Removing the
      participant removes the NPC, and the other way round.
+     **Optional, per region (2026-11-15):** a module ini option, e.g. `WebUserAvatars = off | optional | always`,
+     which the module records on the region's room when it creates or updates it, as a named room field (e.g.
+     `inWorldAvatars`; not free-form metadata, since the web client reads it). The server stores and reports it
+     but never acts on it, and has no notion of NPCs. `/signal/{id}/config` reports it; the web client shows a
+     "Create an NPC in-world?" tick box only for `optional`, and sends the answer with its first offer (like the
+     chosen display name), stored on the participant (e.g. `inWorldAvatar: true`). On its room poll the module
+     creates the NPC only if the region allows it (a client cannot force one into an `off` region), and removes it
+     when the participant leaves. `always`: every web user gets an NPC and there is no tick box; this answers the
+     eavesdropping concern (no invisible listeners in the region). The load tool gets the same request (e.g.
+     `--npc`), under the same region setting, so bots get bodies, names, dots and real positions (Phase 7 (g)).
+     Without a tick a web user behaves as today.
    - **(b) Voice agents.** An agent needs what any participant has: a listener mix rendered at the NPC's position
      (distance, direction, mix-minus) and an input placed there. So the agent is a **separate process, an "agent
      bridge"**, that connects over WebRTC like the load tool's bots (reusing `FakeClient`) and chains speech to
