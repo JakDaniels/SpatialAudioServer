@@ -676,7 +676,9 @@ tested without GStreamer.
        with Speak). Groups on this SQLite standalone: groups V2 alone on MariaDB (`opensim_groups`;
        `MessageOnlineUsersOnly = true`, or V2 messaging switches itself off; `[GridUserService] StorageProvider` named
        in `SQLiteStandalone.ini`, or the groups service pairs SQLite's connection string with the MySQL driver and
-       stops the simulator), written up in the add-on README. Open: ringing across simulators. Call rooms keep the
+       stops the simulator), written up in the add-on README. **Parked (2026-11-15):** ringing
+       callees (and telling callers of a decline) on another simulator: it needs a grid to test (a local Robust grid
+       with two simulators is the plan when it comes up); meanwhile the other side can call back. Call rooms keep the
        non-spatial default `matrix-shared`: re-tested after the PulseAudio fix, speech both ways is clean. One
        Firestorm crash (Windows, Test One calling) came right after a server restart, between `call` and joining the
        call room; not repeatable since, put down to the viewer meeting a restarted voice server mid-reconnect.
