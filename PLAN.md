@@ -425,9 +425,10 @@ tested without GStreamer.
 6. **Spatial (brought forward 2026-11-13, first version done).** Decided: a per-room `spatial` flag (create/ensure,
    default off, stored: migration 4, shown in room details); `matrix-shared` clusters listeners by rendering; an
    inverse, SL-like distance model.
-   - `ISpatialPolicy` → `DistancePolicy` (`Media/Spatial/`): full volume within `Media:Spatial:ReferenceDistance`
-     (10 m), then `DistanceModel` (`Inverse` default, `Linear`, `Exponential`; OpenAL formulas) with `Rolloff`
-     (1: inverse = reference/distance), silent beyond `MaxRange` (60 m). Pan = sine of the horizontal angle from the
+   - `ISpatialPolicy` → `DistancePolicy` (`Media/Spatial/`): full volume within `Media:Spatial:ReferenceDistance`,
+     then `DistanceModel` (`Inverse`, `Linear`, `Exponential`; OpenAL formulas) with `Rolloff`, silent beyond
+     `MaxRange` (60 m). Default since 2026-11-15: exponential from 2 m, rolloff 1 (physical, −6 dB per doubling);
+     rooms may name a profile instead (`spatialProfile`, below). Pan = sine of the horizontal angle from the
      listener's facing (SL axes: x east, y north, z up; identity faces +x), so front and back are both centred.
      Elevation only counts towards distance. No position on either side = centred, full volume. The participant's
      gain/mute multiplies in (`MixEngineContext.Render`).
@@ -569,6 +570,13 @@ tested without GStreamer.
        **2026-11-15:** `DistanceModel` and `Rolloff` added. OpenSim's Vivox module carries SL's settings (README: leave
        them alone): linear, clamping 10 m, rolloff 2, max range 60 m, i.e. 20 m −4.4 dB, 30 m −14 dB, silent from 35 m.
        To compare by ear: `Media__Spatial__DistanceModel=Linear`, `Media__Spatial__Rolloff=2`.
+       **Decided by ear (2026-11-15, one Firestorm viewer, one NPC bot):** the Vivox curve suits a room or meeting;
+       the physical one (exponential, 2 m, rolloff 1: 5 m −8 dB, 20 m −20 dB, 50 m −28 dB) sounds natural, like
+       outside, and is the **default**. Rooms may choose a named **spatial profile** at creation (`spatialProfile`,
+       migration 8, fixed for the room's life): built in `outdoor` (= the default) and `meeting` (Vivox: linear, 10 m,
+       rolloff 2, 60 m); `Media:Spatial:Profiles:{name}` changes them or adds more. The OpenSim module's
+       `SpatialProfile` picks one for the rooms it creates. Media tests pin the old inverse 10 m curve, which their
+       positions were laid out for; the curves are tested in `SpatialPolicyTests`.
    - **Guest names (2026-11-13):** a participant created with `clientNamed: true` (both invite buttons) may choose its
      display name, sent as `displayName` with its first offer; `/signal/{pid}/config` reports `displayName` and
      `clientNamed`. Checked before the one-time join token is used, so a refused name (403) can be retried. Others
@@ -678,6 +686,21 @@ tested without GStreamer.
      announces the new one). The server only stores and reports; the module decides (`WebUserAvatars`), polls each
      region's room once a second (also rooms no viewer here is in), creates the NPC only inside the room's region,
      and removes it when the participant leaves or the room is no longer polled.
+     **Fixes after the first live test (2026-11-15):** NPCs looked like clouds (the default appearance has no baked
+     textures), so they copy `NpcAppearancesFrom` (a list of avatar names or UUIDs, used in turn; the avatar's
+     current look while it is in a region here, else its stored appearance), or appearance notecards by asset UUID
+     (saved with `osAgentSaveAppearance`, which stores the baked textures as assets, so they keep working; a stored
+     appearance's bakes may have expired, and a server cannot bake wearables itself, so stock items alone are not
+     enough: a viewer must have worn and baked them). A server restart left "Bot 1 (web)" in
+     viewers' lists, and a rejoining bot added a second: the viewer only retries a lost connection and keeps its
+     list, and the new server has no record of who was there. So NPC ids are **stable** (a name-based, version 3 UUID
+     from a secret made at module start-up, the room, the name and a slot: stable while the simulator runs, not
+     guessable, never equal to an account's random version 4 UUID), so a rejoining bot gets its old entry back, and the server keeps **recent
+     departures** per room (`ViewerDepartures`, 10 min, outside the pipeline so it outlives media stops) and sends a
+     joining or reconnecting viewer `l` for those not in the room now; the module reports NPCs and guests it removes
+     (`POST /api/rooms/{id}/viewers-gone`), which covers leaves the restarted server never saw. The load tool's room
+     mode notices a server restart (`/api/status` `startedAt` changes while its bots have lost their connection) and
+     joins again with the same names, places and audio.
    - **(b) Voice agents.** An agent needs what any participant has: a listener mix rendered at the NPC's position
      (distance, direction, mix-minus) and an input placed there. So the agent is a **separate process, an "agent
      bridge"**, that connects over WebRTC like the load tool's bots (reusing `FakeClient`) and chains speech to

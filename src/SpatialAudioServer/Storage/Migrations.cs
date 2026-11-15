@@ -96,6 +96,11 @@ internal static class Migrations
         """
         ALTER TABLE rooms ADD COLUMN in_world_avatars TEXT;
         """,
+
+        // 8: the room's named distance curve (Media:Spatial:Profiles); NULL = the server's default curve.
+        """
+        ALTER TABLE rooms ADD COLUMN spatial_profile TEXT;
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;

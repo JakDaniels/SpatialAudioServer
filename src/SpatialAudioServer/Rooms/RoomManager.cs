@@ -133,7 +133,7 @@ public sealed class RoomManager(
     {
         var normalized = ExternalIds.Normalize(externalId);
         var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine,
-            command?.Spatial, command?.ClientPose, command?.InWorldAvatars);
+            command?.Spatial, command?.ClientPose, command?.InWorldAvatars, command?.SpatialProfile);
         ValidateCreate(create);
 
         RoomSnapshot snapshot;
@@ -164,6 +164,38 @@ public sealed class RoomManager(
             }
             return room.Snapshot();
         }
+    }
+
+    /// <summary>
+    /// The integration reports viewer keys gone from the room (NPCs or guests it removed, perhaps while this server was
+    /// restarting): SL viewers in the room, and those joining in the next minutes, are told to drop them. Keys of
+    /// participants in the room now are ignored.
+    /// </summary>
+    public int ViewerKeysGone(Guid roomId, ViewerKeysGoneCommand command)
+    {
+        var keys = command.Keys ?? [];
+        if (keys.Count > MaxPoseBatch)
+        {
+            throw new LimitExceededException($"At most {MaxPoseBatch} keys per request.");
+        }
+        var validation = new Validation();
+        var parsed = new List<string>();
+        for (var i = 0; i < keys.Count; i++)
+        {
+            var ok = Guid.TryParse(keys[i], out var key);
+            validation.Check($"keys[{i}]", ok, "must be a UUID");
+            if (ok)
+            {
+                parsed.Add(key.ToString());
+            }
+        }
+        validation.ThrowIfInvalid();
+        lock (_lock)
+        {
+            FindRoom(roomId);
+        }
+        media.ViewerKeysGone(roomId, parsed);
+        return parsed.Count;
     }
 
     /// <summary>
@@ -699,6 +731,8 @@ public sealed class RoomManager(
             .Range("maxParticipants", command.MaxParticipants, 1, limits.Value.MaxParticipantsPerRoom)
             .Metadata("metadata", command.Metadata)
             .OneOf("engine", command.Engine, MixEngines.Exists, MixEngines.All.Select(e => e.Name))
+            .OneOf("spatialProfile", command.SpatialProfile, mediaOptions.Value.Spatial.Profiles.ContainsKey,
+                mediaOptions.Value.Spatial.Profiles.Keys)
             .ThrowIfInvalid();
 
     private RoomSnapshot CreateRoomLocked(CreateRoomCommand command)
@@ -712,7 +746,8 @@ public sealed class RoomManager(
             Guid.NewGuid(), command.Name!.Trim(), command.ExternalId, command.MaxParticipants ?? limit.MaxParticipantsPerRoom,
             command.Metadata?.ToJsonString(), time.GetUtcNow(),
             command.Engine ?? (command.Spatial == true ? mediaOptions.Value.SpatialEngine : DefaultEngine),
-            command.Spatial ?? false, command.ClientPose?.ToString(), command.InWorldAvatars?.ToString());
+            command.Spatial ?? false, command.ClientPose?.ToString(), command.InWorldAvatars?.ToString(),
+            command.SpatialProfile?.Trim().ToLowerInvariant());
         rooms.Insert(record);
         var room = new Room(record, DefaultEngine);
         _rooms[room.Id] = room;
@@ -767,11 +802,12 @@ public sealed class RoomManager(
             : record.Spatial ? ClientPose.Orientation : ClientPose.None;
         public InWorldAvatars InWorldAvatars { get; set; } =
             Enum.TryParse<InWorldAvatars>(record.InWorldAvatars, ignoreCase: true, out var avatars) ? avatars : InWorldAvatars.Off;
+        public string? SpatialProfile { get; } = record.SpatialProfile;
         public Dictionary<Guid, Participant> Participants { get; } = [];
 
         public RoomSnapshot Snapshot() =>
             new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine, Spatial, ClientPose,
-                InWorldAvatars);
+                InWorldAvatars, SpatialProfile);
 
         public IReadOnlyList<ParticipantSnapshot> ParticipantSnapshots() =>
             Participants.Values.OrderBy(p => p.JoinedAt).Select(p => p.Snapshot()).ToList();

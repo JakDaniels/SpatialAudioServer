@@ -77,3 +77,37 @@ public sealed class InWorldAvatarTests : IDisposable
         Assert.Equal(guest.ParticipantId.ToString(), untied.ViewerKey);
     }
 }
+
+/// <summary>Rooms may name a distance curve (no media).</summary>
+public sealed class SpatialProfileRoomTests : IDisposable
+{
+    private readonly TempDir _dir = new();
+
+    public void Dispose() => _dir.Dispose();
+
+    [Fact]
+    public async Task A_room_keeps_the_profile_it_was_created_with_and_unknown_ones_are_refused()
+    {
+        var path = _dir.File("server.db");
+        Guid id;
+        using (var server = new ServerFactory(path))
+        {
+            var api = server.CreateAuthedClient();
+            var meeting = await (await api.PutAsJsonAsync("/api/rooms/by-external/parcel:x", new { spatial = true, spatialProfile = "Meeting" }))
+                .Read<RoomSnapshot>();
+            Assert.Equal("meeting", meeting.SpatialProfile);
+            id = meeting.Id;
+
+            var plain = await (await api.PostAsJsonAsync("/api/rooms", new { name = "default", spatial = true })).Read<RoomSnapshot>();
+            Assert.Null(plain.SpatialProfile);
+
+            var unknown = await api.PostAsJsonAsync("/api/rooms", new { name = "bad", spatial = true, spatialProfile = "cathedral" });
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, unknown.StatusCode);
+        }
+        using (var server = new ServerFactory(path))
+        {
+            var room = await server.CreateAuthedClient().GetFromJsonAsync<JsonObject>($"/api/rooms/{id}");
+            Assert.Equal("meeting", (string?)room!["spatialProfile"]);
+        }
+    }
+}

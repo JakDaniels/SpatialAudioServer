@@ -116,6 +116,36 @@ public sealed class ViewerCompatibilityTests() : MediaTestBase(MixEngines.Defaul
         await Until(a, m => m[npc]?["j"]?["p"] is { } p && (bool)p!);
     }
 
+    [Fact]
+    public async Task A_joining_viewer_is_told_who_left_recently_and_what_the_integration_removed()
+    {
+        var room = await CreateRoomAsync(spatial: true);
+        var avatarA = Guid.NewGuid().ToString();
+        var a = await JoinAsync(room.Id, 0, viewerStyle: true, talking: false, externalId: avatarA);
+        var browser = await JoinAsync(room.Id, 1);
+        await a.DataChannelOpen.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True(a.SendData("""{"j":{"p":true}}"""));
+        var key = browser.ParticipantId.ToString();
+        await Until(a, m => m[key]?["j"] is not null);
+        (await Api.DeleteAsync($"/api/rooms/{room.Id}/participants/{browser.ParticipantId}")).EnsureSuccessStatusCode();
+
+        // An NPC the module removed while (say) the server was restarting: listening viewers drop it at once.
+        var npc = Guid.NewGuid().ToString();
+        var reported = await Api.PostAsJsonAsync($"/api/rooms/{room.Id}/viewers-gone", new { keys = new[] { npc, avatarA } });
+        reported.EnsureSuccessStatusCode();
+        await Until(a, m => m[npc]?["l"] is { } l && (bool)l!);
+
+        // A viewer joining (or reconnecting) later hears about both, but not about anyone still in the room.
+        var b = await JoinAsync(room.Id, 2, viewerStyle: true, talking: false, externalId: Guid.NewGuid().ToString());
+        await b.DataChannelOpen.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True(b.SendData("""{"j":{"p":true}}"""));
+        var welcome = await Until(b, m => m.Any(e => e.Value?["V"] is not null));
+        Assert.True((bool)welcome[key]!["l"]!);
+        Assert.True((bool)welcome[npc]!["l"]!);
+        Assert.Null(welcome[avatarA]!["l"]);
+        Assert.True((bool)welcome[avatarA]!["j"]!["p"]!);
+    }
+
     /// <summary>Waits for a data channel message (a JSON object keyed by avatar) that matches.</summary>
     private static async Task<System.Text.Json.Nodes.JsonObject> Until(FakeClient client, Func<System.Text.Json.Nodes.JsonObject, bool> match)
     {

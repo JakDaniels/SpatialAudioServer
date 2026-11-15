@@ -15,20 +15,62 @@ public enum DistanceModel
     Exponential,
 }
 
+/// <summary>A distance curve: the part of <see cref="SpatialOptions"/> a room can choose by name (its spatial profile).</summary>
+public sealed class SpatialProfile
+{
+    public DistanceModel DistanceModel { get; set; } = DistanceModel.Exponential;
+    public double ReferenceDistance { get; set; } = 2;
+    public double Rolloff { get; set; } = 1;
+    public double MaxRange { get; set; } = 60;
+}
+
 /// <summary>Spatial settings (<c>Media:Spatial</c>). Distances are in room units: metres for SL/OpenSim regions.</summary>
 public sealed class SpatialOptions
 {
+    /// <summary>"Outdoor": physical fall-off, −6 dB per doubling from 2 m (5 m −8 dB, 20 m −20 dB, 50 m −28 dB). The default.</summary>
+    public const string Outdoor = "outdoor";
+
+    /// <summary>"Meeting": SL's Vivox settings, full volume to 10 m, then linear to silence at 35 m (rolloff 2, 60 m range).</summary>
+    public const string Meeting = "meeting";
+
     /// <summary>Sources at or within this distance are heard at full volume.</summary>
-    public double ReferenceDistance { get; set; } = 10;
+    public double ReferenceDistance { get; set; } = 2;
 
     /// <summary>The fall-off beyond <see cref="ReferenceDistance"/>.</summary>
-    public DistanceModel DistanceModel { get; set; } = DistanceModel.Inverse;
+    public DistanceModel DistanceModel { get; set; } = DistanceModel.Exponential;
 
     /// <summary>
-    /// How fast the volume falls (see <see cref="DistanceModel"/>). OpenSim's Vivox module (SL's settings) uses linear,
-    /// reference 10 m, max range 60 m, rolloff 2: silent from 35 m.
+    /// How fast the volume falls (see <see cref="DistanceModel"/>). The default (exponential, 2 m, rolloff 1) is the
+    /// physical free-field fall-off; OpenSim's Vivox module (SL's settings) uses linear, 10 m, rolloff 2 (the
+    /// <see cref="Meeting"/> profile).
     /// </summary>
     public double Rolloff { get; set; } = 1;
+
+    /// <summary>
+    /// Named distance curves a room may choose (<c>spatialProfile</c>); a room without one uses the settings above.
+    /// Built in: <see cref="Outdoor"/> and <see cref="Meeting"/>; configuration can change them or add more
+    /// (<c>Media:Spatial:Profiles:{name}:DistanceModel</c> …).
+    /// </summary>
+    public Dictionary<string, SpatialProfile> Profiles { get; set; } = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [Outdoor] = new SpatialProfile(),
+        [Meeting] = new SpatialProfile { DistanceModel = DistanceModel.Linear, ReferenceDistance = 10, Rolloff = 2, MaxRange = 60 },
+    };
+
+    /// <summary>These settings with the named profile's distance curve (null: unchanged).</summary>
+    public SpatialOptions WithProfile(string? name)
+    {
+        if (name is null || !Profiles.TryGetValue(name, out var profile))
+        {
+            return this;
+        }
+        var copy = (SpatialOptions)MemberwiseClone();
+        copy.DistanceModel = profile.DistanceModel;
+        copy.ReferenceDistance = profile.ReferenceDistance;
+        copy.Rolloff = profile.Rolloff;
+        copy.MaxRange = profile.MaxRange;
+        return copy;
+    }
 
     /// <summary>Beyond this distance a source is silent and left out of the mix.</summary>
     public double MaxRange { get; set; } = 60;

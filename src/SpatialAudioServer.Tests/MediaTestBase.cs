@@ -26,7 +26,14 @@ public abstract class MediaTestBase : IDisposable
     protected MediaTestBase(string engine, IDictionary<string, string?>? settings = null)
     {
         Engine = engine;
-        var config = new Dictionary<string, string?> { ["Media:Enabled"] = "true" };
+        // The spatial suites' positions and expected levels are laid out for the inverse curve from 10 m (the default
+        // before 2026-11-15); the curves themselves are tested in SpatialPolicyTests.
+        var config = new Dictionary<string, string?>
+        {
+            ["Media:Enabled"] = "true",
+            ["Media:Spatial:DistanceModel"] = "Inverse",
+            ["Media:Spatial:ReferenceDistance"] = "10",
+        };
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
         {
             config[key] = value;

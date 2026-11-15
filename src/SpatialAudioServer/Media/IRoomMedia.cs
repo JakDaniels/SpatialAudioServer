@@ -26,6 +26,9 @@ public interface IRoomMedia
     /// <summary>Mute, gain, position or orientation changed.</summary>
     void ParticipantUpdated(ParticipantSnapshot participant);
 
+    /// <summary>The integration reports these viewer keys gone from the room: SL viewers drop them from their lists.</summary>
+    void ViewerKeysGone(Guid roomId, IReadOnlyList<string> keys);
+
     /// <summary>Builds the participant's endpoint from the client's SDP offer and returns the SDP answer.</summary>
     Task<string> AnswerOfferAsync(Guid roomId, Guid participantId, string offerSdp);
 
@@ -95,6 +98,10 @@ public sealed class NullRoomMedia : IRoomMedia
     }
 
     public void ParticipantUpdated(ParticipantSnapshot participant)
+    {
+    }
+
+    public void ViewerKeysGone(Guid roomId, IReadOnlyList<string> keys)
     {
     }
 
