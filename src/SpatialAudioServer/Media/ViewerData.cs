@@ -21,6 +21,11 @@ namespace SpatialAudioServer.Media;
 /// its microphone is live only there). A viewer adds people to its list only from <c>j</c> with <c>p: true</c>, so
 /// an avatar is announced only in its primary room, and withdrawn (<c>l</c>) when it stops being primary there; its
 /// neighbours see it through their own connection to that room. Browsers and bots are always primary.</para>
+/// <para>A viewer keeps one list for all its connections, remembering the region each person was added from; it
+/// ignores <c>j</c> for someone already listed and takes <c>l</c> only from that region. When an avatar crosses a
+/// border, the new room's <c>j</c> and the old room's <c>l</c> reach a neighbour over different connections in
+/// either order, and with <c>j</c> first the avatar would vanish from its list. So every announcement is repeated
+/// <see cref="ReannounceDelay"/> later, which adds it back from the right region.</para>
 /// <para>Participants are keyed by their external id when it is a UUID (an avatar), otherwise by our participant
 /// id (a browser or bot). A viewer looks every UUID up with its simulator to show a name, so the OpenSim module
 /// registers those participants' names there (polling the room); they are announced <see cref="GuestAnnounceDelay"/>
@@ -34,6 +39,9 @@ internal sealed class ViewerData : IDisposable
 
     /// <summary>How long after connecting a participant that is not an avatar is announced (see the remarks).</summary>
     public static readonly TimeSpan GuestAnnounceDelay = TimeSpan.FromSeconds(2);
+
+    /// <summary>How long after an announcement it is sent again (see the remarks).</summary>
+    public static readonly TimeSpan ReannounceDelay = TimeSpan.FromSeconds(2);
 
     /// <summary>The level sent as p = 0 … 128 maps −60 dBFS … 0 dBFS (speech is around −30 … −15).</summary>
     private const double FloorDb = -60;
@@ -74,15 +82,26 @@ internal sealed class ViewerData : IDisposable
         {
             return;
         }
-        _ = Task.Delay(GuestAnnounceDelay).ContinueWith(_ =>
+        Later(GuestAnnounceDelay, participantId, member, () =>
+        {
+            if (!member.Announced)
+            {
+                Announce(participantId, member);
+            }
+        });
+    }
+
+    /// <summary>Runs <paramref name="action"/> on the worker after <paramref name="delay"/> if the member is still here.</summary>
+    private void Later(TimeSpan delay, Guid participantId, Member member, Action action) =>
+        _ = Task.Delay(delay).ContinueWith(_ =>
         {
             try
             {
                 _worker.Post(() =>
                 {
-                    if (_members.TryGetValue(participantId, out var current) && current == member && !member.Announced)
+                    if (_members.TryGetValue(participantId, out var current) && current == member)
                     {
-                        Announce(participantId, member);
+                        action();
                     }
                 });
             }
@@ -91,7 +110,6 @@ internal sealed class ViewerData : IDisposable
                 // The room's media stopped meanwhile.
             }
         }, TaskScheduler.Default);
-    }
 
     /// <summary>A participant left the room.</summary>
     public void Removed(Guid participantId)
@@ -105,13 +123,22 @@ internal sealed class ViewerData : IDisposable
     private void Announce(Guid participantId, Member member)
     {
         member.Announced = true;
+        var generation = ++member.Generation;
         Broadcast(new JsonObject { [member.Key] = Join() }, except: participantId);
+        Later(ReannounceDelay, participantId, member, () =>
+        {
+            if (member.Announced && member.Generation == generation)
+            {
+                Broadcast(new JsonObject { [member.Key] = Join() }, except: participantId);
+            }
+        });
     }
 
     /// <summary>The participant is no longer primary here: viewers drop it from this region's list.</summary>
     private void Withdraw(Guid participantId, Member member)
     {
         member.Announced = false;
+        member.Generation++;
         member.Speaking = false;
         member.SentLevel = 0;
         Broadcast(new JsonObject { [member.Key] = new JsonObject { ["l"] = true } }, except: participantId);
@@ -249,6 +276,9 @@ internal sealed class ViewerData : IDisposable
 
         /// <summary>A viewer that has joined over its data channel.</summary>
         public bool Listening { get; set; }
+
+        /// <summary>Bumped on each announcement and withdrawal, so a stale repeat is dropped.</summary>
+        public int Generation { get; set; }
 
         public int SentLevel { get; set; }
 

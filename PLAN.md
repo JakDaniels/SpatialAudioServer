@@ -530,6 +530,10 @@ tested without GStreamer.
      in its primary room and withdrawn (`l`) when it stops being primary there; browsers and bots are always primary.
      Positions in the neighbouring room need nothing extra: the module's `TryGetScenePresence` also finds child agents,
      whose positions OpenSim keeps current (seen within a few cm of the viewer's own report).
+     The viewer keeps one list for all connections, each entry remembering the region it came from; it ignores `j`
+     for someone listed and takes `l` only from that region. On a crossing the new room's `j` can beat the old
+     room's `l` (different connections), which dropped the avatar from neighbours' lists (seen in Firestorm: dots
+     flipped between the two avatars as they crossed), so every announcement is repeated 2 s later.
      The viewer looks every UUID up with its simulator to show a name (OpenSim leaves unknown ids out; the viewer
      asks again after 60 s), so the OpenSim module polls each room once a second and registers non-avatar
      participants' names with OpenSim's user management (`AddSystemUser`: "Simon (web)", `GuestLastName`; `RemoveUser`

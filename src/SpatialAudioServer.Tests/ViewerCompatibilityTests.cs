@@ -87,9 +87,10 @@ public sealed class ViewerCompatibilityTests() : MediaTestBase(MixEngines.Defaul
         await Task.Delay(ViewerData.GuestAnnounceDelay + ViewerData.LevelInterval);
         Assert.DoesNotContain(a.DataMessages, m => m.Contains(avatarB));
 
-        // B crosses into this region, then back out.
+        // B crosses into this region (announced, then again: see ViewerData's remarks), then back out.
         Assert.True(b.SendData("""{"j":{"p":true}}"""));
         await Until(a, m => m[avatarB]?["j"]?["p"] is { } p && (bool)p!);
+        await Until(a, _ => a.DataMessages.Count(m => m.Contains(avatarB) && m.Contains("\"j\"")) >= 2);
         Assert.True(b.SendData("""{"j":{}}"""));
         await Until(a, m => m[avatarB]?["l"] is { } l && (bool)l!);
     }
