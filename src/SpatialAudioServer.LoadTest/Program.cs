@@ -211,7 +211,7 @@ public static class LoadTestProgram
                 var client = new FakeClient(name, tones[i], tones, options.JitterBufferMs, logs.CreateLogger("fake"), volume,
                     talking: i < talkers, clip: clip, clipOffsetBytes: offset);
                 clients.Add(client);
-                await client.ConnectAsync(http, join.ParticipantId, join.JoinToken);
+                await client.ConnectAsync(http, join.ParticipantId, join.JoinToken, inWorldAvatar: options.Npc);
                 Console.WriteLine($"  {name} joined ({join.ParticipantId}){(i < talkers ? "" : ", silent")}" +
                     (places[i] is { } place ? $", {place.Distance:0.#} m {BotLayout.Describe(place.Octant)}" : ""));
             }
@@ -458,7 +458,7 @@ public static class LoadTestProgram
     private sealed record Options(
         System.Uri Server, string ApiKey, int Participants, int Rooms, TimeSpan Duration, uint JitterBufferMs, bool Insecure,
         IReadOnlyList<string> Engines, int? Talkers, Guid? Room, IReadOnlyList<string> AudioFiles, double? Volume, string Name,
-        bool DurationSet, bool Spatial, double Radius, TimeSpan Warmup, string? VoicesDirectory, string? Around)
+        bool DurationSet, bool Spatial, double Radius, TimeSpan Warmup, string? VoicesDirectory, string? Around, bool Npc)
     {
         public const string Usage =
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
@@ -472,7 +472,7 @@ public static class LoadTestProgram
             "\n" +
             "Room mode (listening tests): SpatialAudioServer.LoadTest --api-key KEY --room ROOM_ID [--participants 4]\n" +
             "                                   [--audio voices|file.wav[,...]] [--spatial [--radius 5] [--around X,Y,Z|NAME]] [--talkers K]\n" +
-            "                                   [--volume 1.0] [--name Bot] [--duration SECONDS] [--voices DIR]\n" +
+            "                                   [--volume 1.0] [--name Bot] [--duration SECONDS] [--voices DIR] [--npc]\n" +
             "  Adds participants to an existing room (e.g. one you are in with the browser client) and keeps them there\n" +
             "  until Ctrl+C or --duration, then removes them; the room is left alone. They send a tone each, or speak:\n" +
             "  --audio voices: natural pre-rendered voices (scripts/loadtest-linux-x64/voices; --voices DIR elsewhere).\n" +
@@ -483,7 +483,9 @@ public static class LoadTestProgram
             "  --spatial (spatial rooms): bots stand on the 8 compass points of rings round the centre, where the browser\n" +
             "  client puts you facing east: bots 1-8 on the first ring (--radius, default 5 m), 9-16 10 m further out, ….\n" +
             "  --around (implies --spatial): the rings' centre, a point or the participant with that display name (e.g. an\n" +
-            "  OpenSim avatar: they use global coordinates). \"In front\" etc. in the clips then assume you face east.";
+            "  OpenSim avatar: they use global coordinates). \"In front\" etc. in the clips then assume you face east.\n" +
+            "  --npc: ask the room's region (OpenSim module, WebUserAvatars = optional or always) to show each bot in-world\n" +
+            "  as an NPC at its position.";
 
         public static Options Parse(string[] args)
         {
@@ -505,6 +507,7 @@ public static class LoadTestProgram
             var warmup = TimeSpan.FromSeconds(10);
             string? voices = null;
             string? around = null;
+            var npc = false;
             for (var i = 0; i < args.Length; i++)
             {
                 string Value() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} needs a value.");
@@ -524,6 +527,7 @@ public static class LoadTestProgram
                     case "--radius": radius = double.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--warmup": warmup = TimeSpan.FromSeconds(double.Parse(Value(), CultureInfo.InvariantCulture)); break;
                     case "--voices": voices = Value(); break;
+                    case "--npc": npc = true; break;
                     case "--jitter-ms": jitter = uint.Parse(Value(), CultureInfo.InvariantCulture); break;
                     case "--insecure": insecure = true; break;
                     case "--talkers": talkers = int.Parse(Value(), CultureInfo.InvariantCulture); break;
@@ -547,6 +551,10 @@ public static class LoadTestProgram
             {
                 throw new ArgumentException("--audio needs --room: the load test measures tones, so it can't use audio files.");
             }
+            if (npc && room is null)
+            {
+                throw new ArgumentException("--npc needs --room: NPCs are for bots in an OpenSim region's room.");
+            }
             if (room is not null && engines.Count > 0)
             {
                 throw new ArgumentException("--engine can't be used with --room: the room already has its engine.");
@@ -556,7 +564,7 @@ public static class LoadTestProgram
                 throw new ArgumentException("--volume must be between 0 and 10.");
             }
             return new Options(server, key, participants, rooms, duration, jitter, insecure, engines, talkers, room, audio, volume, name,
-                durationSet, spatial, radius, warmup, voices, around);
+                durationSet, spatial, radius, warmup, voices, around, npc);
         }
     }
 }

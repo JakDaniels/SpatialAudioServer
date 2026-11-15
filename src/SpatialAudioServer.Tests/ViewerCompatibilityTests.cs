@@ -95,6 +95,27 @@ public sealed class ViewerCompatibilityTests() : MediaTestBase(MixEngines.Defaul
         await Until(a, m => m[avatarB]?["l"] is { } l && (bool)l!);
     }
 
+    [Fact]
+    public async Task A_web_user_given_an_npc_is_known_to_viewers_by_the_npcs_uuid()
+    {
+        var room = await CreateRoomAsync(spatial: true);
+        var avatarA = Guid.NewGuid().ToString();
+        var a = await JoinAsync(room.Id, 0, viewerStyle: true, talking: false, externalId: avatarA);
+        var browser = await JoinAsync(room.Id, 1, inWorldAvatar: true); // asks with its offer
+        await a.DataChannelOpen.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True(a.SendData("""{"j":{"p":true}}"""));
+        var key = browser.ParticipantId.ToString();
+        await Until(a, m => m[key]?["j"] is not null);
+        var url = $"/api/rooms/{room.Id}/participants/{browser.ParticipantId}";
+        Assert.True((await Api.GetFromJsonAsync<ParticipantSnapshot>(url, Json.Options))!.InWorldAvatar);
+
+        // The region module made its NPC: viewers drop the participant id and list the NPC instead.
+        var npc = Guid.NewGuid().ToString();
+        (await Api.PatchAsJsonAsync(url, new { avatarId = npc })).EnsureSuccessStatusCode();
+        await Until(a, m => m[key]?["l"] is { } l && (bool)l!);
+        await Until(a, m => m[npc]?["j"]?["p"] is { } p && (bool)p!);
+    }
+
     /// <summary>Waits for a data channel message (a JSON object keyed by avatar) that matches.</summary>
     private static async Task<System.Text.Json.Nodes.JsonObject> Until(FakeClient client, Func<System.Text.Json.Nodes.JsonObject, bool> match)
     {

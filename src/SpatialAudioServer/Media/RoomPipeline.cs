@@ -124,6 +124,7 @@ internal sealed class RoomPipeline : IDisposable
         if (_participants.ContainsKey(participant.Id))
         {
             _engine.ParticipantUpdated(participant);
+            _viewers.Updated(participant);
         }
     });
 

@@ -10,7 +10,7 @@ namespace SpatialAudioServer.Api;
 public sealed record RoomDetails(
     Guid Id, string Name, string? ExternalId, int MaxParticipants, System.Text.Json.Nodes.JsonObject? Metadata,
     DateTimeOffset CreatedAt, int ParticipantCount, string Engine, bool Spatial, ClientPose ClientPose,
-    IReadOnlyList<ParticipantSnapshot> Participants);
+    IReadOnlyList<ParticipantSnapshot> Participants, InWorldAvatars InWorldAvatars = InWorldAvatars.Off);
 
 public sealed record JoinResponse(
     Guid ParticipantId, Guid RoomId, string JoinToken, string SignalUrl, DateTimeOffset ExpiresAt, Guid? ReplacedParticipantId);
@@ -85,8 +85,13 @@ public static class ControlApi
         room.MapGet("/", (HttpContext http, RoomManager rooms) =>
         {
             var (r, participants) = rooms.GetRoom(ResolveRoom(http, rooms));
-            return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, r.Engine, r.Spatial, r.ClientPose, participants);
+            return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, r.Engine, r.Spatial,
+                r.ClientPose, participants, r.InWorldAvatars);
         });
+
+        // What may change after creation: whether the integration shows web and bot participants in-world.
+        room.MapPatch("/", (HttpContext http, UpdateRoomCommand body, RoomManager rooms) =>
+            rooms.UpdateRoom(ResolveRoom(http, rooms), body));
 
         // Mixing statistics from the room's engine (encoders, talkers, clusters…): 404 when media is disabled.
         room.MapGet("/media", async (HttpContext http, RoomManager rooms, IRoomMedia media) =>

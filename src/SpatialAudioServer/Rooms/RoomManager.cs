@@ -132,7 +132,8 @@ public sealed class RoomManager(
     public (RoomSnapshot Room, bool Created) EnsureRoom(string externalId, EnsureRoomCommand? command)
     {
         var normalized = ExternalIds.Normalize(externalId);
-        var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine, command?.Spatial, command?.ClientPose);
+        var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine,
+            command?.Spatial, command?.ClientPose, command?.InWorldAvatars);
         ValidateCreate(create);
 
         RoomSnapshot snapshot;
@@ -146,6 +147,35 @@ public sealed class RoomManager(
         }
         RoomCreated(snapshot);
         return (snapshot, true);
+    }
+
+    /// <summary>Changes what may change about a room after creation (today: <see cref="InWorldAvatars"/>).</summary>
+    public RoomSnapshot UpdateRoom(Guid roomId, UpdateRoomCommand command)
+    {
+        lock (_lock)
+        {
+            var room = FindRoom(roomId);
+            if (command.InWorldAvatars is { } avatars && avatars != room.InWorldAvatars)
+            {
+                rooms.UpdateInWorldAvatars(roomId, avatars.ToString());
+                room.InWorldAvatars = avatars;
+                activity.Event("room.updated", roomId, detail: $"inWorldAvatars {avatars}");
+                log.LogInformation("Room {RoomId}: in-world avatars {InWorldAvatars}", roomId, avatars);
+            }
+            return room.Snapshot();
+        }
+    }
+
+    /// <summary>
+    /// The participant (signalling, with its first offer) asks to be shown in-world: stored for the integration, which
+    /// decides (see <see cref="InWorldAvatars"/>).
+    /// </summary>
+    public void RequestInWorldAvatar(Guid roomId, Guid participantId, bool wanted)
+    {
+        lock (_lock)
+        {
+            FindParticipant(FindRoom(roomId), participantId).InWorldAvatar = wanted;
+        }
     }
 
     /// <summary>The id of the room with this external id; <see cref="NotFoundException"/> if none.</summary>
@@ -340,6 +370,11 @@ public sealed class RoomManager(
             participant.Orientation = command.Orientation ?? participant.Orientation;
             participant.ListenerPosition = command.ListenerPosition ?? participant.ListenerPosition;
             participant.ListenerOrientation = command.ListenerOrientation ?? participant.ListenerOrientation;
+            if (command.AvatarId is { } avatar && avatar != (participant.AvatarId ?? Guid.Empty))
+            {
+                participant.AvatarId = avatar == Guid.Empty ? null : avatar;
+                activity.Event("participant.avatar", roomId, participantId, participant.AvatarId?.ToString() ?? "none");
+            }
             snapshot = participant.Snapshot();
         }
         media.ParticipantUpdated(snapshot);
@@ -677,7 +712,7 @@ public sealed class RoomManager(
             Guid.NewGuid(), command.Name!.Trim(), command.ExternalId, command.MaxParticipants ?? limit.MaxParticipantsPerRoom,
             command.Metadata?.ToJsonString(), time.GetUtcNow(),
             command.Engine ?? (command.Spatial == true ? mediaOptions.Value.SpatialEngine : DefaultEngine),
-            command.Spatial ?? false, command.ClientPose?.ToString());
+            command.Spatial ?? false, command.ClientPose?.ToString(), command.InWorldAvatars?.ToString());
         rooms.Insert(record);
         var room = new Room(record, DefaultEngine);
         _rooms[room.Id] = room;
@@ -730,10 +765,13 @@ public sealed class RoomManager(
         public ClientPose ClientPose { get; } = Enum.TryParse<ClientPose>(record.ClientPose, ignoreCase: true, out var pose)
             ? pose
             : record.Spatial ? ClientPose.Orientation : ClientPose.None;
+        public InWorldAvatars InWorldAvatars { get; set; } =
+            Enum.TryParse<InWorldAvatars>(record.InWorldAvatars, ignoreCase: true, out var avatars) ? avatars : InWorldAvatars.Off;
         public Dictionary<Guid, Participant> Participants { get; } = [];
 
         public RoomSnapshot Snapshot() =>
-            new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine, Spatial, ClientPose);
+            new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine, Spatial, ClientPose,
+                InWorldAvatars);
 
         public IReadOnlyList<ParticipantSnapshot> ParticipantSnapshots() =>
             Participants.Values.OrderBy(p => p.JoinedAt).Select(p => p.Snapshot()).ToList();
@@ -761,6 +799,10 @@ public sealed class RoomManager(
         /// Replaced, never changed in place: snapshots share it.</summary>
         public IReadOnlyDictionary<string, PeerSetting> Peers { get; set; } = new Dictionary<string, PeerSetting>();
         public bool PoseIgnoredLogged { get; set; }
+        /// <summary>Asked to be shown in-world (<see cref="InWorldAvatars"/>).</summary>
+        public bool InWorldAvatar { get; set; }
+        /// <summary>The NPC the integration made for it.</summary>
+        public Guid? AvatarId { get; set; }
         public bool Muted { get; set; }
         public double Gain { get; set; } = 1.0;
         public ParticipantState State { get; set; } = ParticipantState.AwaitingSignal;
@@ -769,7 +811,7 @@ public sealed class RoomManager(
 
         public ParticipantSnapshot Snapshot() =>
             new(Id, RoomId, DisplayName, ExternalId, Position, Orientation, Muted, Gain, ParseMetadata(Metadata), JoinedAt, State,
-                ListenerPosition, ListenerOrientation, ClientNamed, ClientReport, Peers);
+                ListenerPosition, ListenerOrientation, ClientNamed, ClientReport, Peers, InWorldAvatar, AvatarId);
     }
 
     // Stored as text and parsed per snapshot, so callers never share a mutable JsonObject with the manager.

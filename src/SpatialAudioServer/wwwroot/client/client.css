@@ -60,6 +60,8 @@ code { background: var(--code); padding: 0 .25rem; border-radius: 3px; }
 
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin: .75rem 0; }
 .grid label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; color: var(--muted); }
+.grid label.check { flex-direction: row; align-items: center; align-self: end; gap: .4rem; color: var(--text); }
+.grid label.check input { flex: none; }
 .new-room { grid-column: 1 / -1; }
 .row { display: flex; gap: .5rem; }
 .row input { flex: 1; min-width: 0; }

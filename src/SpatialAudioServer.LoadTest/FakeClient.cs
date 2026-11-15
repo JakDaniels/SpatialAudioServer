@@ -181,8 +181,9 @@ public sealed class FakeClient : IDisposable
     public Exception? IceError => _iceError;
 
     /// <summary>Offers to the server with the participant's join token and keeps trickling ICE until disposed.</summary>
+    /// <param name="inWorldAvatar">Ask the room's integration to show this client in-world (an OpenSim NPC).</param>
     public async Task ConnectAsync(HttpClient http, Guid participantId, string joinToken, CancellationToken cancel = default,
-        string? displayName = null)
+        string? displayName = null, bool inWorldAvatar = false)
     {
         ParticipantId = participantId;
         if (_pipeline.SetState(State.Playing) == StateChangeReturn.Failure)
@@ -203,8 +204,8 @@ public sealed class FakeClient : IDisposable
         using var request = new HttpRequestMessage(HttpMethod.Post, $"signal/{participantId}/offer")
         {
             Content = JsonContent.Create(ViewerStyle
-                ? new OfferRequest(MungeLikeViewer(offer), Trickle: false, DisplayName: displayName)
-                : new OfferRequest(offer, DisplayName: displayName)),
+                ? new OfferRequest(MungeLikeViewer(offer), Trickle: false, DisplayName: displayName, InWorldAvatar: inWorldAvatar ? true : null)
+                : new OfferRequest(offer, DisplayName: displayName, InWorldAvatar: inWorldAvatar ? true : null)),
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", joinToken);
         using var response = await http.SendAsync(request, cancel);
