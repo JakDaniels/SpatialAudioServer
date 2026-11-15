@@ -652,6 +652,27 @@ tested without GStreamer.
        tethering, global coordinates, then neighbouring regions; (e) parcels; (f) per-peer mute/volume; (g) distance
        model by ear against SL. (g) is postponed (2026-11-15): two viewers at once are awkward to drive; NPC
        speakers (Phase 8) should make it a one-viewer test. Until then bots placed with `--around` can stand in.
+       (g) done later that day with NPC bots (see Phase 6: the exponential default and the `meeting` profile).
+     - **(h) Group and P2P calls (2026-11-15, v1 built).** Found: OpenSim's `WebRtcVoiceRegionModule` answers the
+       viewer's `ChatSessionRequest` `call` with a bare OK, but the viewer needs `voice_credentials {channel_uri,
+       channel_credentials}` (else "invalid credentials" and the call ends), and it never rings a P2P callee (an
+       event-queue `ChatterBoxInvitation` with `voice {invitation_type: 2, channel_uri…}`); the viewer then provisions
+       `channel_type: multiagent` with `channel` (Janus reads `channel_id`). Decided: a core patch written up for
+       Mantis (os-webrtc-sas `core-patches/0001`, not applied to the tree here); meanwhile the add-on's own region module
+       (`SasCallsModule`) re-registers `ChatSessionRequest` once each region is ready (after every module's caps, so
+       it replaces the core handler), and steps aside if the core has `MultiAgentCallsVersion`. Access: a group call
+       needs membership; a P2P channel XORed with the caller's id must be another avatar (so A⊕B cannot be used by a
+       third person); checked on `call` and again on provisioning. Each call is a non-spatial room
+       `call:{gridhash}:{session}`, deleted when its last viewer leaves. v1 scope: P2P callees rung only on the same
+       simulator; group members are not rung (they use Join Call); ad-hoc conferences refused. **Live test (P2P, Firestorm 7.2, two PCs):**
+       ringing works (fixed: a viewer whose IM window is already open sends only `call`, so ringing hangs off `call`,
+       skipped when the other party is already in the call), answering, both in one non-spatial room, the room
+       deleted at hang-up; bots joined to the call's room were heard clearly, with names. Test Two's sound arrived
+       garbled at −46 dB (a radio played into its microphone on a Linux PC; no packet loss, same with the `matrix`
+       engine), so its capture, not the call path; to recheck with people talking. Open: a decline (or the 30 s
+       incoming-call timeout) is not passed to the caller, who keeps "calling"; ringing across simulators; group calls
+       (this SQLite standalone has no groups: OpenSim's groups V2 need MySQL or PostgreSQL); whether call rooms
+       should use `matrix` rather than the non-spatial default `matrix-shared` (not shown to matter here).
 8. **(Ideas, not started; FOR DISCUSSION AND DECISION) In-world presence and voice agents (OpenSim NPCs).**
    Written up 2026-11-15 before any implementation. The principle: **OpenSim decides who exists in the region and
    what voice it has; the audio server only carries the sound.** The audio server never creates anything in a
