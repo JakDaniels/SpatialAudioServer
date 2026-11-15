@@ -49,11 +49,12 @@ internal sealed class StartupService(
                 $"Media:OpusFrameMs must be one of {string.Join(", ", MediaOptions.OpusFrameSizes)} (is {media.Value.OpusFrameMs}).");
         }
         var spatial = media.Value.Spatial;
-        if (spatial.ReferenceDistance <= 0 || spatial.MaxRange < spatial.ReferenceDistance
-            || spatial.ClusterGainStepDb <= 0 || spatial.ClusterPanSteps < 1)
+        if (spatial.ReferenceDistance <= 0 || spatial.MaxRange < spatial.ReferenceDistance || spatial.Rolloff <= 0
+            || spatial.ClusterGainStepDb <= 0 || spatial.ClusterPanSteps < 1 || !Enum.IsDefined(spatial.DistanceModel))
         {
             throw new InvalidOperationException(
-                "Media:Spatial needs ReferenceDistance > 0, MaxRange ≥ ReferenceDistance, ClusterGainStepDb > 0 and ClusterPanSteps ≥ 1.");
+                "Media:Spatial needs ReferenceDistance > 0, MaxRange ≥ ReferenceDistance, Rolloff > 0, DistanceModel " +
+                "Inverse, Linear or Exponential, ClusterGainStepDb > 0 and ClusterPanSteps ≥ 1.");
         }
         if (media.Value.DeadConnectionTimeout < TimeSpan.Zero)
         {

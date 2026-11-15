@@ -10,7 +10,7 @@ namespace SpatialAudioServer.Tests;
 public sealed class SpatialPolicyTests
 {
     private static readonly SpatialOptions Options = new(); // reference 10 m, max range 60 m
-    private static readonly InverseDistancePolicy Policy = new(Options);
+    private static readonly DistancePolicy Policy = new(Options);
     private static readonly Vec3 Origin = new(0, 0, 0);
     private static readonly Quat FacingEast = new(0, 0, 0, 1); // SL: identity rotation faces +x
     private static readonly Quat FacingWest = new(0, 0, 1, 0); // 180° about z
@@ -25,6 +25,21 @@ public sealed class SpatialPolicyTests
     public void Gain_falls_off_inversely_beyond_the_reference_distance(double distance, double gain)
     {
         Assert.Equal(gain, Policy.Render(new Vec3(distance, 0, 0), Origin, FacingEast).Gain, 6);
+    }
+
+    [Theory]
+    [InlineData(DistanceModel.Inverse, 2, 20, 1.0 / 3)]        // 10 / (10 + 2 × 10)
+    [InlineData(DistanceModel.Linear, 1, 35, 0.5)]              // half way from 10 m to 60 m
+    [InlineData(DistanceModel.Linear, 2, 20, 0.6)]              // OpenSim's Vivox settings
+    [InlineData(DistanceModel.Linear, 2, 35, 0.0)]              // … silent from 35 m
+    [InlineData(DistanceModel.Exponential, 2, 20, 0.25)]        // (20 / 10)^−2
+    public void Distance_models_and_rolloff(DistanceModel model, double rolloff, double distance, double gain)
+    {
+        var policy = new DistancePolicy(new SpatialOptions { DistanceModel = model, Rolloff = rolloff });
+        var rendering = policy.Render(new Vec3(distance, 0, 0), Origin, FacingEast);
+        Assert.Equal(gain, rendering.Gain, 6);
+        Assert.Equal(gain == 0, rendering.IsSilent);
+        Assert.Equal(1, policy.Render(new Vec3(10, 0, 0), Origin, FacingEast).Gain, 6);
     }
 
     [Fact]
