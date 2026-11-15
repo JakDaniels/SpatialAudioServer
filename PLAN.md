@@ -523,7 +523,12 @@ tested without GStreamer.
      UUID; `j`/`l` to listening viewers as others join and leave; every 200 ms the `p` (level × 128, −60…0 dBFS)
      and `v` (above `Media:VadThresholdDb`, with `VadHangoverMs`) that changed. Keys are avatar UUIDs; browsers and
      bots (no UUID external id) are keyed by participant id and show as unknown avatars. Engines without input
-     levels (pairchains) send no `p`/`v`. Everyone is announced as primary: neighbouring regions come later.
+     levels (pairchains) send no `p`/`v`. **Neighbouring regions:** a viewer near a border connects to each nearby
+     region's room; its `j` has `p: true` only in the room of the region it stands in (sent again when that changes;
+     the mic is live only there), and a viewer lists people only from `j {p:true}`. So an avatar is announced only
+     in its primary room and withdrawn (`l`) when it stops being primary there; browsers and bots are always primary.
+     Positions in the neighbouring room need nothing extra: the module's `TryGetScenePresence` also finds child agents,
+     whose positions OpenSim keeps current (seen within a few cm of the viewer's own report).
      The viewer looks every UUID up with its simulator to show a name (OpenSim leaves unknown ids out; the viewer
      asks again after 60 s), so the OpenSim module polls each room once a second and registers non-avatar
      participants' names with OpenSim's user management (`AddSystemUser`: "Simon (web)", `GuestLastName`; `RemoveUser`
@@ -622,7 +627,9 @@ tested without GStreamer.
      - **Progress (2026-11-14):** (a) and (b) done: Firestorm 7.2 (Windows) talks and hears bots in stereo. Then,
        by choice, reading SLData from (c) and the first part of (d): simulator position push, viewer `sp/lp` in
        tethered rooms. Then the rest of (c) (2026-11-15): writing `j/l/p/v/V` to viewers. Then (f), per-peer mute/volume.
-       Next: a second avatar test; neighbouring regions.
+       Second avatar and a neighbouring region (`SAS Test2` at 1001,1000) tested
+       2026-11-15: an avatar in region 2 hears region 1's bots near the border; primary-only announcing added
+       for the white dots. Still to check: avatar to avatar across the border, and crossing it.
      - **Order:** (a) module skeleton that builds in the OpenSim tree and loads under the core module; (b) provision
        and signalling → audio between two Firestorm viewers in one region (non-spatial mix is fine at first);
        (c) server SLData: join/leave/levels/speaking (white dots); (d) positions: simulator push + viewer `sp/lp` with

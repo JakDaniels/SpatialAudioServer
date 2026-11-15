@@ -55,6 +55,8 @@ public sealed class ViewerCompatibilityTests() : MediaTestBase(MixEngines.Defaul
 
         // Someone joining later is announced; a talker's level and speaking flag follow.
         var b = await JoinAsync(room.Id, 2, viewerStyle: true, talking: false, externalId: avatarB);
+        await b.DataChannelOpen.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True(b.SendData("""{"j":{"p":true}}"""));
         await Until(a, m => m[avatarB]?["j"] is not null);
         var talking = await Until(a, m => m[browser.ParticipantId.ToString()]?["v"] is { } v && (bool)v!);
         Assert.InRange((int)talking[browser.ParticipantId.ToString()]!["p"]!, 1, 128);
@@ -62,7 +64,34 @@ public sealed class ViewerCompatibilityTests() : MediaTestBase(MixEngines.Defaul
         // Leaving.
         (await Api.DeleteAsync($"/api/rooms/{room.Id}/participants/{browser.ParticipantId}")).EnsureSuccessStatusCode();
         await Until(a, m => m[browser.ParticipantId.ToString()]?["l"] is { } l && (bool)l!);
-        Assert.DoesNotContain(b.DataMessages, m => m.Contains("\"V\"")); // b never joined over its channel
+        Assert.Contains(b.DataMessages, m => m.Contains("\"V\""));
+    }
+
+    [Fact]
+    public async Task An_avatar_is_announced_only_while_this_is_its_primary_region()
+    {
+        var room = await CreateRoomAsync(spatial: true);
+        var avatarA = Guid.NewGuid().ToString();
+        var avatarB = Guid.NewGuid().ToString();
+        var a = await JoinAsync(room.Id, 0, viewerStyle: true, talking: false, externalId: avatarA);
+        var b = await JoinAsync(room.Id, 1, viewerStyle: true, talking: false, externalId: avatarB);
+        await Task.WhenAll(a.DataChannelOpen, b.DataChannelOpen).WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True(a.SendData("""{"j":{"p":true}}"""));
+        await Until(a, m => m[avatarA]?["V"] is not null);
+
+        // B's avatar is in the neighbouring region: it listens here but is not in anyone's list for this region.
+        Assert.True(b.SendData("""{"j":{}}"""));
+        var welcome = await Until(b, m => m[avatarB]?["V"] is not null);
+        Assert.Null(welcome[avatarB]!["j"]);
+        Assert.True((bool)welcome[avatarA]!["j"]!["p"]!);
+        await Task.Delay(ViewerData.GuestAnnounceDelay + ViewerData.LevelInterval);
+        Assert.DoesNotContain(a.DataMessages, m => m.Contains(avatarB));
+
+        // B crosses into this region, then back out.
+        Assert.True(b.SendData("""{"j":{"p":true}}"""));
+        await Until(a, m => m[avatarB]?["j"]?["p"] is { } p && (bool)p!);
+        Assert.True(b.SendData("""{"j":{}}"""));
+        await Until(a, m => m[avatarB]?["l"] is { } l && (bool)l!);
     }
 
     /// <summary>Waits for a data channel message (a JSON object keyed by avatar) that matches.</summary>
