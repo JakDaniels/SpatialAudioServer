@@ -691,7 +691,21 @@ tested without GStreamer.
      current look while it is in a region here, else its stored appearance), or appearance notecards by asset UUID
      (saved with `osAgentSaveAppearance`, which stores the baked textures as assets, so they keep working; a stored
      appearance's bakes may have expired, and a server cannot bake wearables itself, so stock items alone are not
-     enough: a viewer must have worn and baked them). A server restart left "Bot 1 (web)" in
+     enough: a viewer must have worn and baked them).
+     **Planned: an appearance pack (2026-11-15, not started).** A known set of looks for test bots (8, 16 or 32),
+     shipped with the module and available in every region it runs in, with no inventory or Library items: an NPC's
+     look needs only assets. A classic system avatar is its visual parameters (the shape sliders, numbers) plus about
+     six baked textures (head, upper, lower, eyes, skirt, hair) a viewer rendered once. (1) **Export once:** a console
+     command (e.g. `sas npc export-look <avatar|notecard> <name>`) writes the appearance and its baked textures into a
+     folder in the module's repo. (2) **Seed at start-up:** the module stores any of those textures the asset service
+     lacks, under their fixed ids (on a grid: the central asset store, shared by every simulator; permanent assets,
+     so they never expire like a stored appearance's bakes). (3) **Fixed look per bot number:** "Bot N" always gets
+     look N (wrapping round), so a bot is recognisable from test to test; other participants take looks in turn.
+     Configured as `NpcAppearancesFrom = pack` (names and notecards still work). Variety without re-baking: the shape
+     is only numbers, so e.g. 8 baked looks × varied height, build and head give 32 distinct bots. Size: about 6 × 100–300
+     KB per look, a few MB for 8. Licensing: make the looks from OpenSim's own Library items (Ruth, stock clothes),
+     which can ship under the module's MPL-2.0; other creators' items may carry their rights. Decided: classic
+     avatars only, no mesh bodies or attachments (NPCs we create cannot wear those: they rez from inventory). A server restart left "Bot 1 (web)" in
      viewers' lists, and a rejoining bot added a second: the viewer only retries a lost connection and keeps its
      list, and the new server has no record of who was there. So NPC ids are **stable** (a name-based, version 3 UUID
      from a secret made at module start-up, the room, the name and a slot: stable while the simulator runs, not
