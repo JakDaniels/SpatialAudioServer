@@ -48,7 +48,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   Tested avatar to avatar across the border. Distance model decided by ear: exponential from 2 m is the default
   (`outdoor`); rooms may choose `meeting` (SL's Vivox curve) via `spatialProfile` (module `SpatialProfile`).
   Group and P2P calls (PLAN.md Phase 7 (h)): add-on `SasCallsModule` replaces core's `ChatSessionRequest`; core patch
-  for Mantis in os-webrtc-sas `core-patches/` (not applied to the tree here). Live test next.
+  for Mantis in os-webrtc-sas `core-patches/` (not applied to the tree here). P2P and group calls tested live
+  (groups V2 on MariaDB `opensim_groups` for this standalone). Next: ringing across simulators.
   NPCs (PLAN.md Phase 8): web users and bots shown in-world as NPCs, first version (module `WebUserAvatars`, web
   client tick box, load tool `--npc`); voice agents set up from OSSL are ideas only.
   Test OpenSim standalone runs in `screen -S opensim` from `docs/reference/opensim/bin` (avatars Test One/Test Two).

@@ -671,8 +671,12 @@ tested without GStreamer.
        garbled at −46 dB: PulseAudio on that Linux PC used the wrong microphone input for the call's WebRTC stream
        (fixed there; not ours). Declines: the callee's `decline p2p voice` (also sent when its 30 s incoming-call
        dialog runs out) now reaches the caller as `ChatterBoxSessionAgentListUpdates` with the callee's
-       `can_voice_chat: false`, which the viewer shows as declined and ends the call. Open: ringing across simulators; group calls
-       (this SQLite standalone has no groups: OpenSim's groups V2 need MySQL or PostgreSQL). Call rooms keep the
+       `can_voice_chat: false`, which the viewer shows as declined and ends the call. Group calls tested too (2026-11-15): the membership check, both
+       avatars in the group's call room, speech heard; the viewer joins group calls with the microphone off (unmute
+       with Speak). Groups on this SQLite standalone: groups V2 alone on MariaDB (`opensim_groups`;
+       `MessageOnlineUsersOnly = true`, or V2 messaging switches itself off; `[GridUserService] StorageProvider` named
+       in `SQLiteStandalone.ini`, or the groups service pairs SQLite's connection string with the MySQL driver and
+       stops the simulator), written up in the add-on README. Open: ringing across simulators. Call rooms keep the
        non-spatial default `matrix-shared`: re-tested after the PulseAudio fix, speech both ways is clean. One
        Firestorm crash (Windows, Test One calling) came right after a server restart, between `call` and joining the
        call room; not repeatable since, put down to the viewer meeting a restarted voice server mid-reconnect.
