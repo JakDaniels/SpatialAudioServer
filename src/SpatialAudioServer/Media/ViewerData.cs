@@ -26,6 +26,9 @@ namespace SpatialAudioServer.Media;
 /// border, the new room's <c>j</c> and the old room's <c>l</c> reach a neighbour over different connections in
 /// either order, and with <c>j</c> first the avatar would vanish from its list. So every announcement is repeated
 /// <see cref="ReannounceDelay"/> later, which adds it back from the right region.</para>
+/// <para>A viewer keeps its list across a lost connection, so one that joins (or rejoins, e.g. after a server restart)
+/// is also told about recent departures (<see cref="ViewerDepartures"/>) that are not in the room now: those that left
+/// while it was away, and those the integration reports gone (<see cref="Gone"/>).</para>
 /// <para>Participants are keyed by their external id when it is a UUID (an avatar), otherwise by our participant
 /// id (a browser or bot). A viewer looks every UUID up with its simulator to show a name, so the OpenSim module
 /// registers those participants' names there (polling the room); they are announced <see cref="GuestAnnounceDelay"/>
@@ -55,10 +58,13 @@ internal sealed class ViewerData : IDisposable
     private readonly double _speakingDb;
     private readonly long _hangoverMs;
     private readonly Dictionary<Guid, Member> _members = [];
+    private readonly ViewerDepartures _departures;
     private readonly Timer _timer;
 
-    public ViewerData(RoomWorker worker, MediaOptions options, Func<IReadOnlyDictionary<Guid, double>> levels, Func<Guid, WebRtcBin?> rtcOf)
+    public ViewerData(RoomWorker worker, MediaOptions options, Func<IReadOnlyDictionary<Guid, double>> levels, Func<Guid, WebRtcBin?> rtcOf,
+        ViewerDepartures? departures = null)
     {
+        _departures = departures ?? new ViewerDepartures();
         _worker = worker;
         _levels = levels;
         _rtcOf = rtcOf;
@@ -114,9 +120,33 @@ internal sealed class ViewerData : IDisposable
     /// <summary>A participant left the room.</summary>
     public void Removed(Guid participantId)
     {
-        if (_members.Remove(participantId, out var member) && member.Announced)
+        if (_members.Remove(participantId, out var member))
         {
-            Broadcast(new JsonObject { [member.Key] = new JsonObject { ["l"] = true } }, except: participantId);
+            if (member.Announced)
+            {
+                Broadcast(new JsonObject { [member.Key] = new JsonObject { ["l"] = true } }, except: participantId);
+            }
+            if (_members.Values.All(m => m.Key != member.Key))
+            {
+                _departures.Add(member.Key);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The integration says these viewer keys are gone (e.g. NPCs it removed while the server was restarting):
+    /// listening viewers are told, and joining ones later. Keys in the room now are left alone.
+    /// </summary>
+    public void Gone(IReadOnlyList<string> keys)
+    {
+        var message = new JsonObject();
+        foreach (var key in keys.Where(k => _members.Values.All(m => !string.Equals(m.Key, k, StringComparison.OrdinalIgnoreCase))))
+        {
+            message[key.ToLowerInvariant()] = new JsonObject { ["l"] = true };
+        }
+        if (message.Count > 0)
+        {
+            Broadcast(message, except: null);
         }
     }
 
@@ -159,6 +189,7 @@ internal sealed class ViewerData : IDisposable
         {
             Withdraw(participant.Id, member);
         }
+        _departures.Add(member.Key);
         member.Key = participant.ViewerKey;
         if (announced)
         {
@@ -195,6 +226,13 @@ internal sealed class ViewerData : IDisposable
             Withdraw(participantId, member);
         }
         var message = new JsonObject();
+        foreach (var key in _departures.Recent())
+        {
+            if (_members.Values.All(m => !string.Equals(m.Key, key, StringComparison.OrdinalIgnoreCase)))
+            {
+                message[key.ToLowerInvariant()] = new JsonObject { ["l"] = true };
+            }
+        }
         foreach (var other in _members.Values.Where(m => m.Announced))
         {
             var entry = Join();

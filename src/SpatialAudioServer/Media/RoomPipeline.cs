@@ -28,7 +28,7 @@ internal sealed class RoomPipeline : IDisposable
     private readonly ViewerData _viewers;
     private int _disposed;
 
-    public RoomPipeline(RoomSnapshot room, MediaOptions options, ILogger log)
+    public RoomPipeline(RoomSnapshot room, MediaOptions options, ILogger log, ViewerDepartures? departures = null)
     {
         var roomId = room.Id;
         RoomId = roomId;
@@ -43,10 +43,14 @@ internal sealed class RoomPipeline : IDisposable
         }
         _bus = new BusWatcher(_pipeline, $"room-{roomId.ToString()[..8]}", log);
         Spatial = room.Spatial;
-        _engine = MixEngines.Create(room.Engine, new MixEngineContext(roomId, room.MaxParticipants, _pipeline, _worker, options, log, room.Spatial));
+        _engine = MixEngines.Create(room.Engine, new MixEngineContext(roomId, room.MaxParticipants, _pipeline, _worker, options, log, room.Spatial,
+            room.SpatialProfile));
         _viewers = new ViewerData(_worker, options, () => _engine.InputLevels,
-            id => _participants.TryGetValue(id, out var p) ? p.Endpoint?.Rtc : null);
+            id => _participants.TryGetValue(id, out var p) ? p.Endpoint?.Rtc : null, departures);
     }
+
+    /// <summary>The integration reports these viewer keys gone (see <see cref="ViewerData.Gone"/>).</summary>
+    public void ViewerKeysGone(IReadOnlyList<string> keys) => _worker.Post(() => _viewers.Gone(keys));
 
     public Guid RoomId { get; }
 

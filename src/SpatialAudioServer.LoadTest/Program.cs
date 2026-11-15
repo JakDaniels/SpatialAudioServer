@@ -197,23 +197,51 @@ public static class LoadTestProgram
         };
         Console.CancelKeyPress += onCancel;
         var clients = new List<FakeClient>();
+
+        // Bot i joins (again, after a server restart: same name, place and audio).
+        async Task<FakeClient> Join(int i)
+        {
+            var name = BotName(options, i);
+            var position = places[i]?.Position is { } p ? new Vec3(centre.X + p.X, centre.Y + p.Y, centre.Z + p.Z) : null;
+            var join = await Post<JoinResponse>(http, $"api/rooms/{roomId}/participants", new { displayName = name, position });
+            // Each client of a shared clip starts at a different point so they don't speak in unison.
+            var clip = clips.Count > 0 ? clips[i % clips.Count] : null;
+            var sharing = clips.Count > 0 ? (n + clips.Count - 1) / clips.Count : 1;
+            var offset = clip is null ? 0 : (int)((long)clip.Pcm.Length * (i / Math.Max(1, clips.Count)) / sharing);
+            var client = new FakeClient(name, tones[i], tones, options.JitterBufferMs, logs.CreateLogger("fake"), volume,
+                talking: i < talkers, clip: clip, clipOffsetBytes: offset);
+            try
+            {
+                await client.ConnectAsync(http, join.ParticipantId, join.JoinToken, inWorldAvatar: options.Npc);
+            }
+            catch
+            {
+                client.Dispose();
+                throw;
+            }
+            Console.WriteLine($"  {name} joined ({join.ParticipantId}){(i < talkers ? "" : ", silent")}" +
+                (places[i] is { } place ? $", {place.Distance:0.#} m {BotLayout.Describe(place.Octant)}" : ""));
+            return client;
+        }
+
+        // A server restart (its start time changes) loses every participant: the bots then join again.
+        async Task<DateTimeOffset?> StartedAt()
+        {
+            try
+            {
+                return (await Status(http)).StartedAt;
+            }
+            catch (Exception)
+            {
+                return null; // still down
+            }
+        }
+        var startedAt = await StartedAt();
         try
         {
             for (var i = 0; i < n && !stop.IsCancellationRequested; i++)
             {
-                var name = BotName(options, i);
-                var position = places[i]?.Position is { } p ? new Vec3(centre.X + p.X, centre.Y + p.Y, centre.Z + p.Z) : null;
-                var join = await Post<JoinResponse>(http, $"api/rooms/{roomId}/participants", new { displayName = name, position });
-                // Each client of a shared clip starts at a different point so they don't speak in unison.
-                var clip = clips.Count > 0 ? clips[i % clips.Count] : null;
-                var sharing = clips.Count > 0 ? (n + clips.Count - 1) / clips.Count : 1;
-                var offset = clip is null ? 0 : (int)((long)clip.Pcm.Length * (i / Math.Max(1, clips.Count)) / sharing);
-                var client = new FakeClient(name, tones[i], tones, options.JitterBufferMs, logs.CreateLogger("fake"), volume,
-                    talking: i < talkers, clip: clip, clipOffsetBytes: offset);
-                clients.Add(client);
-                await client.ConnectAsync(http, join.ParticipantId, join.JoinToken, inWorldAvatar: options.Npc);
-                Console.WriteLine($"  {name} joined ({join.ParticipantId}){(i < talkers ? "" : ", silent")}" +
-                    (places[i] is { } place ? $", {place.Distance:0.#} m {BotLayout.Describe(place.Octant)}" : ""));
+                clients.Add(await Join(i));
             }
 
             Console.WriteLine(options.DurationSet
@@ -221,6 +249,7 @@ public static class LoadTestProgram
                 : "Running until Ctrl+C");
             var until = options.DurationSet ? DateTime.UtcNow + options.Duration : DateTime.MaxValue;
             var reported = new HashSet<FakeClient>();
+            var rejoin = new HashSet<int>(); // bots to join again after a server restart
             for (var tick = 1; !stop.IsCancellationRequested && DateTime.UtcNow < until; tick++)
             {
                 try
@@ -231,13 +260,52 @@ public static class LoadTestProgram
                 {
                     break;
                 }
+                if (clients.Any(c => c.Removed || c.IceError is not null || !c.AudioFlowing)
+                    && await StartedAt() is { } now && now != startedAt)
+                {
+                    Console.WriteLine("The server restarted: joining again");
+                    startedAt = now;
+                    reported.Clear();
+                    rejoin.UnionWith(Enumerable.Range(0, clients.Count));
+                }
+                foreach (var i in rejoin.ToList())
+                {
+                    if (stop.IsCancellationRequested)
+                    {
+                        break;
+                    }
+                    try
+                    {
+                        var again = await Join(i);
+                        clients[i].Dispose();
+                        clients[i] = again;
+                        rejoin.Remove(i);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"  {BotName(options, i)} could not join again ({ex.Message}); trying again in a second");
+                    }
+                }
+                if (rejoin.Count > 0)
+                {
+                    continue;
+                }
                 foreach (var gone in clients.Where(c => c.Removed && reported.Add(c)))
                 {
                     Console.WriteLine($"  {gone.Name} was removed by the server");
                 }
                 if (clients.All(c => c.Removed))
                 {
-                    using var check = await http.GetAsync($"api/rooms/{roomId}");
+                    HttpResponseMessage check;
+                    try
+                    {
+                        check = await http.GetAsync($"api/rooms/{roomId}");
+                    }
+                    catch (HttpRequestException)
+                    {
+                        continue; // the server is going or restarting: decided once it answers
+                    }
+                    using var _ = check;
                     Console.WriteLine(check.StatusCode == System.Net.HttpStatusCode.NotFound
                         ? "The room was deleted; exiting."
                         : "Every bot was removed from the room; exiting.");

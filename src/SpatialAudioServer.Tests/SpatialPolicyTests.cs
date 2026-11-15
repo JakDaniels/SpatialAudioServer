@@ -9,7 +9,8 @@ namespace SpatialAudioServer.Tests;
 /// <summary>The default distance/direction model, the stereo pan law and the cluster grid (no media).</summary>
 public sealed class SpatialPolicyTests
 {
-    private static readonly SpatialOptions Options = new(); // reference 10 m, max range 60 m
+    // The inverse curve from 10 m (the server default before 2026-11-15): simple numbers for direction and range tests.
+    private static readonly SpatialOptions Options = new() { DistanceModel = DistanceModel.Inverse, ReferenceDistance = 10, MaxRange = 60 };
     private static readonly DistancePolicy Policy = new(Options);
     private static readonly Vec3 Origin = new(0, 0, 0);
     private static readonly Quat FacingEast = new(0, 0, 0, 1); // SL: identity rotation faces +x
@@ -35,11 +36,35 @@ public sealed class SpatialPolicyTests
     [InlineData(DistanceModel.Exponential, 2, 20, 0.25)]        // (20 / 10)^−2
     public void Distance_models_and_rolloff(DistanceModel model, double rolloff, double distance, double gain)
     {
-        var policy = new DistancePolicy(new SpatialOptions { DistanceModel = model, Rolloff = rolloff });
+        var policy = new DistancePolicy(new SpatialOptions { DistanceModel = model, Rolloff = rolloff, ReferenceDistance = 10, MaxRange = 60 });
         var rendering = policy.Render(new Vec3(distance, 0, 0), Origin, FacingEast);
         Assert.Equal(gain, rendering.Gain, 6);
         Assert.Equal(gain == 0, rendering.IsSilent);
         Assert.Equal(1, policy.Render(new Vec3(10, 0, 0), Origin, FacingEast).Gain, 6);
+    }
+
+    [Theory]
+    [InlineData(2, 1.0)]
+    [InlineData(4, 0.5)]   // −6 dB per doubling from 2 m
+    [InlineData(20, 0.1)]
+    [InlineData(50, 0.04)]
+    public void The_default_curve_is_physical_from_two_metres(double distance, double gain)
+    {
+        var policy = new DistancePolicy(new SpatialOptions());
+        Assert.Equal(gain, policy.Render(new Vec3(distance, 0, 0), Origin, FacingEast).Gain, 6);
+        Assert.True(policy.Render(new Vec3(61, 0, 0), Origin, FacingEast).IsSilent);
+    }
+
+    [Fact]
+    public void A_rooms_profile_chooses_its_curve()
+    {
+        var options = new SpatialOptions();
+        var meeting = new DistancePolicy(options.WithProfile("Meeting")); // names are case-insensitive
+        Assert.Equal(1, meeting.Render(new Vec3(10, 0, 0), Origin, FacingEast).Gain, 6);
+        Assert.Equal(0.6, meeting.Render(new Vec3(20, 0, 0), Origin, FacingEast).Gain, 6);
+        Assert.True(meeting.Render(new Vec3(35, 0, 0), Origin, FacingEast).IsSilent);
+        Assert.Same(options, options.WithProfile(null));
+        Assert.Equal(0.1, new DistancePolicy(options.WithProfile(SpatialOptions.Outdoor)).Render(new Vec3(20, 0, 0), Origin, FacingEast).Gain, 6);
     }
 
     [Fact]

@@ -45,7 +45,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   parcel voice, simulator position push (`POST …/poses`), the server reads SLData and writes `j/l/p/v/V` to viewers
   (`Media/ViewerData.cs`), names for web/bot participants, per-person mute and volume. Neighbouring regions: second region
   `SAS Test2` (1001,1000, port 9001); avatars announced only in their primary region's room (viewer `j {p}`).
-  Tested avatar to avatar across the border. Distance model by ear (`Media:Spatial:DistanceModel`/`Rolloff`) postponed until NPC speakers.
+  Tested avatar to avatar across the border. Distance model decided by ear: exponential from 2 m is the default
+  (`outdoor`); rooms may choose `meeting` (SL's Vivox curve) via `spatialProfile` (module `SpatialProfile`).
   NPCs (PLAN.md Phase 8): web users and bots shown in-world as NPCs, first version (module `WebUserAvatars`, web
   client tick box, load tool `--npc`); voice agents set up from OSSL are ideas only.
   Test OpenSim standalone runs in `screen -S opensim` from `docs/reference/opensim/bin` (avatars Test One/Test Two).

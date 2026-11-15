@@ -56,6 +56,15 @@ internal sealed class StartupService(
                 "Media:Spatial needs ReferenceDistance > 0, MaxRange ≥ ReferenceDistance, Rolloff > 0, DistanceModel " +
                 "Inverse, Linear or Exponential, ClusterGainStepDb > 0 and ClusterPanSteps ≥ 1.");
         }
+        foreach (var (name, profile) in spatial.Profiles)
+        {
+            if (profile.ReferenceDistance <= 0 || profile.MaxRange < profile.ReferenceDistance || profile.Rolloff <= 0
+                || !Enum.IsDefined(profile.DistanceModel))
+            {
+                throw new InvalidOperationException(
+                    $"Media:Spatial:Profiles:{name} needs ReferenceDistance > 0, MaxRange ≥ ReferenceDistance, Rolloff > 0 and a DistanceModel.");
+            }
+        }
         if (media.Value.DeadConnectionTimeout < TimeSpan.Zero)
         {
             throw new InvalidOperationException(

@@ -81,7 +81,8 @@ public sealed record RoomSnapshot(
     string Engine,
     bool Spatial = false,
     ClientPose ClientPose = ClientPose.None,
-    InWorldAvatars InWorldAvatars = InWorldAvatars.Off);
+    InWorldAvatars InWorldAvatars = InWorldAvatars.Off,
+    string? SpatialProfile = null);
 
 public sealed record ParticipantSnapshot(
     Guid Id,
@@ -115,14 +116,19 @@ public sealed record ParticipantSnapshot(
 /// <param name="Spatial">Mix by participant position (distance and direction); fixed for the room's life. Default off.</param>
 /// <param name="ClientPose">What participants may set about their own pose; default by <paramref name="Spatial"/>.</param>
 /// <param name="InWorldAvatars">Whether the integration shows web and bot participants in-world; default off.</param>
+/// <param name="SpatialProfile">Spatial rooms: the named distance curve (<c>Media:Spatial:Profiles</c>, e.g. "outdoor",
+/// "meeting"); null = the server's default curve. Fixed for the room's life.</param>
 public sealed record CreateRoomCommand(
     string? Name, string? ExternalId, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null,
-    ClientPose? ClientPose = null, InWorldAvatars? InWorldAvatars = null);
+    ClientPose? ClientPose = null, InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null);
 
 /// <summary>Body of get-or-create by external id. Only used when the room is created; name defaults to the external id.</summary>
 public sealed record EnsureRoomCommand(
     string? Name, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null, ClientPose? ClientPose = null,
-    InWorldAvatars? InWorldAvatars = null);
+    InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null);
+
+/// <summary>Viewer keys (UUIDs) that have gone from a room, e.g. NPCs the integration removed (SL viewers drop them).</summary>
+public sealed record ViewerKeysGoneCommand(IReadOnlyList<string>? Keys);
 
 /// <summary>Partial update of a room: null fields are left unchanged. The rest of a room is fixed for its life.</summary>
 public sealed record UpdateRoomCommand(InWorldAvatars? InWorldAvatars);

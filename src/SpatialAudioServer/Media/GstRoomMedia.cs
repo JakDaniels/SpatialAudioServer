@@ -140,10 +140,26 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
         }
     }
 
+    public void ViewerKeysGone(Guid roomId, IReadOnlyList<string> keys)
+    {
+        if (!_rooms.TryGetValue(roomId, out var entry))
+        {
+            return;
+        }
+        lock (entry)
+        {
+            foreach (var key in keys)
+            {
+                entry.Departures.Add(key);
+            }
+            entry.Pipeline?.ViewerKeysGone(keys);
+        }
+    }
+
     private RoomPipeline Start(RoomEntry entry)
     {
         var room = entry.Room;
-        var pipeline = new RoomPipeline(room, options.Value, log);
+        var pipeline = new RoomPipeline(room, options.Value, log, entry.Departures);
         pipeline.StateChanged += (pid, state) => ParticipantStateChanged?.Invoke(room.Id, pid, state);
         pipeline.DataReceived += (pid, text) => ParticipantData?.Invoke(room.Id, pid, text);
         log.LogInformation("Room {RoomId}: media started", room.Id);
@@ -208,6 +224,8 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
         public RoomSnapshot Room { get; } = room;
         public RoomPipeline? Pipeline { get; set; }
         public HashSet<Guid> Participants { get; } = [];
+        /// <summary>Recent leavers, replayed to SL viewers that join; kept while the media is stopped.</summary>
+        public ViewerDepartures Departures { get; } = new();
         /// <summary>Bumped by every add and every idle-stop schedule, so a stale idle timer does nothing.</summary>
         public int IdleGeneration { get; set; }
         public bool Deleted { get; set; }
