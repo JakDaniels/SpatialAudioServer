@@ -61,8 +61,8 @@ internal sealed class ViewerData : IDisposable
     /// <summary>A participant joined the room: viewers already listening are told.</summary>
     public void Added(ParticipantSnapshot participant)
     {
-        var avatar = Guid.TryParse(participant.ExternalId, out var avatarId);
-        var member = new Member(avatar ? avatarId.ToString() : participant.Id.ToString());
+        var avatar = Guid.TryParse(participant.ExternalId, out _);
+        var member = new Member(participant.ViewerKey);
         _members[participant.Id] = member;
         if (avatar)
         {

@@ -491,6 +491,10 @@ public sealed class RoomManager(
         {
             log.LogTrace("Participant {ParticipantId} SLData: {Text}", participantId, Shorten(text));
         }
+        if (message.Mutes.Count > 0 || message.Gains.Count > 0)
+        {
+            SetPeers(roomId, participantId, message);
+        }
         if (message.Pose is not { } pose)
         {
             return;
@@ -519,6 +523,54 @@ public sealed class RoomManager(
             }
             participant.LastSelfPose = now;
             participant.ClientReport = pose;
+            snapshot = participant.Snapshot();
+        }
+        media.ParticipantUpdated(snapshot);
+    }
+
+    /// <summary>Most per-person settings a participant may keep (a viewer sends one per muted or adjusted person).</summary>
+    public const int MaxPeerSettings = 256;
+
+    /// <summary>
+    /// A viewer's own mute list and per-person volume (SLData <c>m</c> and <c>ug</c>), for its mix only. <c>ug</c> is
+    /// the viewer's volume slider (0–1, default 0.5) × 220 (× 200 for the values it restores on a join), so 100 is the
+    /// mix as it is: gain = ug / 100, at most <see cref="Validation.MaxGain"/>.
+    /// </summary>
+    private void SetPeers(Guid roomId, Guid participantId, SlDataMessage message)
+    {
+        ParticipantSnapshot snapshot;
+        lock (_lock)
+        {
+            if (!_rooms.TryGetValue(roomId, out var room) || !room.Participants.TryGetValue(participantId, out var participant))
+            {
+                return;
+            }
+            var peers = new Dictionary<string, PeerSetting>(participant.Peers);
+            foreach (var (id, muted) in message.Mutes)
+            {
+                if (Guid.TryParse(id, out var key))
+                {
+                    peers[key.ToString()] = (peers.GetValueOrDefault(key.ToString()) ?? PeerSetting.Default) with { Muted = muted };
+                }
+            }
+            foreach (var (id, ug) in message.Gains)
+            {
+                if (Guid.TryParse(id, out var key))
+                {
+                    var gain = Math.Clamp(ug / 100.0, 0, Validation.MaxGain);
+                    peers[key.ToString()] = (peers.GetValueOrDefault(key.ToString()) ?? PeerSetting.Default) with { Gain = gain };
+                }
+            }
+            foreach (var key in peers.Where(p => p.Value == PeerSetting.Default).Select(p => p.Key).ToList())
+            {
+                peers.Remove(key); // back to normal: nothing to keep
+            }
+            if (peers.Count > MaxPeerSettings)
+            {
+                log.LogWarning("Participant {ParticipantId} sent more than {Max} per-person settings; ignored", participantId, MaxPeerSettings);
+                return;
+            }
+            participant.Peers = peers;
             snapshot = participant.Snapshot();
         }
         media.ParticipantUpdated(snapshot);
@@ -705,6 +757,9 @@ public sealed class RoomManager(
         public DateTimeOffset LastSelfPose { get; set; }
         /// <summary>The viewer's own report of where it is (tethered rooms).</summary>
         public ClientPoseReport? ClientReport { get; set; }
+        /// <summary>This participant's own mute and volume for others, by <see cref="ParticipantSnapshot.ViewerKey"/>.
+        /// Replaced, never changed in place: snapshots share it.</summary>
+        public IReadOnlyDictionary<string, PeerSetting> Peers { get; set; } = new Dictionary<string, PeerSetting>();
         public bool PoseIgnoredLogged { get; set; }
         public bool Muted { get; set; }
         public double Gain { get; set; } = 1.0;
@@ -714,7 +769,7 @@ public sealed class RoomManager(
 
         public ParticipantSnapshot Snapshot() =>
             new(Id, RoomId, DisplayName, ExternalId, Position, Orientation, Muted, Gain, ParseMetadata(Metadata), JoinedAt, State,
-                ListenerPosition, ListenerOrientation, ClientNamed, ClientReport);
+                ListenerPosition, ListenerOrientation, ClientNamed, ClientReport, Peers);
     }
 
     // Stored as text and parsed per snapshot, so callers never share a mutable JsonObject with the manager.

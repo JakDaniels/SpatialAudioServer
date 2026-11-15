@@ -79,13 +79,19 @@ internal sealed class MixEngineContext(
     /// </summary>
     public Spatial.Rendering Render(ParticipantSnapshot source, ParticipantSnapshot listener)
     {
+        // The room's gain and mute for the source, then this listener's own (an SL viewer's mute list and volume slider).
+        var gain = source.Muted ? 0 : source.Gain;
+        if (listener.Peers is { Count: > 0 } peers && peers.TryGetValue(source.ViewerKey, out var peer))
+        {
+            gain *= peer.Muted ? 0 : peer.Gain;
+        }
         if (Spatial is null)
         {
-            return Media.Spatial.Rendering.Centre.Scale(source.Muted ? 0 : source.Gain);
+            return Media.Spatial.Rendering.Centre.Scale(gain);
         }
         var from = Media.Spatial.EffectivePose.Of(source, Options.Spatial);
         var to = Media.Spatial.EffectivePose.Of(listener, Options.Spatial);
-        return Spatial.Render(from.Speaker, to.Listener, to.ListenerOrientation).Scale(source.Muted ? 0 : source.Gain);
+        return Spatial.Render(from.Speaker, to.Listener, to.ListenerOrientation).Scale(gain);
     }
 
     public Guid RoomId { get; } = roomId;

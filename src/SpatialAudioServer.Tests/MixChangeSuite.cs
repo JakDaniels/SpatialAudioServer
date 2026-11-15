@@ -81,6 +81,32 @@ public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) wh
     }
 
     [Fact]
+    public async Task A_viewer_mutes_and_turns_down_one_person_for_itself_only()
+    {
+        var room = await CreateRoomAsync();
+        var avatar1 = Guid.NewGuid().ToString();
+        var viewer = await JoinAsync(room.Id, 0, viewerStyle: true, externalId: Guid.NewGuid().ToString());
+        var clients = new List<FakeClient> { viewer, await JoinAsync(room.Id, 1, externalId: avatar1), await JoinAsync(room.Id, 2) };
+        var browserKey = clients[2].ParticipantId.ToString(); // no avatar: viewers know it by participant id
+        await SettleAndMeasureAsync(clients, Others(clients));
+        await viewer.DataChannelOpen.WaitAsync(TimeSpan.FromSeconds(20));
+
+        // The viewer mutes avatar 1 (its mute list): only its own mix changes.
+        Assert.True(viewer.SendData($$$"""{"m":{"{{{avatar1}}}":true}}"""));
+        Func<FakeClient, IEnumerable<double>> muted = c => Others(clients)(c).Where(t => c != viewer || t != Tones[1]);
+        AssertHears(await SettleAndMeasureAsync(clients, muted), muted);
+
+        // Unmuted, and the browser's volume slider all the way down.
+        Assert.True(viewer.SendData($$$"""{"m":{"{{{avatar1}}}":false},"ug":{"{{{browserKey}}}":0}}"""));
+        Func<FakeClient, IEnumerable<double>> quiet = c => Others(clients)(c).Where(t => c != viewer || t != Tones[2]);
+        AssertHears(await SettleAndMeasureAsync(clients, quiet), quiet);
+
+        // Back to the middle of the slider (× 200, as a viewer restores it on joining): everyone again.
+        Assert.True(viewer.SendData($$$"""{"ug":{"{{{browserKey}}}":100}}"""));
+        AssertHears(await SettleAndMeasureAsync(clients, Others(clients)), Others(clients));
+    }
+
+    [Fact]
     public async Task Deleting_a_room_with_connected_participants_tears_it_down()
     {
         var room = await CreateRoomAsync();
