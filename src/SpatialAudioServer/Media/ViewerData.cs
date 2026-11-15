@@ -17,13 +17,19 @@ namespace SpatialAudioServer.Media;
 /// is then told about everyone already in the room. Browsers and bots never open a data channel, so they only appear
 /// in viewers' lists.</para>
 /// <para>Participants are keyed by their external id when it is a UUID (an avatar), otherwise by our participant
-/// id (a browser or bot: shown by the viewer as an unknown avatar). Neighbouring regions (a viewer connected as a
+/// id (a browser or bot). A viewer looks every UUID up with its simulator to show a name, so the OpenSim module
+/// registers those participants' names there (polling the room); they are announced <see cref="GuestAnnounceDelay"/>
+/// after they connect, so the name is there before the viewer asks (if not, it shows "(loading)" and asks again a
+/// minute later). Avatars are announced as soon as they are added. Neighbouring regions (a viewer connected as a
 /// non-primary listener) are not handled yet: everyone is announced as primary.</para>
 /// </remarks>
 internal sealed class ViewerData : IDisposable
 {
     /// <summary>How often levels and speaking flags go out (only changes are sent).</summary>
     public static readonly TimeSpan LevelInterval = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>How long after connecting a participant that is not an avatar is announced (see the remarks).</summary>
+    public static readonly TimeSpan GuestAnnounceDelay = TimeSpan.FromSeconds(2);
 
     /// <summary>The level sent as p = 0 … 128 maps −60 dBFS … 0 dBFS (speech is around −30 … −15).</summary>
     private const double FloorDb = -60;
@@ -55,18 +61,54 @@ internal sealed class ViewerData : IDisposable
     /// <summary>A participant joined the room: viewers already listening are told.</summary>
     public void Added(ParticipantSnapshot participant)
     {
-        var member = new Member(KeyOf(participant));
+        var avatar = Guid.TryParse(participant.ExternalId, out var avatarId);
+        var member = new Member(avatar ? avatarId.ToString() : participant.Id.ToString());
         _members[participant.Id] = member;
-        Broadcast(new JsonObject { [member.Key] = Join() }, except: participant.Id);
+        if (avatar)
+        {
+            Announce(participant.Id, member);
+        }
+    }
+
+    /// <summary>The participant's connection is up: one that is not an avatar is announced shortly.</summary>
+    public void Connected(Guid participantId)
+    {
+        if (!_members.TryGetValue(participantId, out var member) || member.Announced)
+        {
+            return;
+        }
+        _ = Task.Delay(GuestAnnounceDelay).ContinueWith(_ =>
+        {
+            try
+            {
+                _worker.Post(() =>
+                {
+                    if (_members.TryGetValue(participantId, out var current) && current == member && !member.Announced)
+                    {
+                        Announce(participantId, member);
+                    }
+                });
+            }
+            catch (ObjectDisposedException)
+            {
+                // The room's media stopped meanwhile.
+            }
+        }, TaskScheduler.Default);
     }
 
     /// <summary>A participant left the room.</summary>
     public void Removed(Guid participantId)
     {
-        if (_members.Remove(participantId, out var member))
+        if (_members.Remove(participantId, out var member) && member.Announced)
         {
             Broadcast(new JsonObject { [member.Key] = new JsonObject { ["l"] = true } }, except: participantId);
         }
+    }
+
+    private void Announce(Guid participantId, Member member)
+    {
+        member.Announced = true;
+        Broadcast(new JsonObject { [member.Key] = Join() }, except: participantId);
     }
 
     /// <summary>The participant's endpoint went (re-offer or leaving): it gets nothing until it joins again.</summary>
@@ -86,8 +128,9 @@ internal sealed class ViewerData : IDisposable
             return;
         }
         member.Listening = true;
+        member.Announced = true; // a viewer is in its own list from now on
         var message = new JsonObject();
-        foreach (var other in _members.Values)
+        foreach (var other in _members.Values.Where(m => m.Announced))
         {
             var entry = Join();
             if (other.Speaking)
@@ -121,7 +164,7 @@ internal sealed class ViewerData : IDisposable
         var levels = _levels();
         var now = Environment.TickCount64;
         var message = new JsonObject();
-        foreach (var (id, member) in _members)
+        foreach (var (id, member) in _members.Where(m => m.Value.Announced))
         {
             var db = levels.TryGetValue(id, out var rms) ? 20 * Math.Log10(Math.Max(rms, 1e-6)) : double.NegativeInfinity;
             if (db > _speakingDb)
@@ -174,12 +217,12 @@ internal sealed class ViewerData : IDisposable
 
     private static JsonObject Join() => new() { ["j"] = new JsonObject { ["p"] = true } };
 
-    private static string KeyOf(ParticipantSnapshot p) =>
-        Guid.TryParse(p.ExternalId, out var avatar) ? avatar.ToString() : p.Id.ToString();
-
     private sealed class Member(string key)
     {
         public string Key { get; } = key;
+
+        /// <summary>Viewers have been told about this participant (a <c>j</c> went out).</summary>
+        public bool Announced { get; set; }
 
         /// <summary>A viewer that has joined over its data channel.</summary>
         public bool Listening { get; set; }
