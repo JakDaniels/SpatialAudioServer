@@ -425,8 +425,9 @@ tested without GStreamer.
 6. **Spatial (brought forward 2026-11-13, first version done).** Decided: a per-room `spatial` flag (create/ensure,
    default off, stored: migration 4, shown in room details); `matrix-shared` clusters listeners by rendering; an
    inverse, SL-like distance model.
-   - `ISpatialPolicy` → `InverseDistancePolicy` (`Media/Spatial/`): full volume within `Media:Spatial:ReferenceDistance`
-     (10 m), then reference/distance, silent beyond `MaxRange` (60 m). Pan = sine of the horizontal angle from the
+   - `ISpatialPolicy` → `DistancePolicy` (`Media/Spatial/`): full volume within `Media:Spatial:ReferenceDistance`
+     (10 m), then `DistanceModel` (`Inverse` default, `Linear`, `Exponential`; OpenAL formulas) with `Rolloff`
+     (1: inverse = reference/distance), silent beyond `MaxRange` (60 m). Pan = sine of the horizontal angle from the
      listener's facing (SL axes: x east, y north, z up; identity faces +x), so front and back are both centred.
      Elevation only counts towards distance. No position on either side = centred, full volume. The participant's
      gain/mute multiplies in (`MixEngineContext.Render`).
@@ -561,6 +562,9 @@ tested without GStreamer.
        In listening tests the 15 m ring is only 3.5 dB below the 5 m ring, so distance is subtle;
        `Media__Spatial__ReferenceDistance=2` makes it obvious (5 m −8 dB … 35 m −25 dB) and sounded better, but the
        defaults stay until they can be matched with SL by ear and by measurement (a rolloff exponent may be needed).
+       **2026-11-15:** `DistanceModel` and `Rolloff` added. OpenSim's Vivox module carries SL's settings (README: leave
+       them alone): linear, clamping 10 m, rolloff 2, max range 60 m, i.e. 20 m −4.4 dB, 30 m −14 dB, silent from 35 m.
+       To compare by ear: `Media__Spatial__DistanceModel=Linear`, `Media__Spatial__Rolloff=2`.
    - **Guest names (2026-11-13):** a participant created with `clientNamed: true` (both invite buttons) may choose its
      display name, sent as `displayName` with its first offer; `/signal/{pid}/config` reports `displayName` and
      `clientNamed`. Checked before the one-time join token is used, so a refused name (403) can be retried. Others
@@ -629,7 +633,7 @@ tested without GStreamer.
        tethered rooms. Then the rest of (c) (2026-11-15): writing `j/l/p/v/V` to viewers. Then (f), per-peer mute/volume.
        Second avatar and a neighbouring region (`SAS Test2` at 1001,1000) tested
        2026-11-15: an avatar in region 2 hears region 1's bots near the border; primary-only announcing added
-       for the white dots. Still to check: avatar to avatar across the border, and crossing it.
+       for the white dots; then avatar to avatar across the border (audio, dots, listed once on either side) works.
      - **Order:** (a) module skeleton that builds in the OpenSim tree and loads under the core module; (b) provision
        and signalling → audio between two Firestorm viewers in one region (non-spatial mix is fine at first);
        (c) server SLData: join/leave/levels/speaking (white dots); (d) positions: simulator push + viewer `sp/lp` with

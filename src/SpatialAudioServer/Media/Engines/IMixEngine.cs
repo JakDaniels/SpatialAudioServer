@@ -70,7 +70,7 @@ internal sealed class MixEngineContext(
     Guid roomId, int maxParticipants, Pipeline pipeline, RoomWorker worker, MediaOptions options, ILogger log, bool spatial = false)
 {
     /// <summary>The room's spatial policy, or null for a non-spatial room (everyone centred at their gain).</summary>
-    public Spatial.ISpatialPolicy? Spatial { get; } = spatial ? new Spatial.InverseDistancePolicy(options.Spatial) : null;
+    public Spatial.ISpatialPolicy? Spatial { get; } = spatial ? new Spatial.DistancePolicy(options.Spatial) : null;
 
     /// <summary>
     /// How <paramref name="source"/> sounds to <paramref name="listener"/>, including the source's gain/mute. Sources are

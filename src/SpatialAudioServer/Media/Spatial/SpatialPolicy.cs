@@ -2,11 +2,33 @@ using SpatialAudioServer.Rooms;
 
 namespace SpatialAudioServer.Media.Spatial;
 
+/// <summary>How volume falls with distance beyond the reference distance (the OpenAL / Web Audio models).</summary>
+public enum DistanceModel
+{
+    /// <summary>reference / (reference + rolloff × (d − reference)); rolloff 1 is reference/d, −6 dB per doubling.</summary>
+    Inverse,
+
+    /// <summary>1 − rolloff × (d − reference) / (max range − reference), down to silence (Vivox's SL default).</summary>
+    Linear,
+
+    /// <summary>(d / reference)^−rolloff.</summary>
+    Exponential,
+}
+
 /// <summary>Spatial settings (<c>Media:Spatial</c>). Distances are in room units: metres for SL/OpenSim regions.</summary>
 public sealed class SpatialOptions
 {
     /// <summary>Sources at or within this distance are heard at full volume.</summary>
     public double ReferenceDistance { get; set; } = 10;
+
+    /// <summary>The fall-off beyond <see cref="ReferenceDistance"/>.</summary>
+    public DistanceModel DistanceModel { get; set; } = DistanceModel.Inverse;
+
+    /// <summary>
+    /// How fast the volume falls (see <see cref="DistanceModel"/>). OpenSim's Vivox module (SL's settings) uses linear,
+    /// reference 10 m, max range 60 m, rolloff 2: silent from 35 m.
+    /// </summary>
+    public double Rolloff { get; set; } = 1;
 
     /// <summary>Beyond this distance a source is silent and left out of the mix.</summary>
     public double MaxRange { get; set; } = 60;
@@ -90,8 +112,9 @@ public interface ISpatialPolicy
 }
 
 /// <summary>
-/// The default policy. Distance: full volume up to <see cref="SpatialOptions.ReferenceDistance"/>, then
-/// reference/distance (−6 dB per doubling), silent beyond <see cref="SpatialOptions.MaxRange"/>. Direction: pan is
+/// The default policy. Distance: full volume up to <see cref="SpatialOptions.ReferenceDistance"/>, then the
+/// <see cref="SpatialOptions.DistanceModel"/> (by default reference/distance, −6 dB per doubling), silent beyond
+/// <see cref="SpatialOptions.MaxRange"/>. Direction: pan is
 /// the sine of the source's horizontal angle from the listener's facing, so straight ahead or behind is centred and
 /// directly left or right is hard left or right (stereo cannot tell front from back). Elevation only affects distance.
 /// Either side without a position hears or is heard centred at full volume.
@@ -99,7 +122,7 @@ public interface ISpatialPolicy
 /// <remarks>
 /// Coordinates follow SL/OpenSim: x east, y north, z up; an avatar with identity rotation faces +x, so its left is +y.
 /// </remarks>
-public sealed class InverseDistancePolicy(SpatialOptions options) : ISpatialPolicy
+public sealed class DistancePolicy(SpatialOptions options) : ISpatialPolicy
 {
     public Rendering Render(Vec3? source, Vec3? listener, Quat? listenerOrientation)
     {
@@ -113,13 +136,34 @@ public sealed class InverseDistancePolicy(SpatialOptions options) : ISpatialPoli
         {
             return Rendering.Silent;
         }
-        var gain = distance <= options.ReferenceDistance ? 1 : options.ReferenceDistance / distance;
+        var gain = Attenuation(distance);
+        if (gain <= 0)
+        {
+            return Rendering.Silent;
+        }
 
         // Into the listener's frame: local x = forward, local y = left.
         var (forward, left, _) = listenerOrientation is { } q ? InverseRotate(q, dx, dy, dz) : (dx, dy, dz);
         var horizontal = Math.Sqrt(forward * forward + left * left);
         var pan = horizontal < 1e-6 ? 0 : -left / horizontal;
         return new Rendering(gain, pan);
+    }
+
+    /// <summary>The distance model's gain, 0 … 1.</summary>
+    public double Attenuation(double distance)
+    {
+        double reference = options.ReferenceDistance, rolloff = options.Rolloff;
+        if (distance <= reference)
+        {
+            return 1;
+        }
+        return options.DistanceModel switch
+        {
+            DistanceModel.Linear => options.MaxRange <= reference ? 0
+                : Math.Clamp(1 - rolloff * (distance - reference) / (options.MaxRange - reference), 0, 1),
+            DistanceModel.Exponential => Math.Pow(distance / reference, -rolloff),
+            _ => reference / (reference + rolloff * (distance - reference)),
+        };
     }
 
     /// <summary>Rotates a world vector by the inverse of <paramref name="q"/> (normalised first).</summary>
