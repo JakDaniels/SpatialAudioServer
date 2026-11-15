@@ -667,6 +667,17 @@ tested without GStreamer.
      eavesdropping concern (no invisible listeners in the region). The load tool gets the same request (e.g.
      `--npc`), under the same region setting, so bots get bodies, names, dots and real positions (Phase 7 (g)).
      Without a tick a web user behaves as today.
+     **First version built (2026-11-15), brought forward for Phase 7 (g).** Decided for it: the **participant drives
+     the NPC** (not the NPC as master, for now): the module mirrors the participant's position and facing
+     (`listenerOrientation`, else `orientation`) onto the NPC, so the Stand picker, `--around` and the Facing control
+     work unchanged; the NPC as master can come with script-driven NPCs. **Default appearance**; name "{display name}
+     {GuestLastName}" ("Bot 1 (web)"), registered with user management. Server: room `inWorldAvatars`
+     (`off`/`optional`/`always`, migration 7, `PATCH /api/rooms/{id}`, reported by `/signal/{id}/config`),
+     participant `inWorldAvatar` (asked with the first offer) and `avatarId` (set by the module with
+     `PATCH …/participants/{id}`; the viewer key becomes the NPC's UUID: `ViewerData` withdraws the old key and
+     announces the new one). The server only stores and reports; the module decides (`WebUserAvatars`), polls each
+     region's room once a second (also rooms no viewer here is in), creates the NPC only inside the room's region,
+     and removes it when the participant leaves or the room is no longer polled.
    - **(b) Voice agents.** An agent needs what any participant has: a listener mix rendered at the NPC's position
      (distance, direction, mix-minus) and an input placed there. So the agent is a **separate process, an "agent
      bridge"**, that connects over WebRTC like the load tool's bots (reusing `FakeClient`) and chains speech to

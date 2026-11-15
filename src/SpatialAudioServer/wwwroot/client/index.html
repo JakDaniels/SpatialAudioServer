@@ -27,6 +27,8 @@
       <label id="placeField" hidden title="Spatial room: where you (and invited guests) stand">Stand
         <select id="place"><option value="">at the centre (0, 0, 0)</option></select>
       </label>
+      <label id="npcField" class="check" hidden title="The room's region can show you in-world as an NPC (an avatar others see)">
+        <input id="npc" type="checkbox"> Create an NPC in-world</label>
       <label class="new-room">New room
         <span class="row">
           <input id="newRoomName" maxlength="200" placeholder="Room name">
@@ -61,6 +63,8 @@
     <div class="controls">
       <label class="volume" id="guestNameField" hidden>Your name
         <input id="guestName" maxlength="200" autocomplete="nickname" placeholder="Your name"></label>
+      <label class="volume" id="guestNpcField" hidden title="The region can show you in-world as an NPC (an avatar others see)">
+        <input id="guestNpc" type="checkbox"> Create an NPC in-world</label>
       <button id="start" class="primary" type="button" hidden>Join</button>
       <button id="mute" type="button" aria-pressed="false">Mute mic</button>
       <label class="volume">Volume <input id="volume" type="range" min="0" max="1" step="0.05" value="1"></label>

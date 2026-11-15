@@ -52,7 +52,7 @@ public abstract class MediaTestBase : IDisposable
     /// <summary>Adds a participant via the control API and connects a fake client sending <c>Tones[index]</c>.</summary>
     protected async Task<FakeClient> JoinAsync(
         Guid roomId, int index, bool talking = true, bool viewerStyle = false, AudioClip? clip = null, Vec3? position = null,
-        Quat? orientation = null, string? externalId = null)
+        Quat? orientation = null, string? externalId = null, bool inWorldAvatar = false)
     {
         var response = await Api.PostAsJsonAsync($"/api/rooms/{roomId}/participants",
             new { displayName = $"fake{index}", position, orientation, externalId });
@@ -60,7 +60,7 @@ public abstract class MediaTestBase : IDisposable
         var join = await response.Read<JoinResponse>();
         var client = new FakeClient($"fake{index}", Tones[index], Tones, talking: talking, viewerStyle: viewerStyle, clip: clip);
         _clients.Add(client);
-        await client.ConnectAsync(Signal, join.ParticipantId, join.JoinToken);
+        await client.ConnectAsync(Signal, join.ParticipantId, join.JoinToken, inWorldAvatar: inWorldAvatar);
         return client;
     }
 

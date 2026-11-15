@@ -30,6 +30,24 @@ public enum ClientPose
 }
 
 /// <summary>
+/// Whether the integration (the OpenSim region module) shows web and bot participants in its world, as NPCs. Set on
+/// the room by the integration and reported to clients (<c>GET /signal/{id}/config</c>), so a web client knows whether
+/// to offer it; a client asks with its first offer (<see cref="ParticipantSnapshot.InWorldAvatar"/>). The server only
+/// stores and reports both: the integration decides and creates the avatar.
+/// </summary>
+public enum InWorldAvatars
+{
+    /// <summary>Not offered.</summary>
+    Off,
+
+    /// <summary>A participant may ask for one (the web client's tick box).</summary>
+    Optional,
+
+    /// <summary>Every web and bot participant gets one: no invisible listeners in the region.</summary>
+    Always,
+}
+
+/// <summary>
 /// How one listener wants one other participant: muted, or at a volume (1 = as mixed), on top of the room's own
 /// gain and mute for that participant. Set by an SL viewer's SLData <c>m</c> and <c>ug</c> (its mute list and the
 /// per-person volume slider), so it only changes that listener's mix.
@@ -62,7 +80,8 @@ public sealed record RoomSnapshot(
     int ParticipantCount,
     string Engine,
     bool Spatial = false,
-    ClientPose ClientPose = ClientPose.None);
+    ClientPose ClientPose = ClientPose.None,
+    InWorldAvatars InWorldAvatars = InWorldAvatars.Off);
 
 public sealed record ParticipantSnapshot(
     Guid Id,
@@ -80,25 +99,33 @@ public sealed record ParticipantSnapshot(
     Quat? ListenerOrientation = null,
     bool ClientNamed = false,
     ClientPoseReport? ClientReport = null,
-    IReadOnlyDictionary<string, PeerSetting>? Peers = null)
+    IReadOnlyDictionary<string, PeerSetting>? Peers = null,
+    bool InWorldAvatar = false,
+    Guid? AvatarId = null)
 {
     /// <summary>
-    /// How SL viewers know this participant: its avatar UUID when the external id is one, otherwise its participant
-    /// id (a web browser or bot). Lower case, as viewers write UUIDs. <see cref="Peers"/> is keyed by it.
+    /// How SL viewers know this participant: the in-world avatar the integration made for it (<see cref="AvatarId"/>,
+    /// an NPC), else its avatar UUID when the external id is one, otherwise its participant id (a web browser or bot).
+    /// Lower case, as viewers write UUIDs. <see cref="Peers"/> is keyed by it.
     /// </summary>
-    public string ViewerKey => Guid.TryParse(ExternalId, out var avatar) ? avatar.ToString() : Id.ToString();
+    public string ViewerKey => AvatarId?.ToString() ?? (Guid.TryParse(ExternalId, out var avatar) ? avatar.ToString() : Id.ToString());
 }
 
 /// <param name="Engine">Mix engine name (see <c>GET /api/status</c>); null uses the server default (Media:Engine).</param>
 /// <param name="Spatial">Mix by participant position (distance and direction); fixed for the room's life. Default off.</param>
 /// <param name="ClientPose">What participants may set about their own pose; default by <paramref name="Spatial"/>.</param>
+/// <param name="InWorldAvatars">Whether the integration shows web and bot participants in-world; default off.</param>
 public sealed record CreateRoomCommand(
     string? Name, string? ExternalId, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null,
-    ClientPose? ClientPose = null);
+    ClientPose? ClientPose = null, InWorldAvatars? InWorldAvatars = null);
 
 /// <summary>Body of get-or-create by external id. Only used when the room is created; name defaults to the external id.</summary>
 public sealed record EnsureRoomCommand(
-    string? Name, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null, ClientPose? ClientPose = null);
+    string? Name, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null, ClientPose? ClientPose = null,
+    InWorldAvatars? InWorldAvatars = null);
+
+/// <summary>Partial update of a room: null fields are left unchanged. The rest of a room is fixed for its life.</summary>
+public sealed record UpdateRoomCommand(InWorldAvatars? InWorldAvatars);
 
 /// <param name="ClientNamed">
 /// The participant may choose its own display name when it joins (an invited guest); otherwise the name given here
@@ -111,8 +138,11 @@ public sealed record AddParticipantCommand(
 /// <param name="Position">Where the participant is: where others hear it from (an SL avatar's position).</param>
 /// <param name="ListenerPosition">Where it hears from, if not <paramref name="Position"/> (an SL viewer's camera).</param>
 /// <param name="ListenerOrientation">Which way it faces for hearing, if not <paramref name="Orientation"/>.</param>
+/// <param name="AvatarId">The in-world avatar (NPC) the integration made for it; viewers then know it by this UUID.
+/// The empty UUID clears it.</param>
 public sealed record UpdateParticipantCommand(
-    bool? Muted, double? Gain, Vec3? Position, Quat? Orientation, Vec3? ListenerPosition = null, Quat? ListenerOrientation = null);
+    bool? Muted, double? Gain, Vec3? Position, Quat? Orientation, Vec3? ListenerPosition = null, Quat? ListenerOrientation = null,
+    Guid? AvatarId = null);
 
 /// <summary>One participant's new pose in a <see cref="PoseBatchCommand"/>: by our id or by its external id.</summary>
 public sealed record PoseUpdate(Guid? ParticipantId, string? ExternalId, Vec3? Position, Quat? Orientation);

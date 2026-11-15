@@ -91,6 +91,11 @@ internal static class Migrations
         """
         ALTER TABLE rooms ADD COLUMN client_pose TEXT;
         """,
+
+        // 7: whether the integration shows web and bot participants in-world (InWorldAvatars name); NULL = Off.
+        """
+        ALTER TABLE rooms ADD COLUMN in_world_avatars TEXT;
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;

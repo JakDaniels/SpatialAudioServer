@@ -8,7 +8,8 @@ namespace SpatialAudioServer.Signalling;
 /// never fetch candidates (Second Life viewers). Default true: answer at once and trickle via GET /ice.
 /// </param>
 /// <param name="DisplayName">The name the participant chose, if it may choose one (invited guests: see config).</param>
-public sealed record OfferRequest(string? Sdp, bool? Trickle = null, string? DisplayName = null);
+/// <param name="InWorldAvatar">Asks to be shown in-world (see config's inWorldAvatars); the integration decides.</param>
+public sealed record OfferRequest(string? Sdp, bool? Trickle = null, string? DisplayName = null, bool? InWorldAvatar = null);
 
 public sealed record OfferResponse(string Sdp, string SessionToken);
 
@@ -19,9 +20,11 @@ public sealed record CandidateDto(string? Candidate, uint SdpMLineIndex);
 /// <param name="ClientPose">What the participant may change about its own pose (PATCH /signal/{id}/pose).</param>
 /// <param name="DisplayName">The participant's current name.</param>
 /// <param name="ClientNamed">It may choose its own name (send displayName with the offer).</param>
+/// <param name="InWorldAvatars">Whether the room's integration shows web participants in-world: Optional = offer a
+/// choice (send inWorldAvatar with the offer), Always = it will.</param>
 public sealed record ClientConfig(
     IReadOnlyList<IceServerDto> IceServers, bool Spatial = false, ClientPose ClientPose = ClientPose.None,
-    string? DisplayName = null, bool ClientNamed = false);
+    string? DisplayName = null, bool ClientNamed = false, InWorldAvatars InWorldAvatars = InWorldAvatars.Off);
 
 public sealed record IceServerDto(IReadOnlyList<string> Urls, string? Username, string? Credential);
 
@@ -76,7 +79,7 @@ public static class SignallingApi
             var me = rooms.GetParticipant(roomId, participantId);
             return new ClientConfig(options.Value.IceServers
                 .Select(s => new IceServerDto(s.Urls, s.Username, s.Credential)).ToList(), room.Spatial, room.ClientPose,
-                me.DisplayName, me.ClientNamed);
+                me.DisplayName, me.ClientNamed, room.InWorldAvatars);
         });
 
         // The participant's own pose, within the room's clientPose (today: turning only). Session token.
@@ -102,6 +105,10 @@ public static class SignallingApi
             {
                 // Checked before the offer uses up the one-time join token, so a refused name can be retried.
                 rooms.RenameSelf(sessions.AuthorizeReadOnly(participantId, Bearer(http)), participantId, body.DisplayName);
+            }
+            if (body.InWorldAvatar is { } wanted)
+            {
+                rooms.RequestInWorldAvatar(sessions.AuthorizeReadOnly(participantId, Bearer(http)), participantId, wanted);
             }
             var (roomId, sessionToken) = sessions.AuthorizeOffer(participantId, Bearer(http));
             var answer = await media.AnswerOfferAsync(roomId, participantId, body.Sdp);

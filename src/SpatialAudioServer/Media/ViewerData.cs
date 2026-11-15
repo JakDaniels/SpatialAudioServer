@@ -144,6 +144,28 @@ internal sealed class ViewerData : IDisposable
         Broadcast(new JsonObject { [member.Key] = new JsonObject { ["l"] = true } }, except: participantId);
     }
 
+    /// <summary>
+    /// The participant changed: if viewers now know it by another key (the integration gave it an in-world avatar),
+    /// it leaves under the old key and is announced under the new one.
+    /// </summary>
+    public void Updated(ParticipantSnapshot participant)
+    {
+        if (!_members.TryGetValue(participant.Id, out var member) || member.Key == participant.ViewerKey)
+        {
+            return;
+        }
+        var announced = member.Announced;
+        if (announced)
+        {
+            Withdraw(participant.Id, member);
+        }
+        member.Key = participant.ViewerKey;
+        if (announced)
+        {
+            Announce(participant.Id, member);
+        }
+    }
+
     /// <summary>The participant's endpoint went (re-offer or leaving): it gets nothing until it joins again.</summary>
     public void EndpointRemoved(Guid participantId)
     {
@@ -266,7 +288,7 @@ internal sealed class ViewerData : IDisposable
 
     private sealed class Member(string key, bool avatar)
     {
-        public string Key { get; } = key;
+        public string Key { get; set; } = key;
 
         /// <summary>An SL avatar (external id is a UUID): announced only where its viewer is primary.</summary>
         public bool Avatar { get; } = avatar;

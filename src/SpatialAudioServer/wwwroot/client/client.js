@@ -102,6 +102,8 @@ async function loadPlaces() {
   const roomId = $("room").value;
   const spatial = knownRooms.get(roomId)?.spatial === true;
   $("placeField").hidden = !spatial;
+  // The region module shows web users in-world (an NPC) when the room says so: a choice when optional.
+  $("npcField").hidden = knownRooms.get(roomId)?.inWorldAvatars !== "optional";
   places = new Map();
   let options = `<option value="">at the centre (0, 0, 0)</option>`;
   if (spatial) {
@@ -184,7 +186,8 @@ async function joinFromSetup() {
     const join = await addParticipant(name, true);
     $("setup").hidden = true;
     if (join.spatial) log(`spatial room: you are at ${positionText(join.position)}`);
-    await startCall(join.participantId, join.joinToken, join.roomName, name, join.roomId);
+    const npc = !$("npcField").hidden && $("npc").checked;
+    await startCall(join.participantId, join.joinToken, join.roomName, name, join.roomId, undefined, npc);
   } catch (e) { log(`error: ${e.message}`); }
 }
 
@@ -204,19 +207,21 @@ async function invite() {
 
 let call = null;
 
-async function startCall(participantId, joinToken, roomName, displayName, roomId, chosenName) {
+async function startCall(participantId, joinToken, roomName, displayName, roomId, chosenName, inWorldAvatar = false) {
   $("call").hidden = false;
   $("start").hidden = true;
   $("roomTitle").textContent = roomName ? `Room: ${roomName}` : "In the room";
   $("whoami").textContent = `${displayName ?? "Participant"} · ${participantId}` + (roomId ? ` · room ${roomId}` : "");
   if (roomId) log(`room ID ${roomId} (the load tool's --room)`);
   call = {
-    participantId, roomId, joinToken, chosenName: chosenName ?? null, sessionToken: null, pc: null, stream: null, iceServers: [],
+    participantId, roomId, joinToken, chosenName: chosenName ?? null, inWorldAvatar, sessionToken: null, pc: null, stream: null, iceServers: [],
     epoch: 0, reconnects: 0, closed: false, audio: null, statsTimer: null, lastStats: null,
   };
   try {
     const config = await request("GET", `/signal/${participantId}/config`, { bearer: joinToken });
     call.iceServers = config.iceServers;
+    if (config.inWorldAvatars === "always") log("this region shows web users in-world: you will appear as an NPC");
+    else if (inWorldAvatar) log("you asked to appear in-world as an NPC");
     // Show Facing when this participant may turn itself (spatial rooms by default). Starts facing east.
     const mayTurn = config.clientPose === "orientation" || config.clientPose === "tethered";
     $("facingControl").hidden = !mayTurn;
@@ -268,9 +273,12 @@ async function connect() {
     const offer = await pc.createOffer();
     offer.sdp = wantStereo(offer.sdp);
     await pc.setLocalDescription(offer);
+    // An invited guest's chosen name and the in-world NPC request go with the first offer (not with re-offers).
+    const body = { sdp: pc.localDescription.sdp };
+    if (!call.sessionToken && call.chosenName) body.displayName = call.chosenName;
+    if (!call.sessionToken && call.inWorldAvatar) body.inWorldAvatar = true;
     const answer = await request("POST", `/signal/${participantId}/offer`, {
-      // An invited guest's chosen name goes with its first offer (re-offers after a reconnect don't need it).
-      body: call.chosenName && !call.sessionToken ? { sdp: pc.localDescription.sdp, displayName: call.chosenName } : { sdp: pc.localDescription.sdp },
+      body,
       bearer: call.sessionToken ?? call.joinToken,
     });
     if (epoch !== call?.epoch) return;
@@ -500,13 +508,16 @@ if (params.has("participant") && params.has("token")) {
       $("guestName").value = store(NAME_STORE) || "";
       $("guestName").focus();
     }
+    $("guestNpcField").hidden = config.inWorldAvatars !== "optional";
   }).catch(e => log(`error: ${e.message}`));
   $("start").onclick = () => {
     const chosen = $("guestNameField").hidden ? null : $("guestName").value.trim();
     if (chosen === "") { $("guestName").focus(); log("enter your name first"); return; }
     if (chosen) store(NAME_STORE, chosen);
+    const npc = !$("guestNpcField").hidden && $("guestNpc").checked;
     $("guestNameField").hidden = true;
-    startCall(params.get("participant"), params.get("token"), params.get("room"), chosen ?? undefined, undefined, chosen);
+    $("guestNpcField").hidden = true;
+    startCall(params.get("participant"), params.get("token"), params.get("room"), chosen ?? undefined, undefined, chosen, npc);
   };
 } else {
   $("setup").hidden = false;
