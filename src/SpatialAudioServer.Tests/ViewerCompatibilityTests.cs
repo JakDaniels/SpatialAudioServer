@@ -34,6 +34,52 @@ public sealed class ViewerCompatibilityTests() : MediaTestBase(MixEngines.Defaul
     }
 
     [Fact]
+    public async Task Viewers_hear_who_joins_talks_and_leaves_over_their_data_channel()
+    {
+        var room = await CreateRoomAsync(spatial: true);
+        var avatarA = Guid.NewGuid().ToString();
+        var avatarB = Guid.NewGuid().ToString();
+        var a = await JoinAsync(room.Id, 0, viewerStyle: true, talking: false, externalId: avatarA);
+        var browser = await JoinAsync(room.Id, 1); // talking, no data channel: keyed by its participant id
+        await a.DataChannelOpen.WaitAsync(TimeSpan.FromSeconds(20));
+        Assert.True(a.SendData("""{"j":{"p":true}}"""));
+
+        // On its join: everyone in the room (itself included) and the server's version under its own UUID.
+        var welcome = await Until(a, m => m.ContainsKey(avatarA) && m[avatarA]!["V"] is not null);
+        Assert.StartsWith("SpatialAudioServer ", (string)welcome[avatarA]!["V"]!);
+        Assert.True((bool)welcome[browser.ParticipantId.ToString()]!["j"]!["p"]!);
+
+        // Someone joining later is announced; a talker's level and speaking flag follow.
+        var b = await JoinAsync(room.Id, 2, viewerStyle: true, talking: false, externalId: avatarB);
+        await Until(a, m => m[avatarB]?["j"] is not null);
+        var talking = await Until(a, m => m[browser.ParticipantId.ToString()]?["v"] is { } v && (bool)v!);
+        Assert.InRange((int)talking[browser.ParticipantId.ToString()]!["p"]!, 1, 128);
+
+        // Leaving.
+        (await Api.DeleteAsync($"/api/rooms/{room.Id}/participants/{browser.ParticipantId}")).EnsureSuccessStatusCode();
+        await Until(a, m => m[browser.ParticipantId.ToString()]?["l"] is { } l && (bool)l!);
+        Assert.DoesNotContain(b.DataMessages, m => m.Contains("\"V\"")); // b never joined over its channel
+    }
+
+    /// <summary>Waits for a data channel message (a JSON object keyed by avatar) that matches.</summary>
+    private static async Task<System.Text.Json.Nodes.JsonObject> Until(FakeClient client, Func<System.Text.Json.Nodes.JsonObject, bool> match)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            foreach (var text in client.DataMessages)
+            {
+                if (System.Text.Json.Nodes.JsonNode.Parse(text) is System.Text.Json.Nodes.JsonObject message && match(message))
+                {
+                    return message;
+                }
+            }
+            await Task.Delay(100);
+        }
+        throw new TimeoutException($"{client.Name} never got the message. It got: {string.Join(" | ", client.DataMessages)}");
+    }
+
+    [Fact]
     public async Task A_viewers_pose_arrives_over_its_data_channel_in_a_tethered_room()
     {
         var room = await (await Api.PostAsJsonAsync("/api/rooms",
