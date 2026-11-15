@@ -520,6 +520,11 @@ tested without GStreamer.
      and `v` (above `Media:VadThresholdDb`, with `VadHangoverMs`) that changed. Keys are avatar UUIDs; browsers and
      bots (no UUID external id) are keyed by participant id and show as unknown avatars. Engines without input
      levels (pairchains) send no `p`/`v`. Everyone is announced as primary: neighbouring regions come later.
+     The viewer looks every UUID up with its simulator to show a name (OpenSim leaves unknown ids out; the viewer
+     asks again after 60 s), so the OpenSim module polls each room once a second and registers non-avatar
+     participants' names with OpenSim's user management (`AddSystemUser`: "Simon (web)", `GuestLastName`; `RemoveUser`
+     once they have gone), and the
+     server announces those participants `GuestAnnounceDelay` (2 s) after they connect so the name is there first.
    - **Client-set poses (decided in part 2026-11-13; FOR DISCUSSION AND DECISION when testing with SL viewers).**
      The question: may participants set their own position/orientation, and how does that fit security? Positions
      decide what you hear in a spatial room, so a client that can move anywhere can walk up to any conversation

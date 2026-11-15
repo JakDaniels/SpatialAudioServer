@@ -44,10 +44,14 @@ public sealed class ViewerCompatibilityTests() : MediaTestBase(MixEngines.Defaul
         await a.DataChannelOpen.WaitAsync(TimeSpan.FromSeconds(20));
         Assert.True(a.SendData("""{"j":{"p":true}}"""));
 
-        // On its join: everyone in the room (itself included) and the server's version under its own UUID.
+        // On its join: everyone announced so far (itself included) and the server's version under its own UUID.
         var welcome = await Until(a, m => m.ContainsKey(avatarA) && m[avatarA]!["V"] is not null);
         Assert.StartsWith("SpatialAudioServer ", (string)welcome[avatarA]!["V"]!);
-        Assert.True((bool)welcome[browser.ParticipantId.ToString()]!["j"]!["p"]!);
+        Assert.True((bool)welcome[avatarA]!["j"]!["p"]!);
+
+        // A browser (no avatar) is announced a moment after it connects, so the simulator can register its name first.
+        var browserJoin = await Until(a, m => m[browser.ParticipantId.ToString()]?["j"] is not null);
+        Assert.True((bool)browserJoin[browser.ParticipantId.ToString()]!["j"]!["p"]!);
 
         // Someone joining later is announced; a talker's level and speaking flag follow.
         var b = await JoinAsync(room.Id, 2, viewerStyle: true, talking: false, externalId: avatarB);

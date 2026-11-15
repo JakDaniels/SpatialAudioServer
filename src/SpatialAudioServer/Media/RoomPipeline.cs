@@ -247,6 +247,16 @@ internal sealed class RoomPipeline : IDisposable
                 _log.LogWarning("Room {RoomId}: participant {ParticipantId} connection failed: {Diagnostics}",
                     RoomId, p.Id, rtc.Diagnostics());
             }
+            if (state == WebRTCPeerConnectionState.Connected)
+            {
+                _worker.Post(() =>
+                {
+                    if (!endpoint.Removed)
+                    {
+                        _viewers.Connected(p.Id);
+                    }
+                });
+            }
             StateChanged?.Invoke(p.Id, Map(state));
         };
         rtc.DataChannelOpened += () => _log.LogInformation("Room {RoomId}: participant {ParticipantId} data channel '{Label}' is open",
