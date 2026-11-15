@@ -16,12 +16,16 @@ namespace SpatialAudioServer.Media;
 /// <para>Worker only, except <see cref="Dispose"/>. A viewer gets messages once it has sent its own <c>j</c>; it
 /// is then told about everyone already in the room. Browsers and bots never open a data channel, so they only appear
 /// in viewers' lists.</para>
+/// <para>Neighbouring regions: a viewer near a border is connected to each nearby region's room, and its <c>j</c>
+/// says <c>p: true</c> only in the room of the region its avatar is in (it sends <c>j</c> again when that changes;
+/// its microphone is live only there). A viewer adds people to its list only from <c>j</c> with <c>p: true</c>, so
+/// an avatar is announced only in its primary room, and withdrawn (<c>l</c>) when it stops being primary there; its
+/// neighbours see it through their own connection to that room. Browsers and bots are always primary.</para>
 /// <para>Participants are keyed by their external id when it is a UUID (an avatar), otherwise by our participant
 /// id (a browser or bot). A viewer looks every UUID up with its simulator to show a name, so the OpenSim module
 /// registers those participants' names there (polling the room); they are announced <see cref="GuestAnnounceDelay"/>
 /// after they connect, so the name is there before the viewer asks (if not, it shows "(loading)" and asks again a
-/// minute later). Avatars are announced as soon as they are added. Neighbouring regions (a viewer connected as a
-/// non-primary listener) are not handled yet: everyone is announced as primary.</para>
+/// minute later). Avatars are announced once their viewer says this is their primary region (below).</para>
 /// </remarks>
 internal sealed class ViewerData : IDisposable
 {
@@ -58,22 +62,15 @@ internal sealed class ViewerData : IDisposable
     /// <summary>Messages sent, for tests and stats.</summary>
     public long Sent { get; private set; }
 
-    /// <summary>A participant joined the room: viewers already listening are told.</summary>
-    public void Added(ParticipantSnapshot participant)
-    {
-        var avatar = Guid.TryParse(participant.ExternalId, out _);
-        var member = new Member(participant.ViewerKey);
-        _members[participant.Id] = member;
-        if (avatar)
-        {
-            Announce(participant.Id, member);
-        }
-    }
+    /// <summary>A participant joined the room. An avatar is announced when its viewer joins as primary, anyone else
+    /// shortly after connecting (<see cref="Connected"/>).</summary>
+    public void Added(ParticipantSnapshot participant) =>
+        _members[participant.Id] = new Member(participant.ViewerKey, Guid.TryParse(participant.ExternalId, out _));
 
     /// <summary>The participant's connection is up: one that is not an avatar is announced shortly.</summary>
     public void Connected(Guid participantId)
     {
-        if (!_members.TryGetValue(participantId, out var member) || member.Announced)
+        if (!_members.TryGetValue(participantId, out var member) || member.Avatar || member.Announced)
         {
             return;
         }
@@ -111,6 +108,15 @@ internal sealed class ViewerData : IDisposable
         Broadcast(new JsonObject { [member.Key] = Join() }, except: participantId);
     }
 
+    /// <summary>The participant is no longer primary here: viewers drop it from this region's list.</summary>
+    private void Withdraw(Guid participantId, Member member)
+    {
+        member.Announced = false;
+        member.Speaking = false;
+        member.SentLevel = 0;
+        Broadcast(new JsonObject { [member.Key] = new JsonObject { ["l"] = true } }, except: participantId);
+    }
+
     /// <summary>The participant's endpoint went (re-offer or leaving): it gets nothing until it joins again.</summary>
     public void EndpointRemoved(Guid participantId)
     {
@@ -120,15 +126,25 @@ internal sealed class ViewerData : IDisposable
         }
     }
 
-    /// <summary>The viewer sent its <c>j</c>: it hears about everyone in the room (itself included) and gets our version.</summary>
-    public void ViewerJoined(Guid participantId)
+    /// <summary>
+    /// The viewer sent its <c>j</c> (on joining, and again when its primary region changes): it is announced to the
+    /// others or withdrawn, and hears about everyone announced (itself included when primary) and gets our version.
+    /// </summary>
+    public void ViewerJoined(Guid participantId, bool primary)
     {
         if (!_members.TryGetValue(participantId, out var member))
         {
             return;
         }
         member.Listening = true;
-        member.Announced = true; // a viewer is in its own list from now on
+        if (primary && !member.Announced)
+        {
+            Announce(participantId, member);
+        }
+        else if (!primary && member.Announced)
+        {
+            Withdraw(participantId, member);
+        }
         var message = new JsonObject();
         foreach (var other in _members.Values.Where(m => m.Announced))
         {
@@ -140,7 +156,11 @@ internal sealed class ViewerData : IDisposable
             }
             message[other.Key] = entry;
         }
-        ((JsonObject)message[member.Key]!)["V"] = ServerVersion;
+        if (message[member.Key] is not JsonObject own)
+        {
+            message[member.Key] = own = new JsonObject();
+        }
+        own["V"] = ServerVersion;
         Send(participantId, message.ToJsonString());
     }
 
@@ -217,9 +237,12 @@ internal sealed class ViewerData : IDisposable
 
     private static JsonObject Join() => new() { ["j"] = new JsonObject { ["p"] = true } };
 
-    private sealed class Member(string key)
+    private sealed class Member(string key, bool avatar)
     {
         public string Key { get; } = key;
+
+        /// <summary>An SL avatar (external id is a UUID): announced only where its viewer is primary.</summary>
+        public bool Avatar { get; } = avatar;
 
         /// <summary>Viewers have been told about this participant (a <c>j</c> went out).</summary>
         public bool Announced { get; set; }

@@ -267,13 +267,13 @@ internal sealed class RoomPipeline : IDisposable
             {
                 return;
             }
-            if (text.Contains("\"j\"", StringComparison.Ordinal) && SlData.Parse(text) is { Joined: true })
+            if (text.Contains("\"j\"", StringComparison.Ordinal) && SlData.Parse(text) is { Joined: true } join)
             {
                 _worker.Post(() =>
                 {
                     if (!endpoint.Removed)
                     {
-                        _viewers.ViewerJoined(p.Id);
+                        _viewers.ViewerJoined(p.Id, join.Primary);
                     }
                 });
             }
