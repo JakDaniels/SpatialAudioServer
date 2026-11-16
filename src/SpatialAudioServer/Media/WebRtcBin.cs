@@ -170,21 +170,43 @@ public sealed partial class WebRtcBin : IDisposable
     public void ApplyRemoteOffer(string offerSdp) => SetDescription("set-remote-description", WebRTCSDPType.Offer, offerSdp);
 
     /// <summary>
-    /// Makes the transceiver webrtcbin created for m-line <paramref name="mlineIndex"/> send as well as receive,
-    /// restricted to <paramref name="codec"/>. Request the pad <c>sink_{mlineIndex}</c> afterwards to feed it.
+    /// After <see cref="ApplyRemoteOffer"/>: makes the transceiver for m-line <paramref name="mlineIndex"/> send as
+    /// well as receive, restricted to <paramref name="codec"/>, and returns the sink pad <c>sink_{mlineIndex}</c> that
+    /// feeds it.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This is the deterministic answerer order. Linking a send pad before the offer and letting webrtcbin match it
     /// to the offered m-line by its caps is timing-dependent: caps that arrive before the offer, or during it, leave
     /// the pad bound to a transceiver the answer never uses, and webrtcbin blocks it forever.
+    /// </para>
+    /// <para>
+    /// GStreamer 1.28 creates a transceiver per offered m-line when the offer is applied, and that one is used.
+    /// Older webrtcbin (1.24) creates them only with the answer, so there is none yet: then requesting
+    /// <c>sink_{mlineIndex}</c> first creates a transceiver locked to that m-line (by index, not by caps), which the
+    /// answer uses.
+    /// </para>
     /// </remarks>
-    public void PrepareSendTransceiver(int mlineIndex, Caps codec)
+    public Pad PrepareSendPad(int mlineIndex, Caps codec)
     {
-        using var transceiver = Element.EmitSignal<WebRTCRTPTransceiver>("get-transceiver", mlineIndex)
-            ?? throw new InvalidOperationException($"webrtcbin has no transceiver for m-line {mlineIndex}.");
-        Global.UtilSetObjectArg(transceiver, "direction", "sendrecv");
-        transceiver.SetProperty("codec-preferences", codec);
+        Pad? pad = null;
+        var transceiver = Element.EmitSignal<WebRTCRTPTransceiver>("get-transceiver", mlineIndex);
+        if (transceiver is null)
+        {
+            pad = RequestSinkPad(mlineIndex);
+            transceiver = pad.GetProperty<WebRTCRTPTransceiver>("transceiver")
+                ?? throw new InvalidOperationException($"webrtcbin's sink_{mlineIndex} pad has no transceiver.");
+        }
+        using (transceiver)
+        {
+            Global.UtilSetObjectArg(transceiver, "direction", "sendrecv");
+            transceiver.SetProperty("codec-preferences", codec);
+        }
+        return pad ?? RequestSinkPad(mlineIndex);
     }
+
+    private Pad RequestSinkPad(int mlineIndex) =>
+        Element.RequestPadSimple($"sink_{mlineIndex}") ?? throw new InvalidOperationException($"webrtcbin gave no sink_{mlineIndex} pad.");
 
     /// <summary>Creates and applies the local answer; returns its SDP text.</summary>
     public string CreateAndApplyAnswer()
