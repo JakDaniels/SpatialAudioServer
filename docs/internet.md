@@ -54,9 +54,19 @@ passes HTTP on.
 ```
 
 `ListenAddress` keeps the plain HTTP port off the network. `TrustedProxies` (addresses or CIDR ranges) makes the
-server believe `X-Forwarded-For` / `X-Forwarded-Proto` from those proxies only, so rate limits, the admin login
-throttle and the allow-lists below see each client's own address. Without it, every client appears as the proxy;
-with a proxy listed that is not really yours, a client could claim any address. Caddy:
+server believe `X-Forwarded-For` / `X-Forwarded-Proto` from those proxies only. **Behind a proxy, set it**: several
+protections depend on it.
+
+| Without `TrustedProxies` | With it |
+|---|---|
+| Every client appears as the proxy: one shared rate limit and admin-login throttle for everyone | each client is limited and throttled on its own address |
+| `Admin:AllowedNetworks` / `Auth:AllowedNetworks` see only the proxy's address (allow it, and you allow everyone) | the lists see each client's address |
+| `Admin:RequireHttps` sees plain HTTP from the proxy and refuses every admin login (a proxy on the same host included) | the proxy's `X-Forwarded-Proto: https` counts as HTTPS |
+
+Only list proxies that are yours: a listed proxy's headers are believed, so a client that could reach the server
+through another listed address could claim any address. The proxy must send `X-Forwarded-For` and
+`X-Forwarded-Proto` (Caddy does by default; nginx with the lines below), and should redirect plain HTTP to HTTPS
+(Caddy does by default; with nginx, add a `server { listen 80; return 301 https://$host$request_uri; }`). Caddy:
 
 ```
 voice.example.org {
@@ -175,8 +185,8 @@ listening-port=3478
 tls-listening-port=5349
 realm=voice.example.org
 fingerprint
-lt-cred-mech
-user=sas:a-long-random-password
+use-auth-secret
+static-auth-secret=a-long-random-secret
 cert=/etc/letsencrypt/live/voice.example.org/fullchain.pem
 pkey=/etc/letsencrypt/live/voice.example.org/privkey.pem
 min-port=49160
@@ -194,7 +204,7 @@ total-quota=100
     { "Urls": [ "stun:voice.example.org:3478" ] },
     { "Urls": [ "turn:voice.example.org:3478?transport=udp", "turn:voice.example.org:3478?transport=tcp",
                 "turns:voice.example.org:5349?transport=tcp" ],
-      "Username": "sas", "Credential": "a-long-random-password" }
+      "Secret": "a-long-random-secret", "CredentialLifetime": "12:00:00" }
   ]
 }
 ```
@@ -203,10 +213,13 @@ Open 3478 (UDP and TCP), 5349 (TCP) and coturn's relay range (UDP) in the firewa
 as the media range, keep the two ranges apart. If clients' networks allow only 443, run coturn's TLS listener on 443
 on a separate address from the web server.
 
-**About the credentials:** the TURN username and password in `Media:IceServers` are handed to every client that
-joins, so treat them as semi-public: use an account just for this, with coturn's quotas (`total-quota`,
-`user-quota`, `max-bps`) and the `denied-peer-ip` rules above so it cannot be used to reach your internal network.
-Short-lived TURN credentials (coturn's `use-auth-secret`) are not supported yet.
+**About the credentials:** with `Secret` (coturn's `use-auth-secret` / `static-auth-secret`, the "TURN REST API"
+scheme), the server makes each client its own TURN credentials: username `{expiry}:{participant id}`, password
+`base64(HMAC-SHA1(secret, username))`, valid for `CredentialLifetime` (12 h). The secret itself never leaves the
+server, and credentials stop working once they expire. Fixed `Username`/`Credential` also work (with coturn's
+`lt-cred-mech` and a `user=` line), but they are handed to every client that joins, so they are semi-public. Either
+way, keep coturn's quotas (`total-quota`, `user-quota`, `max-bps`) and the `denied-peer-ip` rules above, so the relay
+cannot be used to reach your internal network.
 
 Test with the WebRTC "Trickle ICE" page (search for it: it is part of the WebRTC samples): with the TURN entry
 added, it should list `relay` candidates.
@@ -243,13 +256,21 @@ added, it should list `relay` candidates.
 
   Others get 404. Client signalling and the web client are not affected: they work with join and session tokens.
   Behind a proxy this relies on `TrustedProxies` (section 2).
+- **Admin login over HTTPS only:** `"Admin": { "RequireHttps": true }` refuses admin login over plain HTTP and marks
+  the session cookie Secure. The one exception is a request made on the machine itself (e.g. `curl
+  http://localhost:5000` while setting up); a request through a proxy on the same host does not count as that. Behind
+  a proxy that terminates TLS, list it in `TrustedProxies` (section 2), or every admin login is refused.
 - **Keys and passwords.**
-  - Control-API keys: create one per integration with `SpatialAudioServer apikey create <label>`. Check them with
-    `apikey list`, and revoke unused ones with `apikey revoke <id or prefix>`.
+  - Control-API keys: create one per integration with `SpatialAudioServer apikey create <label>`, optionally with
+    `--expires 90d` (or a date) for keys handed to people or tools. `apikey list` shows each key's last use and
+    expiry, and flags keys unused for 90 days. Revoke keys you no longer need with `apikey revoke <id or prefix>`.
   - Avoid `Auth:ApiKeys` in configuration on a public host: those keys are not stored hashed, and can't be revoked
     with the command.
   - The admin password: set it with `admin set-password`, or give a hash in `Admin:PasswordHash` (from
-    `admin hash-password`).
+    `admin hash-password`). Changing it ends every admin session. After 5 failed logins from one address, or 30 from
+    anywhere, within a minute, logins are refused for a minute.
+  - Admin changes made with the session cookie are refused if the request comes from another site's page, even on
+    the same domain.
 - **Limits.** The defaults are sized for one host: 16 rooms × 32 participants, request bodies ≤ 64 KB, signalling ≤ 30
   requests/s per participant and ≤ 300/s per address. Lower `Limits:SignalRequestsPerSecondPerAddress` if you expect
   few clients per address.
@@ -258,13 +279,16 @@ added, it should list `relay` candidates.
 - **Logs and updates.** `journalctl -u spatialaudio` holds the event log (joins, leaves, refused requests). Keep
   .NET, GStreamer and the OS patched: media parsing (SDP, RTP, Opus) is the part that faces untrusted input.
 - **Backups.** `/opt/sas/data/spatialaudio.db` holds rooms, hashed keys and the session history: copy it with the
-  service stopped, or with `sqlite3 spatialaudio.db ".backup copy.db"`.
+  service stopped, or with `sqlite3 spatialaudio.db ".backup copy.db"`. `/opt/sas/data/keys` holds the keys that
+  protect admin session cookies: keep it private (only the service user may read it); losing it just logs the admin
+  out.
 
 ## 7. Checklist
 
 1. DNS name pointing at the host; certificate in place (section 2); `AllowedHosts` set.
 2. Firewall: TCP 443, and the media range for UDP and TCP (section 3), plus TURN's ports if used.
 3. Behind NAT: `PublicAddress` set and the media range forwarded on the same ports (section 4).
-4. `Admin:AllowedNetworks` and `Auth:AllowedNetworks` set (section 6).
+4. `Admin:AllowedNetworks`, `Auth:AllowedNetworks` and `Admin:RequireHttps` set (section 6); TURN, if used, with a
+   `Secret` (section 5).
 5. Service running as `spatialaudio` with the stricter unit; API keys created and stored, none left in configuration.
 6. Test from outside your network: the web client from a phone on mobile data, and a viewer from another site.

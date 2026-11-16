@@ -65,6 +65,17 @@ internal sealed class StartupService(
                     $"Media:Spatial:Profiles:{name} needs ReferenceDistance > 0, MaxRange ≥ ReferenceDistance, Rolloff > 0 and a DistanceModel.");
             }
         }
+        foreach (var server in media.Value.IceServers)
+        {
+            if (!string.IsNullOrEmpty(server.Secret) && (server.Username is not null || server.Credential is not null))
+            {
+                throw new InvalidOperationException("Media:IceServers: an entry has either Secret or Username/Credential, not both.");
+            }
+            if (server.CredentialLifetime <= TimeSpan.Zero)
+            {
+                throw new InvalidOperationException("Media:IceServers: CredentialLifetime must be positive.");
+            }
+        }
         var network = media.Value.Network;
         if ((network.MinPort != 0 || network.MaxPort != 0)
             && (network.MinPort < 1024 || network.MaxPort > 65535 || network.MinPort > network.MaxPort))

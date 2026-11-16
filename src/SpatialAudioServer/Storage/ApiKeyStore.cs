@@ -3,24 +3,28 @@ using static SpatialAudioServer.Storage.StoreHelpers;
 namespace SpatialAudioServer.Storage;
 
 public sealed record ApiKeyRecord(
-    Guid Id, string Label, string Prefix, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt, DateTimeOffset? RevokedAt);
+    Guid Id, string Label, string Prefix, DateTimeOffset CreatedAt, DateTimeOffset? LastUsedAt, DateTimeOffset? RevokedAt,
+    DateTimeOffset? ExpiresAt = null);
 
 /// <summary>Control-API keys created at run time. Only a hash and a short display prefix are stored.</summary>
 public sealed class ApiKeyStore(Database database, TimeProvider time)
 {
     public const string KeyPrefix = "sas_";
 
-    /// <summary>Creates a key and returns it in plain text; this is the only time it is available.</summary>
-    public (ApiKeyRecord Record, string Key) Create(string label)
+    /// <summary>
+    /// Creates a key and returns it in plain text; this is the only time it is available. It stops working at
+    /// <paramref name="expiresAt"/>, if given.
+    /// </summary>
+    public (ApiKeyRecord Record, string Key) Create(string label, DateTimeOffset? expiresAt = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
         var key = Secrets.NewToken(KeyPrefix);
-        var record = new ApiKeyRecord(Guid.NewGuid(), label.Trim(), key[..12], time.GetUtcNow(), null, null);
+        var record = new ApiKeyRecord(Guid.NewGuid(), label.Trim(), key[..12], time.GetUtcNow(), null, null, expiresAt);
         using var connection = database.Open();
         using var command = connection.Command(
-            "INSERT INTO api_keys (id, label, key_hash, prefix, created_at) VALUES ($id, $label, $hash, $prefix, $created)",
+            "INSERT INTO api_keys (id, label, key_hash, prefix, created_at, expires_at) VALUES ($id, $label, $hash, $prefix, $created, $expires)",
             ("$id", record.Id.ToString()), ("$label", record.Label), ("$hash", Secrets.Hash(key)),
-            ("$prefix", record.Prefix), ("$created", ToDb(record.CreatedAt)));
+            ("$prefix", record.Prefix), ("$created", ToDb(record.CreatedAt)), ("$expires", expiresAt is { } e ? ToDb(e) : null));
         command.ExecuteNonQuery();
         return (record, key);
     }
@@ -29,14 +33,14 @@ public sealed class ApiKeyStore(Database database, TimeProvider time)
     {
         using var connection = database.Open();
         using var command = connection.Command(
-            "SELECT id, label, prefix, created_at, last_used_at, revoked_at FROM api_keys ORDER BY created_at");
+            "SELECT id, label, prefix, created_at, last_used_at, revoked_at, expires_at FROM api_keys ORDER BY created_at");
         using var reader = command.ExecuteReader();
         var keys = new List<ApiKeyRecord>();
         while (reader.Read())
         {
             keys.Add(new ApiKeyRecord(
                 Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
-                FromDb(reader.GetString(3)), FromDbNullable(reader, 4), FromDbNullable(reader, 5)));
+                FromDb(reader.GetString(3)), FromDbNullable(reader, 4), FromDbNullable(reader, 5), FromDbNullable(reader, 6)));
         }
         return keys;
     }
@@ -51,19 +55,22 @@ public sealed class ApiKeyStore(Database database, TimeProvider time)
         return command.ExecuteNonQuery();
     }
 
-    /// <summary>The active key with this hash, or null.</summary>
+    /// <summary>The active key with this hash (not revoked, not expired), or null.</summary>
     public ApiKeyRecord? FindActive(string keyHash)
     {
         using var connection = database.Open();
         using var command = connection.Command(
-            "SELECT id, label, prefix, created_at, last_used_at FROM api_keys WHERE key_hash = $hash AND revoked_at IS NULL",
+            "SELECT id, label, prefix, created_at, last_used_at, expires_at FROM api_keys WHERE key_hash = $hash AND revoked_at IS NULL",
             ("$hash", keyHash));
         using var reader = command.ExecuteReader();
-        return reader.Read()
-            ? new ApiKeyRecord(
-                Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
-                FromDb(reader.GetString(3)), FromDbNullable(reader, 4), null)
-            : null;
+        if (!reader.Read())
+        {
+            return null;
+        }
+        var record = new ApiKeyRecord(
+            Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetString(2),
+            FromDb(reader.GetString(3)), FromDbNullable(reader, 4), null, FromDbNullable(reader, 5));
+        return record.ExpiresAt is { } expires && expires <= time.GetUtcNow() ? null : record;
     }
 
     public void Touch(Guid id)

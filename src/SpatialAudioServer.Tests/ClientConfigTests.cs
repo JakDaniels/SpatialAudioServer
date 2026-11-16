@@ -15,6 +15,45 @@ public sealed class ClientConfigTests : IDisposable
     public void Dispose() => _dir.Dispose();
 
     [Fact]
+    public void Turn_credentials_from_a_secret_follow_the_turn_rest_scheme()
+    {
+        var server = new SpatialAudioServer.Configuration.IceServerConfig { Secret = "s3cret" };
+        var (user, credential) = server.CredentialsFor("p1", new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero));
+        // expiry (now + 12 h) in Unix seconds, then base64(HMAC-SHA1(secret, username)), as coturn's use-auth-secret checks.
+        Assert.Equal("1794787200:p1", user);
+        Assert.Equal("y01NmWQ+E5UzHvmnrnAWa/QebKY=", credential);
+        Assert.Equal(("u", "c"), new SpatialAudioServer.Configuration.IceServerConfig { Username = "u", Credential = "c" }
+            .CredentialsFor("p1", DateTimeOffset.UnixEpoch));
+    }
+
+    [Fact]
+    public async Task With_a_turn_secret_each_participant_gets_its_own_credentials()
+    {
+        using var server = new ServerFactory(_dir.File("secret.db"), new Dictionary<string, string?>
+        {
+            ["Media:IceServers:0:Urls:0"] = "turns:turn.example.org:5349?transport=tcp",
+            ["Media:IceServers:0:Secret"] = "s3cret",
+        });
+        var api = server.CreateAuthedClient();
+        var room = await (await api.PostAsJsonAsync("/api/rooms", new { name = "A" })).Read<RoomSnapshot>();
+        async Task<IceServerDto> TurnFor(string name)
+        {
+            var join = await (await api.PostAsJsonAsync($"/api/rooms/{room.Id}/participants", new { displayName = name })).Read<JoinResponse>();
+            var client = server.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", join.JoinToken);
+            var config = await client.GetFromJsonAsync<ClientConfig>($"/signal/{join.ParticipantId}/config", Json.Options);
+            Assert.EndsWith(":" + join.ParticipantId, config!.IceServers[0].Username);
+            return config.IceServers[0];
+        }
+
+        var a = await TurnFor("a");
+        var b = await TurnFor("b");
+        Assert.NotEqual(a.Credential, b.Credential);
+        var expiry = long.Parse(a.Username!.Split(':')[0], System.Globalization.CultureInfo.InvariantCulture);
+        Assert.InRange(DateTimeOffset.FromUnixTimeSeconds(expiry) - DateTimeOffset.UtcNow, TimeSpan.FromHours(11.9), TimeSpan.FromHours(12.1));
+    }
+
+    [Fact]
     public async Task Config_gives_the_ice_servers_without_using_up_the_join_token()
     {
         using var server = new ServerFactory(_dir.File("server.db"), new Dictionary<string, string?>

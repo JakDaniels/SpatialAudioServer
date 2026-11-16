@@ -72,13 +72,15 @@ public static class SignallingApi
         var signal = app.MapGroup("/signal/{participantId:guid}");
 
         signal.MapGet("/config", (Guid participantId, HttpContext http, SignalSessions sessions, RoomManager rooms,
-            Microsoft.Extensions.Options.IOptions<Configuration.MediaOptions> options) =>
+            Microsoft.Extensions.Options.IOptions<Configuration.MediaOptions> options, TimeProvider time) =>
         {
             var roomId = sessions.AuthorizeReadOnly(participantId, Bearer(http));
             var (room, _) = rooms.GetRoom(roomId);
             var me = rooms.GetParticipant(roomId, participantId);
+            var now = time.GetUtcNow();
             return new ClientConfig(options.Value.IceServers
-                .Select(s => new IceServerDto(s.Urls, s.Username, s.Credential)).ToList(), room.Spatial, room.ClientPose,
+                .Select(s => s.CredentialsFor(participantId.ToString(), now) is var (user, credential)
+                    ? new IceServerDto(s.Urls, user, credential) : null!).ToList(), room.Spatial, room.ClientPose,
                 me.DisplayName, me.ClientNamed, room.InWorldAvatars);
         });
 

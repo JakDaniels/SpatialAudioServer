@@ -101,6 +101,11 @@ internal static class Migrations
         """
         ALTER TABLE rooms ADD COLUMN spatial_profile TEXT;
         """,
+
+        // 9: optional expiry of control-API keys; NULL = never.
+        """
+        ALTER TABLE api_keys ADD COLUMN expires_at TEXT;
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;

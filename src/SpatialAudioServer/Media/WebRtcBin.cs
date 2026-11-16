@@ -272,8 +272,10 @@ public sealed partial class WebRtcBin : IDisposable
     /// Points webrtcbin at the configured STUN/TURN servers: the first <c>stun:</c> URL, and every <c>turn:</c> /
     /// <c>turns:</c> URL with the entry's credentials.
     /// </summary>
-    public void ConfigureIceServers(IEnumerable<Configuration.IceServerConfig> servers)
+    /// <param name="id">Who the connection is for, in TURN credentials made from a secret.</param>
+    public void ConfigureIceServers(IEnumerable<Configuration.IceServerConfig> servers, string id = "server")
     {
+        var now = DateTimeOffset.UtcNow;
         var stunSet = false;
         foreach (var server in servers)
         {
@@ -287,8 +289,9 @@ public sealed partial class WebRtcBin : IDisposable
                 else if (url.StartsWith("turn:", StringComparison.OrdinalIgnoreCase) || url.StartsWith("turns:", StringComparison.OrdinalIgnoreCase))
                 {
                     var scheme = url[..url.IndexOf(':')].ToLowerInvariant();
-                    var credentials = server.Username is null ? "" :
-                        $"{System.Uri.EscapeDataString(server.Username)}:{System.Uri.EscapeDataString(server.Credential ?? "")}@";
+                    var (username, password) = server.CredentialsFor(id, now);
+                    var credentials = username is null ? "" :
+                        $"{System.Uri.EscapeDataString(username)}:{System.Uri.EscapeDataString(password ?? "")}@";
                     Element.EmitSignal("add-turn-server", $"{scheme}://{credentials}{HostPort(url[(scheme.Length + 1)..])}");
                 }
             }
