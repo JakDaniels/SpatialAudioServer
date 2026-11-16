@@ -61,6 +61,7 @@ Tests: `dotnet test src`.
 | [PLAN.md](PLAN.md) | The specification: architecture, API, decisions and their reasons, phases and progress |
 | [docs/running.md](docs/running.md) | Installing, configuring and running on Linux and Windows, as a service, firewall, load tool |
 | [docs/internet.md](docs/internet.md) | On an internet-facing host: TLS, the media port range, NAT, TURN, hardening |
+| [PACKAGING-PLAN.md](PACKAGING-PLAN.md) | Plan for .deb/.rpm/Windows installers, versioning and a release workflow (not built yet) |
 | [docs/benchmarks.md](docs/benchmarks.md) | Load-test results: CPU per engine, room counts, test machines |
 | [scripts/loadtest-linux-x64/README.md](scripts/loadtest-linux-x64/README.md) | The self-contained load tool for a separate Linux machine |
 | [docs/gstreamer_acousticspace_design.md](docs/gstreamer_acousticspace_design.md) | Design notes for a possible acoustic-space DSP element |
