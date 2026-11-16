@@ -250,9 +250,9 @@ Each of these is small, and each needs its own change and tests when the work st
 .github/workflows/gstreamer-watch.yml   weekly: an issue when GStreamer has a newer release than the Windows pin
 ```
 
-- **Running (2026-11-16):** `ci.yml` with `test-1.28` and `test-1.24` (installing GStreamer and .NET on each run
-  for now). `develop` is the repository's default branch while private, so "Run workflow" runs it by hand on
-  `develop`. Still to come: `windows`, `load-22.04`, the prepared images.
+- **Running (2026-11-16):** `ci.yml` with `test-1.28` and `test-1.24` (GStreamer and .NET already installed
+  in the prepared images). `develop` is the repository's default branch while private, so "Run workflow" runs it
+  by hand on `develop`. Still to come: `windows`, `load-22.04`.
   - **Both pass the full suite** (183 tests) on the private repository's 2-core runners, about 12 minutes per job.
   - **GStreamer 1.24 is supported** (Ubuntu 24.04's 1.24.2). Getting there needed three changes, listed in PLAN.md
     "GStreamer version differences".
@@ -278,8 +278,11 @@ Each of these is small, and each needs its own change and tests when the work st
     GitHub's free arm64 Linux runners can run the suite there.
 - **Caching:**
   - NuGet packages, and the pinned GStreamer download for Windows.
-  - **Prepared container images** (`ghcr.io/<owner>/sas-ci:1.24`, `:1.28`, `:22.04`, with GStreamer and .NET
-    installed), so a test job does not spend 3–4 minutes installing them. Rebuilt only when their Dockerfile changes.
+  - **Prepared container images** (done 2026-11-16): `ghcr.io/<owner>/sas-ci:1.28`, `:1.24` (GStreamer and the .NET
+    SDK installed) and `:22.04` (GStreamer only, for the load tool `.deb`), from `.github/ci-images/Dockerfile`.
+    `ci-images.yml` builds and pushes them when the Dockerfile changes, monthly (security updates, .NET patches) and
+    by hand. They save about a minute per job (installing took ~40 s, .NET ~15 s) and a dependency on outside
+    downloads mid-run. The packages stay private with the repository; ci.yml pulls them with its own token.
 - **Load tool on 22.04:**
   - The `load-22.04` job installs the load tool `.deb` and checks it starts and finds its GStreamer elements. That
     needs `sas-loadtest --check`, a small addition.
