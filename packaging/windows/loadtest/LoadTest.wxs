@@ -1,0 +1,44 @@
+<!-- The load tool MSI: the program, its voices and its own GStreamer in C:\Program Files\SpatialAudioServer Load Test\,
+     on PATH (SpatialAudioServer.LoadTest.exe, or sas-loadtest as on Linux). No service. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="SpatialAudioServer Load Test" Manufacturer="SpatialAudioServer developers" Version="$(ProductVersion)"
+           UpgradeCode="75F63680-24D8-4E54-93F6-D414FB4D60BE" Scope="perMachine">
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/JakDaniels/SpatialAudioServer" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="SpatialAudioServer Load Test">
+        <Directory Id="GStreamerFolder" Name="gstreamer" />
+        <Directory Id="VoicesFolder" Name="voices" />
+        <Directory Id="DocsFolder" Name="docs" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="LoadTest" Title="SpatialAudioServer Load Test" Level="1">
+      <ComponentGroupRef Id="Program" />
+      <ComponentRef Id="OnPath" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(Here)\license.rtf" />
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="Program">
+      <Files Directory="INSTALLFOLDER" Include="$(Stage)\loadtest\*" />
+      <Component Directory="INSTALLFOLDER">
+        <File Source="$(Here)\sas-loadtest.cmd" />
+      </Component>
+      <Files Directory="VoicesFolder" Include="$(Stage)\voices\**" />
+      <Files Directory="GStreamerFolder" Include="$(Stage)\gstreamer\**" />
+      <Files Directory="DocsFolder" Include="$(Stage)\loadtest-docs\**" />
+    </ComponentGroup>
+
+    <Component Id="OnPath" Directory="INSTALLFOLDER" Guid="97ADDEE6-3A57-4FD9-9E26-C840B6ADC207">
+      <Environment Id="LoadTestOnPath" Name="PATH" Value="[INSTALLFOLDER]" Part="last" Action="set" System="yes" />
+      <RegistryValue Root="HKLM" Key="Software\SpatialAudioServer Load Test" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+    </Component>
+  </Fragment>
+</Wix>

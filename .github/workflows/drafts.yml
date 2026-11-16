@@ -3,7 +3,8 @@
 # release files do not count against the Actions storage that workflow artefacts would fill. Pre-release versions
 # only (0.2.1~alpha.0.N), so a draft is never mistaken for a release and the real one upgrades it cleanly.
 # Now: Linux .deb and .rpm (Fedora) for x64 and arm64, server and load tool, each x64 package then installed
-# and tried on its distributions. Still to come: openSUSE, the Windows MSIs.
+# and tried on its distributions; and the Windows MSIs (x64), installed and tried on the Windows runner. Still to come:
+# openSUSE. Windows minutes count double on a private repository's bill.
 name: drafts
 
 on:
@@ -11,6 +12,10 @@ on:
     inputs:
       test:
         description: Install and try the x64 packages on each distribution (about 2 minutes each)
+        type: boolean
+        default: true
+      windows:
+        description: Build and try the Windows MSIs (about 15 minutes, billed double)
         type: boolean
         default: true
 
@@ -125,7 +130,7 @@ jobs:
             | while read -r url; do
                 curl -fsSLOJ -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/octet-stream" "$url"
               done
-          sha256sum -c SHA256SUMS
+          sha256sum -c --ignore-missing SHA256SUMS # the windows job may add MSIs meanwhile
           ls -l
 
       - name: Prepare
@@ -134,3 +139,74 @@ jobs:
 
       - name: Install and try
         run: sh scripts/test-packages.sh packages ${{ matrix.what || 'server+loadtest' }}
+
+  # The MSIs, each with its own GStreamer (PACKAGING-PLAN.md "GStreamer on Windows"), added to the release the linux
+  # job made. The pinned GStreamer installer is checked against its SHA-256, installed into a scratch folder, the
+  # needed parts gathered, and then removed again, so that the test proves the MSIs use their own copy.
+  windows:
+    needs: linux
+    if: inputs.windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      GSTREAMER_VERSION: 1.28.8
+      GSTREAMER_SHA256: e4c41ee6ee9c6c32a45d198463ec08d79bac3bd5fa58adc93d13fe4a08abc9d9
+      PEFILE_VERSION: '2024.8.26'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache the GStreamer installer
+        uses: actions/cache@v4
+        with:
+          path: gstreamer-installer
+          key: gstreamer-msvc-x86_64-${{ env.GSTREAMER_VERSION }}
+
+      - name: GStreamer (pinned)
+        run: |
+          $exe = "gstreamer-installer\gstreamer-1.0-msvc-x86_64-$env:GSTREAMER_VERSION.exe"
+          if (-not (Test-Path $exe)) {
+            New-Item -ItemType Directory -Force gstreamer-installer | Out-Null
+            Invoke-WebRequest -Uri "https://gstreamer.freedesktop.org/data/pkg/windows/$env:GSTREAMER_VERSION/msvc/gstreamer-1.0-msvc-x86_64-$env:GSTREAMER_VERSION.exe" -OutFile $exe
+          }
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:GSTREAMER_SHA256) { throw "GStreamer installer checksum $hash, expected $env:GSTREAMER_SHA256" }
+          # Inno Setup: silent, into a scratch folder.
+          $p = Start-Process -FilePath $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=$env:RUNNER_TEMP\gst" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "GStreamer installer failed ($($p.ExitCode))" }
+          Get-ChildItem -Recurse "$env:RUNNER_TEMP\gst" -Filter gstreamer-1.0-0.dll | Select-Object FullName
+
+      - name: Build the MSIs
+        run: |
+          python -m pip install --quiet "pefile==$env:PEFILE_VERSION"
+          scripts\build-windows.ps1 -GStreamerRoot "$env:RUNNER_TEMP\gst" -GStreamerVersion $env:GSTREAMER_VERSION
+
+      - name: Remove the build's GStreamer
+        run: |
+          Remove-Item -Recurse -Force "$env:RUNNER_TEMP\gst"
+          foreach ($name in 'GSTREAMER_1_0_ROOT_MSVC_X86_64', 'GSTREAMER_1_0_ROOT_X86_64') {
+            [Environment]::SetEnvironmentVariable($name, $null, 'Machine')
+          }
+
+      - name: Install and try the MSIs
+        run: scripts\test-windows.ps1 -Dist dist
+
+      - name: Add the MSIs to the develop (draft) release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Set-Location dist
+          gh release download develop-draft --pattern SHA256SUMS --clobber
+          # LF line endings, as sha256sum writes and reads them.
+          foreach ($msi in Get-ChildItem *.msi) {
+            [IO.File]::AppendAllText("$PWD\SHA256SUMS", "$((Get-FileHash $msi -Algorithm SHA256).Hash.ToLowerInvariant())  $($msi.Name)`n")
+          }
+          gh release upload develop-draft (Get-ChildItem *.msi).Name SHA256SUMS --clobber

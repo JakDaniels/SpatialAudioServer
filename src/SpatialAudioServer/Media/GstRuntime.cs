@@ -38,6 +38,11 @@ public sealed class GstRuntime(ILogger<GstRuntime> log)
             }
             try
             {
+                // Windows installations carry their own GStreamer (PACKAGING-PLAN.md, code change 4).
+                if (EmbeddedGStreamer.UseIfPresent(System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? "sas") is { } embedded)
+                {
+                    log.LogInformation("Using the GStreamer embedded in {Folder}", embedded);
+                }
                 // Each module initialiser registers its boxed types; they all end in the same gst_init.
                 GstSdp.Initialize();
                 GstWebRTC.Initialize();

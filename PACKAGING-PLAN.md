@@ -403,6 +403,29 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      would change if RHEL or EPEL ships webrtcbin, or with a GStreamer bundled into a RHEL package, as the Windows
      MSI will do (a larger job with its own security-update duty); not planned for now.
 6. **Windows:** code change 4, the GStreamer selection and the server and load tool MSIs, tested on Windows.
+   *Built (2026-11-16), not yet run:*
+   - **Code change 4** (`Media/EmbeddedGStreamer.cs`): with `gstreamer\bin` beside the program, the process uses
+     only that GStreamer (plugin path, scanner, its own registry cache in the account's local app data, `PATH`,
+     GstSharp's `NativeLoader.Configure`). Plus an optional `environment` file beside the program
+     (`Hosting/ProgramEnvironment.cs`), the Windows counterpart of `/etc/spatialaudioserver/environment`: the MSI's
+     points configuration and data at `%ProgramData%\SpatialAudioServer`, for the service and for an
+     administrator's `SpatialAudioServer.exe apikey …` alike.
+   - **GStreamer:** 1.28.8, pinned by SHA-256. From 1.28 GStreamer ships one Inno Setup `.exe` per architecture
+     (517 MB for x64; no MSIs or merge modules any more). CI installs it silently into a scratch folder, and
+     `packaging/windows/gather-gstreamer.py` copies the listed plugins, GStreamer's libraries and every DLL they
+     import (walked with pefile; the Microsoft C++ runtime from System32 if GStreamer lacks it), the plugin
+     scanner and the licence texts. The scratch install is then removed, so the test proves the MSIs use their own.
+   - **MSIs** (WiX 6.0.2, `packaging/windows/`; WiX 7 needs its maintenance-fee EULA accepted):
+     - server: the service as the virtual account `NT SERVICE\SpatialAudioServer` (decided), started on install;
+       `C:\ProgramData\SpatialAudioServer` readable by it, `data\` writable by it, both closed to other users
+       (SDDL with the service's SID, which is derived from its name); the site `appsettings.json` installed once and
+       kept, with the media ports 40000–40999; the program on `PATH`; firewall rules for TCP 5000–5001 and UDP
+       40000–40999 as an optional feature, off by default (decided); upgrades in place.
+     - load tool: program, voices and GStreamer in `C:\Program Files\SpatialAudioServer Load Test\`, on `PATH`,
+       with `sas-loadtest.cmd`.
+     - MSI versions: `0.2.1-alpha.0.5` becomes `0.2.1.5` (MSI compares three parts; same-version upgrades allowed).
+   - **Test** (`scripts/test-windows.ps1`, on the runner): install with the firewall rules, the service's account,
+     an API key from the command, `/api/status` with every element, the load tool's run, uninstall (data kept).
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
 8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,
    and the GitHub Pages apt/yum repository.
