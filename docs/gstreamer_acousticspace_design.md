@@ -911,3 +911,96 @@ Phase 4:
 The key design principle is:
 
 > Perform expensive acoustic calculations only when geometry changes, and keep the real-time audio path limited to gain, delay, interpolation and accumulation.
+
+---
+
+# Development and Packaging
+
+*Added 2026-11-16. Nothing is built yet.*
+
+GStreamer is designed for plugins built outside its own source tree: a plugin is a shared library (`.so` / `.dll`)
+found in GStreamer's plugin directories or on `GST_PLUGIN_PATH`. So `acousticspace` can be developed and shipped on
+its own, and offered to GStreamer once it has proved itself.
+
+## Its own project
+
+- A separate repository (e.g. `gst-acousticspace`), not part of SpatialAudioServer. That keeps it usable by anyone,
+  and it is what GStreamer would expect to see when it is proposed.
+- **Licence:**
+  - LGPL-2.1-or-later, as GStreamer's C plugins, or MPL-2.0, as most of gst-plugins-rs. Either keeps adoption open.
+  - SpatialAudioServer stays Apache-2.0: it only loads the plugin at run time.
+
+## Language: C or Rust
+
+| | C | Rust |
+|---|---|---|
+| Build | Meson, from GStreamer's plugin template | `gstreamer-rs` with `cargo-c`, built as an ordinary plugin library |
+| Fit | traditional; the sketches above are C | GStreamer's preferred language for new elements |
+| Upstream home | gst-plugins-bad (then good) | gst-plugins-rs, an official module released with GStreamer and packaged by distributions |
+
+The DSP is the same either way: cached coefficients per path, delay-buffer taps, multiply-adds. **Leaning towards
+Rust:**
+- a many-input, many-output engine is easier to keep memory-safe in it;
+- gst-plugins-rs is probably the realistic way into GStreamer's releases.
+
+To decide when work starts.
+
+## GStreamer versions
+
+- GStreamer keeps binary compatibility within 1.x: a plugin built against an older 1.x runs on newer ones, though
+  not the other way round.
+- **Linux:** build against the oldest version SpatialAudioServer supports (1.24, see PACKAGING-PLAN.md). The result
+  works on 1.24 through 1.28 and later.
+- **Windows:** build with MSVC against the same GStreamer 1.28 that the SpatialAudioServer MSI embeds. The compiler
+  must match the official MSVC builds of GStreamer.
+
+## Packaging
+
+The packaging follows [PACKAGING-PLAN.md](../PACKAGING-PLAN.md): its own workflows, versions from tags, and draft
+packages from its develop branch.
+
+- **Linux:** its own `.deb` and `.rpm` (e.g. `gstreamer1.0-acousticspace`, Fedora `gstreamer1-acousticspace`) for x64
+  and arm64:
+  - installed into the system GStreamer plugin directory (`/usr/lib/<triplet>/gstreamer-1.0/`,
+    `/usr/lib64/gstreamer-1.0/`);
+  - depending on `gstreamer1.0-plugins-base` (≥ 1.24);
+  - SpatialAudioServer's package *recommends* it, but does not require it.
+- **Windows:** the plugin DLL goes into the SpatialAudioServer MSI's embedded GStreamer folder, beside the other
+  plugins. No separate installer.
+- **If it is adopted upstream:** distributions then ship it with GStreamer, and the separate package is retired: the
+  next SpatialAudioServer package recommends the distribution's package instead.
+
+## How SpatialAudioServer uses it
+
+- **A new mix engine** (e.g. `acoustic`), chosen per room like `matrix` and `matrix-shared`. Engines are pluggable
+  per room, and the engine suites already run once per engine, so it gets the same end-to-end tests.
+- **Only when installed:** the engine is offered only when the `acousticspace` element exists. `/api/status` already
+  reports missing elements. A server without the plugin keeps working with the existing engines.
+- **Control:** properties on each request pad in place of the custom events proposed above:
+  - per participant: `x`, `y`, `z`, `yaw` (and later `pitch`, `roll`), `gain`, `active`;
+  - per element: the room preset (`environment`), and later geometry.
+
+  Request-pad properties are GStreamer's usual way to control per-stream settings (as `audiomixer` and
+  `audiomixmatrix` do), they work with any binding, and the server already sets such properties. The element turns
+  property changes into its coefficient updates; the audio path never sees them.
+- **Positions:** the server's spatial policy already computes where each participant is and how it faces
+  (`EffectivePose`), so the engine passes those on. The distance curve and the profiles (`outdoor`, `meeting`) map onto
+  the element's distance model.
+
+## Testing
+
+- **In its own repository:** unit tests with GStreamer's check framework (`gst-check`, or `gst::check` in Rust):
+  - known inputs, checking gain, ITD and taps on the outputs;
+  - pads added and removed while playing;
+  - a listener's own input never in their own mix;
+  - CPU per path measured, for the scaling claims above.
+- **In SpatialAudioServer:** the engine suites with the plugin installed, and the load tool for real rooms.
+
+## Getting it adopted
+
+GStreamer takes new elements when they are generally useful, maintained and well tested. A multi-listener
+acoustic-space mixer is specialised, so expect discussion. The way there:
+1. working and tested out of tree;
+2. documentation (element docs, examples with `gst-launch-1.0`);
+3. ideally users besides SpatialAudioServer;
+4. then a merge request on GStreamer's GitLab: gst-plugins-rs if it is in Rust, otherwise gst-plugins-bad.

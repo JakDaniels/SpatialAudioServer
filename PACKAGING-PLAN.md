@@ -21,8 +21,18 @@ listed at the end. [PLAN.md](PLAN.md) stays the specification of the server itse
 
 ## Supported systems
 
-**Decided:** any `.deb`- or `.rpm`-based distribution that ships **GStreamer 1.24 or later**. The first target to
-test is **Ubuntu 24.04** (GStreamer 1.24.2): a `.deb` for it comes first.
+**Decided:** the **server** on any `.deb`- or `.rpm`-based distribution that ships **GStreamer 1.24 or later**; the
+**load tool** also on **Ubuntu 22.04** (GStreamer 1.20), where it is already used for load runs (the committed
+self-contained build in `scripts/loadtest-linux-x64/` runs there). The first target to test is **Ubuntu 24.04**
+(GStreamer 1.24.2): a `.deb` for it comes first.
+
+| Package | GStreamer floor | Also on |
+|---|---|---|
+| server (`spatialaudioserver`) | 1.24 | |
+| load tool (`spatialaudioserver-loadtest`) | 1.20 | Ubuntu 22.04 (and other 1.20+ distributions) |
+
+The dependency package names are the same on Ubuntu 22.04, 24.04 and 26.04, so **one load tool `.deb`** per
+architecture installs on all of them, with its GStreamer dependencies at `>= 1.20`.
 
 | Family | Examples with GStreamer ≥ 1.24 (to confirm per release) | Package |
 |---|---|---|
@@ -84,8 +94,8 @@ calls the GStreamer libraries directly, so GObject Introspection typelibs (`gir1
 **Load tool package `spatialaudioserver-loadtest`:**
 - the self-contained load tool in `/usr/lib/spatialaudioserver-loadtest/`, with `/usr/bin/sas-loadtest`;
 - the pre-rendered voices (`voices/`, 2.3 MB);
-- the same GStreamer dependencies; `libflite1` (Fedora: `flite`) only as *Recommends*, since it is needed only for
-  `--audio flite`;
+- the same GStreamer packages as the server, but at **`>= 1.20`**, so it installs on Ubuntu 22.04; `libflite1`
+  (Fedora: `flite`) only as *Recommends*, since it is needed only for `--audio flite`;
 - no service, no user.
 
 ## Windows installers
@@ -203,44 +213,153 @@ Each of these is small, and each needs its own change and tests when the work st
 5. **Load tool voices:** it looks for `voices/` next to itself (`--voices` overrides). Fine as long as the package
    keeps them together.
 
-## The GitHub workflow
+## Branches and the GitHub workflows
+
+**Decided (2026-11-16):**
+- Development happens on a **`develop`** branch. CI runs **no tests** there: the tests are run locally while
+  developing, as so far.
+- **`main`** gets the full tests: a pull request from `develop` into `main` runs everything, both GStreamer versions,
+  Windows and the 22.04 load tool check, and is merged when green.
+- Packages can be built from `develop` as **drafts for testing**, never as release versions.
+- Releases are tags on `main`. Once the repository is public, released packages also go into the GitHub Pages
+  repositories.
+- **No self-hosted runner.**
 
 ```
-.github/workflows/ci.yml        on every push and pull request
-  test-1.28   container ubuntu:26.04: install GStreamer + .NET, build, full test suite (≈ 8 min)
-  test-1.24   container ubuntu:24.04: the same against GStreamer 1.24 (the floor)
+.github/workflows/ci.yml        pull requests into main, and pushes to main (skipped for docs-only changes)
+  test-1.28   ubuntu:26.04 container (GStreamer 1.28): build, full test suite (≈ 8 min)
+  test-1.24   ubuntu:24.04 container (GStreamer 1.24, the floor): the same
+  windows     windows-latest: fetch the pinned GStreamer (hash checked), embed it, full test suite against it
+  load-22.04  ubuntu:22.04 container: build and install the load tool .deb, check it starts and finds its elements
 
-.github/workflows/release.yml   on a tag v*
-  test        both test jobs above (a release only from green tests)
-  linux       matrix x64 / arm64: dotnet publish -r linux-{x64,arm64} --self-contained (cross-publish from x64)
-              → nfpm → server and load tool, .deb and .rpm
-  windows     windows-latest: fetch the pinned GStreamer (hash checked), pick the plugins and their DLLs,
-              publish win-x64 → full test suite against that embedded GStreamer → WiX → server MSI, load tool MSI
-  release     gather the artefacts, SHA256SUMS, create the GitHub release from the tag (notes from the tag message
-              or a CHANGELOG section)
+.github/workflows/drafts.yml    by hand only (workflow_dispatch) on develop; choose linux, windows or both
+  linux       dotnet publish -r linux-{x64,arm64} --self-contained → nfpm → server and load tool, .deb and .rpm
+  windows     fetch and embed the pinned GStreamer, publish win-x64 → WiX → server MSI, load tool MSI
+  draft       replace the files of the single pre-release "develop (draft)" with these, and SHA256SUMS
+
+.github/workflows/release.yml   on a tag v* on main (a commit whose ci.yml run was green)
+  linux, windows   as in drafts.yml, with the release version
+  release     SHA256SUMS; while private: a draft GitHub release, checked and published by hand;
+              once public: the published release, then the GitHub Pages apt/yum repositories updated
+
+.github/workflows/gstreamer-watch.yml   weekly: an issue when GStreamer has a newer release than the Windows pin
 ```
 
-- **arm64:** the self-contained .NET publish cross-builds from an x64 runner, and nfpm does not care about the
-  architecture. The arm64 packages still need testing on arm64: GitHub has arm64 Linux runners, or use a Raspberry
-  Pi 5 or arm64 VM by hand at first. The media tests need GStreamer on the test machine.
-- **Caching:** NuGet packages, and the pinned GStreamer download for Windows.
-- **Windows tests:** the release workflow runs the full suite on `windows-latest` against the embedded GStreamer, so
-  what ships is what was tested; `ci.yml` may run it too once it is quick enough.
-- **GStreamer watch:** `.github/workflows/gstreamer-watch.yml`, weekly, opens an issue when GStreamer has a newer
-  release than the Windows pin.
-- **Later:** an apt and yum repository (GitHub Pages with `reprepro`/`createrepo_c`, or a hosted service), so updates
-  come through `apt upgrade` / `dnf upgrade`; that is when GPG signing becomes necessary.
+- **Versions** come from MinVer (see Versioning):
+  - Draft builds are never on a release tag, so they get pre-release versions such as `0.2.1-alpha.0.14`, 14 commits
+    after `v0.2.0`. A draft cannot be mistaken for a release.
+  - In packages that shows as `0.2.1~alpha.0.14`, which sorts before the real `0.2.1`, so installing the release
+    later is a clean upgrade.
+  - Draft MSIs need a numeric version: `0.2.1.14`-style, with the commit count as the build number.
+- **Drafts in one rolling pre-release, not in workflow artefacts:** a private repository's Actions storage on the free
+  plan is about 500 MB, and one set of packages is about 400 MB, so artefacts would fill it. Release files do not
+  count against it. The "develop (draft)" pre-release always holds just the latest drafts, visible only to the
+  repository's collaborators while it is private. Its tag (`develop-draft`) is moved to the commit built, and it is
+  marked as a pre-release, never as latest.
+- **The gate on main:** while private, merging only when the pull request is green is a habit, not a rule. GitHub's
+  branch protection, which would enforce it, needs a paid plan for private repositories. Once public it is free, and
+  `main` should then require the `ci.yml` checks.
+- **Releases do not re-run the tests:** a release tag is put on a `main` commit whose `ci.yml` run passed. The release
+  workflow checks that run's result through the API and stops if it was not green.
+- **arm64:**
+  - The self-contained .NET publish cross-builds from an x64 runner, and nfpm does not care about the architecture.
+  - Testing the arm64 packages on arm64 is by hand at first, on a Raspberry Pi 5 or an arm64 VM. Once public,
+    GitHub's free arm64 Linux runners can run the suite there.
+- **Caching:**
+  - NuGet packages, and the pinned GStreamer download for Windows.
+  - **Prepared container images** (`ghcr.io/<owner>/sas-ci:1.24`, `:1.28`, `:22.04`, with GStreamer and .NET
+    installed), so a test job does not spend 3–4 minutes installing them. Rebuilt only when their Dockerfile changes.
+- **Load tool on 22.04:**
+  - The `load-22.04` job installs the load tool `.deb` and checks it starts and finds its GStreamer elements. That
+    needs `sas-loadtest --check`, a small addition.
+  - Its media tests need a server, which is not supported on 22.04, so real load runs there stay manual, as now.
+
+## Package repositories (GitHub Pages)
+
+**Decided:** apt and yum repositories on GitHub Pages, so users add the repository once and get updates through
+`apt upgrade` / `dnf upgrade`. Releases stay on GitHub Releases too.
+
+- **What it is:** static files on a Pages site, e.g. `https://<owner>.github.io/sas-packages/`, in its own repository
+  (`sas-packages`), so the source repository's Pages stay free for docs:
+  - `deb/`: an apt repository, `dists/stable/main/binary-{amd64,arm64}/` and `pool/`, made with `reprepro` (or
+    `aptly`). One suite serves 22.04, 24.04 and 26.04, since the packages carry their own dependencies' versions.
+  - `rpm/`: a yum/dnf repository, `x86_64/` and `aarch64/` with `repodata/`, made with `createrepo_c`.
+- **Signing:** a GPG key made for the project; the private key as an Actions secret, the public key published at the
+  repository's root. `reprepro` signs `Release`/`InRelease`; the `.rpm` files are signed with `rpmsign` and the
+  `repodata` too. Free.
+- **Release step:** after the GitHub release, the workflow checks out `sas-packages`, adds the new packages, prunes old
+  ones, regenerates and signs the indexes, and pushes. Pages then serves it.
+- **User set-up**, shown in the README:
+
+  ```bash
+  curl -fsSL https://<owner>.github.io/sas-packages/key.asc | sudo gpg --dearmor -o /usr/share/keyrings/sas.gpg
+  echo "deb [signed-by=/usr/share/keyrings/sas.gpg] https://<owner>.github.io/sas-packages/deb stable main" |
+    sudo tee /etc/apt/sources.list.d/sas.list
+  sudo apt update && sudo apt install spatialaudioserver      # or spatialaudioserver-loadtest
+  ```
+
+  For dnf, a `.repo` file with `baseurl` and `gpgkey`.
+- **Size limits:** a Pages site may be about **1 GB**, and a single file at most 100 MB. Self-contained packages are
+  about 50 MB each, and a release adds about 8 of them (server and load tool, x64 and arm64, deb and rpm), so ~400 MB.
+  So **the repository keeps the latest two releases**; older ones stay downloadable from GitHub Releases (apt's index
+  cannot point at release download URLs, so the files have to live in the site itself). Should that become tight:
+  - **framework-dependent packages:** a few MB each, depending on the distribution's `dotnet-runtime-10.0` (Fedora and
+    Ubuntu 26.04 have it; 24.04 to check; 22.04 has only .NET 8, so the load tool would stay self-contained);
+  - **a hosted service with a free open-source plan** (e.g. Cloudsmith).
+- **While the repository is private:** a Pages site from a private repository needs a paid plan, and the packages
+  should not be public before the project is. So until then, packages exist only as the "develop (draft)"
+  pre-release and as draft releases (see the workflows above), and the Pages repository starts with the first
+  public release.
+
+## Actions minutes
+
+**Decided:** the repository stays **private** until there is something concrete to release; it then becomes public.
+
+| | Private (now) | Public (later) |
+|---|---|---|
+| GitHub-hosted runners (Linux x64/arm64, Windows) | 2000 minutes a month; Windows minutes count ×2 | free, unlimited |
+
+**What the workflows above cost while private** (rough, with the prepared container images):
+
+| Run | Minutes (Windows counted ×2) | How often |
+|---|---|---|
+| `ci.yml`: a pull request into main (1.28 and 1.24 suites ≈ 20, Windows suite ≈ 25 ×2, 22.04 check ≈ 3) | ≈ 75 | per merge; another ≈ 75 if the push to main runs it again (it can be skipped when the pull request's run was for the same commit) |
+| `drafts.yml`, Linux only | ≈ 5 | when you want something to test |
+| `drafts.yml`, Linux and Windows | ≈ 25 | likewise |
+| `release.yml` | ≈ 25 | per release |
+| `gstreamer-watch.yml` | < 1 | weekly |
+| pushes to `develop` | 0 | |
+
+So with a merge every week or two and a few draft builds, about **200–450 minutes a month**: well inside 2000.
+`develop` costs nothing, however often it is pushed.
+
+**Ways to keep it down if needed:**
+- path filters, so docs-only changes do not run `ci.yml`;
+- `concurrency: cancel-in-progress`, so a pull request updated quickly runs only its latest commit;
+- running the Windows suite only in `release.yml`, not on every pull request. That saves ≈ 50 a merge, but Windows
+  problems are then found only at release time.
+
+**Once public:** GitHub's runners are free, so `ci.yml` can also run on pull requests from others, and the arm64 suite
+can run on GitHub's arm64 runners. The limits above stop mattering.
 
 ## Order of work
 
 1. **Versioning:** MinVer, and a first tag (`v0.2.0`).
-2. **CI:** the two test jobs (1.28 and 1.24). The 1.24 job answers whether Ubuntu 24.04 is supported, before any
-   packaging.
+2. **Branches and CI:** a `develop` branch for day-to-day work; `ci.yml` (both GStreamer versions) on pull requests
+   into `main`, and the prepared container images. The first run against 1.24 answers whether Ubuntu 24.04 is
+   supported, before any packaging.
 3. **Code changes 1–3** (configuration directory, data paths, command wrapper).
-4. **`.deb` for Ubuntu 24.04 (x64)**, server and load tool: test by hand on 24.04.
+4. **`drafts.yml` with the `.deb` for Ubuntu 24.04 (x64)**, server and load tool: test by hand on 24.04; the load tool
+   `.deb` also on 22.04.
 5. The rest of Linux: `.rpm` (Fedora/RHEL), arm64, openSUSE.
 6. **Windows:** code change 4, the GStreamer selection and the server and load tool MSIs, tested on Windows.
-7. **The release workflow**, putting it all together; then the first public release.
+7. **The release workflow**, putting it all together, with draft GitHub releases while private.
+8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,
+   and the GitHub Pages apt/yum repository.
+
+The planned `acousticspace` GStreamer plugin (docs/gstreamer_acousticspace_design.md, "Development and Packaging")
+gets its own repository and its own packages the same way: `.deb`/`.rpm` into the system plugin directory, recommended
+(not required) by the server package; on Windows, its DLL inside the server MSI's embedded GStreamer.
 
 The OpenSim add-on (`os-webrtc-sas`) is not part of this: its DLL is built against a particular OpenSim version, so
 it gets its own release (a zip per OpenSim version) in its own repository.
@@ -255,3 +374,5 @@ it gets its own release (a zip per OpenSim version) in its own repository.
 5. **Firewall rules on Windows:** add them by default, or leave them as an installer option.
 6. **Package names:** `spatialaudioserver` and `spatialaudioserver-loadtest`, with the command `sas-loadtest`.
 7. **Release notes:** a `CHANGELOG.md` kept by hand, or notes from the tag message.
+8. **The repository name and owner for the Pages packages** (`sas-packages`), and whether to try framework-dependent
+   packages to save space.
