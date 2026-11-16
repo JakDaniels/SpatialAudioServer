@@ -28,6 +28,20 @@ depends:
 recommends:
   - libflite1 # --audio flite
 
+overrides:
+  rpm:
+    depends:
+      - gstreamer1-plugins-base >= 1.20
+      - gstreamer1-plugins-good >= 1.20
+      - gstreamer1-plugins-bad-free >= 1.20
+      - libnice-gstreamer1
+      - openssl-libs
+      - glibc
+      - libgcc
+      - libstdc++
+    recommends:
+      - flite # --audio flite
+
 contents:
   # A single self-contained file, with the voices beside it (where it looks for them).
   - src: dist/stage/loadtest/SpatialAudioServer.LoadTest
