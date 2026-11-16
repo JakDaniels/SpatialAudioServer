@@ -160,6 +160,11 @@ public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) wh
         // and GLib's thread pool keep a few idle workers (which keep their last task's name, e.g. "queue93:src"),
         // so a handful is expected; a per-join leak shows as +10 or more over 10 joins (UPnP did: +20).
         // .NET thread-pool workers are excluded: that pool grows on its own.
+        // A full collection first: an object released only when the collector takes its last managed wrapper is
+        // a delay, not a leak (GStreamer 1.24 keeps a connection's ICE thread until its ICE object is finalised).
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
         await Task.Delay(1000);
         var after = ThreadNames();
         var grown = after.Where(kv => !kv.Key.StartsWith(".NET", StringComparison.Ordinal))
