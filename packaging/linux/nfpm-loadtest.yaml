@@ -1,0 +1,47 @@
+# The load tool package (PACKAGING-PLAN.md "Linux packages"): no service, no user. GStreamer 1.20 is enough for its
+# fake clients, so it installs on Ubuntu 22.04 too. Built by scripts/build-packages.sh (VERSION, ARCH).
+name: spatialaudioserver-loadtest
+version: ${VERSION}
+version_schema: semver
+arch: ${ARCH}
+platform: linux
+section: net
+priority: optional
+maintainer: SpatialAudioServer developers
+description: |
+  Load and listening-test tool for SpatialAudioServer
+  Fills rooms on a running server with fake WebRTC clients that send tones or
+  speak (pre-rendered voices included), checks who hears whom, and reports the
+  server's CPU and memory.
+homepage: https://github.com/JakDaniels/SpatialAudioServer
+license: Apache-2.0
+
+depends:
+  - gstreamer1.0-plugins-base (>= 1.20)
+  - gstreamer1.0-plugins-good (>= 1.20)
+  - gstreamer1.0-plugins-bad (>= 1.20)
+  - gstreamer1.0-nice
+  - libssl3t64 | libssl3
+  - libc6
+  - libgcc-s1
+  - libstdc++6
+recommends:
+  - libflite1 # --audio flite
+
+contents:
+  # A single self-contained file, with the voices beside it (where it looks for them).
+  - src: dist/stage/loadtest/SpatialAudioServer.LoadTest
+    dst: /usr/lib/spatialaudioserver-loadtest/SpatialAudioServer.LoadTest
+    file_info: { mode: 0755 }
+  - src: dist/stage/loadtest/voices
+    dst: /usr/lib/spatialaudioserver-loadtest/voices
+    type: tree
+  - src: packaging/linux/sas-loadtest
+    dst: /usr/bin/sas-loadtest
+    file_info: { mode: 0755 }
+  - src: scripts/loadtest-linux-x64/README.md
+    dst: /usr/share/doc/spatialaudioserver-loadtest/README.md
+    file_info: { mode: 0644 }
+  - src: LICENSE
+    dst: /usr/share/doc/spatialaudioserver-loadtest/copyright
+    file_info: { mode: 0644 }
