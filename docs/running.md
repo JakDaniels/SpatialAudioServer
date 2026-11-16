@@ -71,8 +71,11 @@ For testing, a fixed key can be set in configuration instead (`Auth:ApiKeys`, se
 ## 3. Configuration
 
 `appsettings.json` next to the program, overridden by `appsettings.{Environment}.json` (e.g. the git-ignored
-`appsettings.Development.json` that `dotnet run` uses) and then by environment variables, with `__` between levels:
-`Server__HttpsPort=443`, `Auth__ApiKeys__0=devkey`, `Media__IdleRoomTimeout=00:01:00`.
+`appsettings.Development.json` that `dotnet run` uses), then by the same two files in the directory named by
+`SAS_CONFIG_DIR` if it is set (the packages use `/etc/spatialaudioserver`, so site settings live apart from the
+program and survive upgrades), and then by environment variables, with `__` between levels:
+`Server__HttpsPort=443`, `Auth__ApiKeys__0=devkey`, `Media__IdleRoomTimeout=00:01:00`. The JSON files may contain
+`//` comments.
 
 | Setting | Default | |
 |---|---|---|

@@ -65,6 +65,7 @@ scripts.
 | Program (self-contained `linux-x64` / `linux-arm64` publish) | `/usr/lib/spatialaudioserver/` |
 | Command wrapper (`spatialaudioserver apikey …`, `admin …`) | `/usr/bin/spatialaudioserver` |
 | Configuration (a config file: kept and merged on upgrade) | `/etc/spatialaudioserver/appsettings.json` |
+| Where things are, for the unit and the wrapper (a config file) | `/etc/spatialaudioserver/environment` |
 | Data: SQLite database, `keys/`, dev certificate | `/var/lib/spatialaudioserver/` (owned by the service user) |
 | Service | `/usr/lib/systemd/system/spatialaudioserver.service` (the hardened unit from `docs/internet.md`) |
 | Docs | `/usr/share/doc/spatialaudioserver/` (README, running.md, internet.md, licences) |
@@ -202,16 +203,22 @@ release of ours). On Linux the distribution updates GStreamer, so Linux packages
 
 Each of these is small, and each needs its own change and tests when the work starts:
 
-1. **Configuration from `/etc` and `ProgramData`:** the program looks for `appsettings.json` next to itself today.
-   The packages need it in `/etc/spatialaudioserver/` and `C:\ProgramData\SpatialAudioServer\`, e.g. an environment
-   variable or command-line switch naming the configuration directory, set by the service unit. Environment
-   variables already work for single settings.
-2. **Data outside the program folder:** `Storage:DatabasePath` already takes a path, and the cookie `keys/` and the
-   dev certificate follow it. Packages set it to `/var/lib/spatialaudioserver/spatialaudio.db` (Windows:
-   `ProgramData`). The dev certificate path needs the same treatment.
-3. **The command wrapper:** `spatialaudioserver apikey …` run by an administrator must use the service's
-   configuration and database, and run as the service user (so files stay owned by it). The wrapper does
-   `sudo -u spatialaudio …` with the same environment the unit sets.
+1. **Configuration from `/etc` and `ProgramData`** (done 2026-11-16): `SAS_CONFIG_DIR` names a directory whose
+   `appsettings.json` (and `appsettings.{Environment}.json`) apply on top of the program's own and below
+   environment variables (`Hosting/ConfigDirectory.cs`). Packages: `/etc/spatialaudioserver`,
+   `C:\ProgramData\SpatialAudioServer`.
+2. **Data outside the program folder** (done, no code needed): `Storage:DatabasePath` and
+   `Server:DevCertificatePath` take any path, and the cookie `keys/` follow the database. The Linux package sets
+   both in `/etc/spatialaudioserver/environment` (below `/var/lib/spatialaudioserver/`).
+3. **The command wrapper** (done): `packaging/linux/spatialaudioserver` runs `apikey …` and `admin …` as the
+   service user (`runuser` from root, or directly as that user), with the service's environment file, so commands
+   see the same configuration and database and the files stay the service's. With no command it prints usage:
+   the server itself runs as the service. The files in `packaging/linux/`:
+   - `spatialaudioserver.service`: the hardened unit, `EnvironmentFile=/etc/spatialaudioserver/environment`,
+     `StateDirectory=spatialaudioserver` (so systemd creates `/var/lib/spatialaudioserver` for the service user);
+   - `environment`: where things are (configuration directory, database, dev certificate), read by the unit and
+     the wrapper alike;
+   - `appsettings.json`: the commented template for `/etc/spatialaudioserver/appsettings.json`.
 4. **Windows: the embedded GStreamer.** At start-up, if `<install dir>\gstreamer\` exists, set `GST_PLUGIN_PATH`,
    `GST_PLUGIN_SYSTEM_PATH`, `GST_REGISTRY` and the DLL search path for the process, before GStreamer initialises
    (server and load tool).

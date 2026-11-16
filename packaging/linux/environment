@@ -1,0 +1,8 @@
+# /etc/spatialaudioserver/environment
+# Read by the service (systemd EnvironmentFile=) and by the spatialaudioserver command, so both use the same
+# configuration and data. One KEY=value per line, no quotes. Site settings belong in appsettings.json beside this file;
+# these are only where things are. Settings here override that file (environment variables come last).
+DOTNET_ENVIRONMENT=Production
+SAS_CONFIG_DIR=/etc/spatialaudioserver
+Storage__DatabasePath=/var/lib/spatialaudioserver/spatialaudio.db
+Server__DevCertificatePath=/var/lib/spatialaudioserver/devcert.pfx
