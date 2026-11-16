@@ -1,6 +1,6 @@
 # Packaging and releases: plan
 
-Status: **under way** (2026-11-16): versioning, CI and the code changes done; the first `.deb` built.
+Status: **under way** (2026-11-16): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested).
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -372,13 +372,18 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
 3. **Code changes 1–3** (configuration directory, data paths, command wrapper).
 4. **`drafts.yml` with the `.deb` for Ubuntu 24.04 (x64)**, server and load tool: test by hand on 24.04; the load tool
    `.deb` also on 22.04.
-   *Built (2026-11-16), to test on 24.04:* `scripts/build-packages.sh [x64|arm64]` (the .NET publishes, then nfpm
+   *Built and tested (2026-11-16):* `scripts/build-packages.sh [x64|arm64]` (the .NET publishes, then nfpm
    with `packaging/linux/nfpm-server.yaml` and `nfpm-loadtest.yaml`; also by hand, with nfpm installed) and
    `drafts.yml` (by hand on `develop`, nfpm 2.48.0 pinned by checksum). Packages are self-contained with
    invariant globalisation (no libicu dependency); file modes are normalised (0644, programs 0755). The load tool
    is `/usr/bin/sas-loadtest`, a launcher for the real program beside its voices.
    Release files are named with the SemVer version (`spatialaudioserver_0.2.1-alpha.0.5_amd64.deb`), since GitHub
    turns `~` in a file name into `.`; the version inside the package keeps its `~`.
+   Tested by hand: on Ubuntu 24.04 (GStreamer 1.24.2) the server package installs (with the dependencies apt
+   pulls in, mostly for `gstreamer1.0-plugins-bad`), the wrapper sets the admin password and creates keys through
+   sudo, the service starts, the admin UI and web client work, an upgrade to the next draft restarts the service
+   and keeps keys and settings, and remove (data kept) and purge (data and `/etc` gone, the `spatialaudio` user
+   kept) behave. The load tool package installs and passes load runs on 24.04 and on 22.04 (GStreamer 1.20).
 5. The rest of Linux: `.rpm` (Fedora/RHEL), arm64, openSUSE.
 6. **Windows:** code change 4, the GStreamer selection and the server and load tool MSIs, tested on Windows.
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
