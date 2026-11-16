@@ -416,7 +416,7 @@ tested without GStreamer.
    - **Headers:** CSP (self only), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` (join links
      carry the token in the query), `frame-ancestors 'none'`.
    - **Token expiry, as built:** join tokens 5 min, one use; session tokens live as long as the participant; admin
-     sessions sliding 8 h. API keys do not expire (revoke them); revisit before public deployment.
+     sessions sliding 8 h. API keys do not expire unless given an expiry (see below).
    - **Run docs:** `docs/running.md` (Linux + Windows: prerequisites, first-time setup, configuration table,
      firewall, systemd unit, Windows service, load tool). A published build uses its own folder as content root when
      started elsewhere (Windows services start in System32). `dotnet publish -r win-x64` checked from Linux (SQLite
@@ -430,8 +430,19 @@ tested without GStreamer.
      re-loaded as PKCS#12 for Windows), `Server:TrustedProxies` (forwarded headers only from those), and network
      allow-lists `Admin:AllowedNetworks` (admin UI + `/api/admin`) and `Auth:AllowedNetworks` (control API), others
      404, signalling and the web client unaffected. Guide: `docs/internet.md` (TLS directly or behind a proxy,
-     firewall, NAT, coturn, hardening, checklist). Still to do: a run on a real public host; TURN tested for real;
-     short-lived TURN credentials (the configured ones are handed to every client).
+     firewall, NAT, coturn, hardening, checklist). Still to do: a run on a real public host; TURN tested for real.
+   - **Before public deployment (2026-11-15):** API keys may expire (`apikey create <label> --expires 90d|date`,
+     migration 9; `apikey list` shows expiry and flags keys unused for 90 days; last-use tracking already existed).
+     TURN credentials per client from a shared `Secret` (coturn `use-auth-secret`: `{expiry}:{participant id}`,
+     base64 HMAC-SHA1; `CredentialLifetime` 12 h; the server's own TURN use gets its own), instead of one fixed pair
+     handed to everyone. Admin review: the session carries a fingerprint of the password hash, so changing the
+     password ends every session; the login throttle prunes itself and also caps failures overall (30/min from
+     anywhere, against guessers spread over many addresses); cookie-authenticated changes under `/api` with a foreign
+     `Origin` are refused (SameSite=Strict does not cover sibling subdomains); `Admin:RequireHttps` (login only over
+     HTTPS, Secure cookie; the one exception is a request on the machine itself, and a loopback request still
+     carrying `X-Forwarded-For`/`Forwarded`, i.e. through an untrusted proxy on the same host, does not count, so
+     behind a proxy it needs `Server:TrustedProxies`); the cookie protection keys live in `data/keys`, so sessions survive
+     restarts and a hardened unit (no home) does not fall back to in-memory keys.
 6. **Spatial (brought forward 2026-11-13, first version done).** Decided: a per-room `spatial` flag (create/ensure,
    default off, stored: migration 4, shown in room details); `matrix-shared` clusters listeners by rendering; an
    inverse, SL-like distance model.

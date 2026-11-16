@@ -57,6 +57,7 @@ Stop it with **Ctrl+C** (or SIGTERM / a service stop). Everyone's session is clo
 
 ```bash
 dotnet run --project src/SpatialAudioServer -- apikey create region-module   # prints a sas_… key: keep it
+# optionally with an expiry: apikey create visitor-tool --expires 90d (or --expires 2027-01-31)
 dotnet run --project src/SpatialAudioServer -- admin set-password            # admin UI password
 ```
 
@@ -84,7 +85,8 @@ For testing, a fixed key can be set in configuration instead (`Auth:ApiKeys`, se
 | `Storage:DatabasePath` | `data/spatialaudio.db` | rooms, keys, history |
 | `Auth:ApiKeys` | `[]` | fixed control-API keys (never stored) |
 | `Auth:JoinTokenLifetime` | 5 min | a participant who has not connected by then is removed (`join-expired`) |
-| `Admin:SessionLifetime` | 8 h | sliding |
+| `Admin:SessionLifetime` | 8 h | sliding; changing the admin password ends every session |
+| `Admin:RequireHttps` | false | admin login only over HTTPS (except from the machine itself), Secure cookie |
 | `Limits:MaxRooms`, `MaxParticipantsPerRoom`, `MaxParticipantsTotal` | 16, 32, 512 | |
 | `Limits:MaxRequestBodyBytes` | 64 KB | |
 | `Limits:SignalRequestsPerSecond` | 30 | per participant on `/signal/…`, bursts of 2×; 0 = off |
@@ -92,7 +94,7 @@ For testing, a fixed key can be set in configuration instead (`Auth:ApiKeys`, se
 | `Media:IdleRoomTimeout` | 30 s | a room's pipeline starts with its first participant and stops this long after the last leaves |
 | `Media:DeadConnectionTimeout` | 10 s | a connection failed/disconnected this long is removed (`connection-lost`) |
 | `Media:Engine`, `Media:SpatialEngine` | `matrix-shared`, `matrix` | default mix engine for new rooms |
-| `Media:IceServers` | `[]` | STUN/TURN (not needed on a LAN) |
+| `Media:IceServers` | `[]` | STUN/TURN (not needed on a LAN); a TURN entry takes `Username`/`Credential`, or a `Secret` (coturn `static-auth-secret`) for per-client credentials valid `CredentialLifetime` (12 h) |
 | `Media:Network:MinPort`, `MaxPort` | any | the media port range (UDP and ICE-TCP), for firewalls |
 | `Media:Network:PublicAddress` | unset | the public address behind 1:1 NAT: host candidates are also given with it |
 | `Media:Spatial:DistanceModel`, `ReferenceDistance`, `Rolloff`, `MaxRange`, `Profiles` | exponential, 2 m, 1, 60 m | distance curve; rooms may name a profile (`outdoor`, `meeting`) |

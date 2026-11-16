@@ -82,4 +82,31 @@ public sealed class StorageTests : IDisposable
         Assert.Null(store.FindActive(Secrets.Hash(key)));
         Assert.NotNull(Assert.Single(store.List()).RevokedAt);
     }
+
+    [Fact]
+    public void An_api_key_with_an_expiry_stops_working_then()
+    {
+        var clock = new ManualTime(new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero));
+        var store = new ApiKeyStore(new Database(_dir.File("expiry.sqlite")), clock);
+        var (record, key) = store.Create("visitor", clock.Now.AddDays(30));
+        var (_, forever) = store.Create("module");
+
+        Assert.Equal(record.Id, store.FindActive(Secrets.Hash(key))?.Id);
+        clock.Now = clock.Now.AddDays(30);
+        Assert.Null(store.FindActive(Secrets.Hash(key)));
+        Assert.NotNull(store.FindActive(Secrets.Hash(forever)));
+        Assert.Equal(record.ExpiresAt, store.List().Single(k => k.Id == record.Id).ExpiresAt);
+    }
+
+    [Fact]
+    public void Key_expiry_is_given_in_days_or_as_a_future_date()
+    {
+        var now = new DateTimeOffset(2026, 11, 15, 12, 0, 0, TimeSpan.Zero);
+        Assert.Equal(now.AddDays(90), SpatialAudioServer.Hosting.ApiKeyCommand.ParseExpiry("90d", now));
+        Assert.Equal(new DateTimeOffset(2027, 1, 31, 0, 0, 0, TimeSpan.Zero),
+            SpatialAudioServer.Hosting.ApiKeyCommand.ParseExpiry("2027-01-31T00:00:00Z", now));
+        Assert.Null(SpatialAudioServer.Hosting.ApiKeyCommand.ParseExpiry("2020-01-01", now)); // past
+        Assert.Null(SpatialAudioServer.Hosting.ApiKeyCommand.ParseExpiry("0d", now));
+        Assert.Null(SpatialAudioServer.Hosting.ApiKeyCommand.ParseExpiry("soon", now));
+    }
 }

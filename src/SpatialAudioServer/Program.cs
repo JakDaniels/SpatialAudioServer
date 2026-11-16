@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using SpatialAudioServer.Api;
 using SpatialAudioServer.Configuration;
@@ -58,6 +59,13 @@ builder.Services.AddHostedService<StartupService>();
 builder.Services.AddHostedService<ParticipantSweeper>();
 
 builder.Services.AddApiKeyAndAdminAuthentication();
+// The keys that protect admin session cookies, beside the database: so sessions survive restarts, and a hardened
+// service (no home directory, ProtectHome=true) does not fall back to in-memory keys.
+{
+    var database = builder.Configuration[$"{StorageOptions.Section}:DatabasePath"] is { Length: > 0 } configured ? configured : new StorageOptions().DatabasePath;
+    var keys = Path.Combine(Path.GetDirectoryName(Path.Combine(builder.Environment.ContentRootPath, database)) ?? ".", "keys");
+    builder.Services.AddDataProtection().SetApplicationName("SpatialAudioServer").PersistKeysToFileSystem(new DirectoryInfo(keys));
+}
 var limitOptions = builder.Configuration.GetSection(LimitOptions.Section).Get<LimitOptions>() ?? new LimitOptions();
 builder.Services.AddSignalRateLimits(limitOptions);
 builder.Services.AddProblemDetails();
@@ -135,6 +143,7 @@ app.UseStaticFiles(new StaticFileOptions
 app.MapGet("/", () => Results.Redirect("/client/")).ExcludeFromDescription();
 app.UseStatusCodePages();
 app.UseRateLimiter();
+app.UseSameOriginAdminChanges();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapAdminSession();

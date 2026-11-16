@@ -7,6 +7,30 @@ using Microsoft.Data.Sqlite;
 
 namespace SpatialAudioServer.Tests;
 
+/// <summary>
+/// The test host's requests have no client address: a request with <see cref="Header"/> gets that address (as if
+/// it came from there), before any of the server's own middleware runs.
+/// </summary>
+public sealed class TestRemoteAddress : IStartupFilter
+{
+    public const string Header = "X-Test-Remote-Address";
+
+    public Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> Configure(Action<Microsoft.AspNetCore.Builder.IApplicationBuilder> next) =>
+        app =>
+        {
+            Microsoft.AspNetCore.Builder.UseExtensions.Use(app, (http, nextStep) =>
+            {
+                if (http.Request.Headers.TryGetValue(Header, out var value) && System.Net.IPAddress.TryParse(value, out var address))
+                {
+                    http.Connection.RemoteIpAddress = address;
+                    http.Request.Headers.Remove(Header);
+                }
+                return nextStep(http);
+            });
+            next(app);
+        };
+}
+
 /// <summary>A temporary directory, removed (with any pooled SQLite connections) on dispose.</summary>
 public sealed class TempDir : IDisposable
 {
@@ -32,6 +56,8 @@ public sealed class ServerFactory(string databasePath, IDictionary<string, strin
         builder.UseSetting("Storage:DatabasePath", databasePath);
         builder.UseSetting("Auth:ApiKeys:0", ApiKey);
         builder.UseSetting("Media:Enabled", "false");
+        builder.ConfigureServices(services =>
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton<IStartupFilter, TestRemoteAddress>(services));
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
         {
             builder.UseSetting(key, value);

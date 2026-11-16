@@ -68,6 +68,12 @@ public sealed class AdminOptions
     /// ranges. Empty: anywhere (the password still applies). Others get 404.
     /// </summary>
     public List<string> AllowedNetworks { get; set; } = [];
+
+    /// <summary>
+    /// Admin login only over HTTPS (except from the machine itself), and the session cookie marked Secure. Off by
+    /// default for LAN set-ups on plain HTTP; turn it on for an internet-facing host.
+    /// </summary>
+    public bool RequireHttps { get; set; }
 }
 
 public sealed class AuthOptions
@@ -220,6 +226,12 @@ public sealed class MediaNetworkOptions
     public string? PublicAddress { get; set; }
 }
 
+/// <summary>
+/// A STUN/TURN server. TURN credentials are either fixed (<see cref="Username"/>, <see cref="Credential"/>), which
+/// every client is given, or made per client from a <see cref="Secret"/> shared with the TURN server (coturn's
+/// <c>use-auth-secret</c> / <c>static-auth-secret</c>, the "TURN REST API" scheme), valid for
+/// <see cref="CredentialLifetime"/>.
+/// </summary>
 public sealed class IceServerConfig
 {
     public List<string> Urls { get; set; } = [];
@@ -227,4 +239,26 @@ public sealed class IceServerConfig
     public string? Username { get; set; }
 
     public string? Credential { get; set; }
+
+    /// <summary>coturn's <c>static-auth-secret</c>: credentials are made per client and expire.</summary>
+    public string? Secret { get; set; }
+
+    /// <summary>How long credentials made from <see cref="Secret"/> are valid (a TURN allocation then ends).</summary>
+    public TimeSpan CredentialLifetime { get; set; } = TimeSpan.FromHours(12);
+
+    /// <summary>
+    /// The credentials for one user of this server: the fixed ones, or with a <see cref="Secret"/>
+    /// "{expiry in Unix seconds}:{id}" and base64(HMAC-SHA1(secret, that username)).
+    /// </summary>
+    public (string? Username, string? Credential) CredentialsFor(string id, DateTimeOffset now)
+    {
+        if (string.IsNullOrEmpty(Secret))
+        {
+            return (Username, Credential);
+        }
+        var username = $"{(now + CredentialLifetime).ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture)}:{id}";
+        var hash = System.Security.Cryptography.HMACSHA1.HashData(
+            System.Text.Encoding.UTF8.GetBytes(Secret), System.Text.Encoding.UTF8.GetBytes(username));
+        return (username, Convert.ToBase64String(hash));
+    }
 }
