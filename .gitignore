@@ -75,3 +75,6 @@ src/SpatialAudioServer/appsettings.Development.json
 
 # The self-contained load tool: built by scripts/build-loadtest.sh (and by CI for the packages), not committed
 scripts/loadtest-linux-x64/SpatialAudioServer.LoadTest
+
+# Packages built by scripts/build-packages.sh
+dist/
