@@ -5,7 +5,7 @@ Measured results for SpatialAudioServer, oldest first. The decisions taken from 
 
 ## How the numbers are made
 
-- **Load tool:** `src/SpatialAudioServer.LoadTest` (a self-contained Linux build is in `scripts/loadtest-linux-x64/`).
+- **Load tool:** `src/SpatialAudioServer.LoadTest` (a self-contained Linux build goes in `scripts/loadtest-linux-x64/`: `scripts/build-loadtest.sh`).
   Each fake client is a real WebRTC peer that sends a tone (300 Hz + 50 Hz × i) and measures, with a Goertzel tone
   meter on 20 ms frames, which tones it hears. A run passes when every listener hears every other talker in its room
   in more than half the frames, hears itself in almost none (mix-minus) and hears no other room.

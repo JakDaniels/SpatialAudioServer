@@ -155,8 +155,8 @@ from the same folder before starting it, so they use the same `data\spatialaudio
 
 ## 6. Load tool
 
-The load tool needs GStreamer too. On Linux use the self-contained build in `scripts/loadtest-linux-x64/` (see its
-README). On Windows run it from the repository:
+The load tool needs GStreamer too. On Linux use the self-contained build made by `scripts/build-loadtest.sh` in
+`scripts/loadtest-linux-x64/` (see its README). On Windows run it from the repository:
 
 ```powershell
 $env:SAS_API_KEY = "sas_..."

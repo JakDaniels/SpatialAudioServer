@@ -1,0 +1,80 @@
+# Full tests (PACKAGING-PLAN.md "Branches and the GitHub workflows"): on pull requests into main and pushes to main.
+# develop runs no CI (tests are run locally). Once this file is on main, "Run workflow" on the Actions page runs it on
+# any branch by hand; before that, a draft pull request from develop into main runs it.
+# Still to come: the windows job (embedded GStreamer) and load-22.04 (needs the load tool .deb), and prepared
+# container images in place of installing GStreamer and .NET on every run.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test-${{ matrix.gstreamer }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - gstreamer: '1.28'
+            image: ubuntu:26.04
+          - gstreamer: '1.24' # the floor for the server packages
+            image: ubuntu:24.04
+    container: ${{ matrix.image }}
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - name: Install GStreamer and tools
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git curl \
+            gstreamer1.0-tools gstreamer1.0-nice \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            libgstreamer-plugins-bad1.0-0 \
+            $(apt-cache search --names-only '^libicu[0-9]+$' | cut -d' ' -f1)
+          gst-inspect-1.0 --version
+
+      # Full history: MinVer needs the tags and the commit count for the version.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ matrix.image }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}
+          restore-keys: nuget-${{ matrix.image }}-
+
+      - name: Build
+        run: dotnet build src
+
+      - name: Version
+        run: dotnet src/SpatialAudioServer/bin/Debug/net10.0/SpatialAudioServer.dll --version
+
+      # A hung test fails the run after 5 minutes instead of using up the job's time (no dump: too large to keep).
+      - name: Test
+        run: >
+          dotnet test src --no-build
+          --blame-hang-timeout 5m --blame-hang-dump-type none
+          --logger "console;verbosity=normal"

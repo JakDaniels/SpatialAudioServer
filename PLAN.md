@@ -205,7 +205,7 @@ src/SpatialAudioServer.Tests/    xUnit unit + integration tests (WebApplicationF
 src/SpatialAudioServer.LoadTest/ load tool: GStreamer fake clients (FakeClient, ToneMeter, bot voices); the tests use it too
 spikes/WebRtcEcho/               Phase 0 spike (not part of the solution)
 scripts/                         setup-ubuntu.sh, build-loadtest.sh, render-voices.py,
-                                 loadtest-linux-x64/ (committed self-contained load tool + voices)
+                                 loadtest-linux-x64/ (voices, README; the self-contained load tool is built here, not committed)
 docs/                            running.md (Linux/Windows run docs), benchmarks.md (load-test results), design notes;
                                  reference/ (git-ignored sources)
 ```
