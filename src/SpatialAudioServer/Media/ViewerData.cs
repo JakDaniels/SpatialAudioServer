@@ -1,6 +1,6 @@
-using System.Reflection;
 using System.Text.Json.Nodes;
 using SpatialAudioServer.Configuration;
+using SpatialAudioServer.Hosting;
 using SpatialAudioServer.Rooms;
 
 namespace SpatialAudioServer.Media;
@@ -50,7 +50,7 @@ internal sealed class ViewerData : IDisposable
     private const double FloorDb = -60;
 
     private static readonly string ServerVersion = "SpatialAudioServer " +
-        (typeof(ViewerData).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown");
+        (AppVersion.Informational);
 
     private readonly RoomWorker _worker;
     private readonly Func<IReadOnlyDictionary<Guid, double>> _levels;

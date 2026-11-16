@@ -13,6 +13,12 @@ using SpatialAudioServer.Storage;
 // SpatialAudioServer --delete-existing-rooms  run it, deleting every stored room first (testing: a clean, idle server)
 // SpatialAudioServer apikey <command>         manage stored control-API keys (create <label> | list | revoke <id>)
 // SpatialAudioServer admin <command>          the admin UI password (set-password | clear-password | hash-password)
+// SpatialAudioServer --version                print the version and exit
+if (args is ["--version"])
+{
+    Console.WriteLine(AppVersion.Informational);
+    return 0;
+}
 var cliCommand = args is ["apikey", ..] or ["admin", ..];
 const string DeleteRoomsFlag = "--delete-existing-rooms";
 var deleteRooms = !cliCommand && args.Contains(DeleteRoomsFlag);

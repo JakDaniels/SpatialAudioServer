@@ -1,7 +1,7 @@
 # Packaging and releases: plan
 
-Status: **plan only, nothing built yet** (2026-11-16). Decisions so far are marked **Decided**; open points are
-listed at the end. [PLAN.md](PLAN.md) stays the specification of the server itself.
+Status: **under way** (2026-11-16): versioning done on `develop`, the rest is still a plan. Decisions so far are
+marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the specification of the server itself.
 
 ## Goals
 
@@ -175,11 +175,15 @@ release of ours). On Linux the distribution updates GStreamer, so Linux packages
 ## Versioning
 
 - **Decided:** versions come from git tags, so a release is made by pushing a tag.
-- **Proposal:** [MinVer](https://github.com/adamralph/minver), one package reference in `Directory.Build.props`, with
-  no code changes:
+- **Done (2026-11-16, on `develop`):** [MinVer](https://github.com/adamralph/minver) 8.0.0 in
+  `src/Directory.Build.props`, so the server, the load tool and the tests share one version:
   - tag `v0.2.0` → every build of that commit is `0.2.0`;
   - builds after it are `0.2.1-alpha.0.N` (N commits on);
-  - the commit hash goes into `InformationalVersion`, as today (`/api/status` and the OpenSim module show it).
+  - before the first tag (`MinVerMinimumMajorMinor` 0.2): `0.2.0-alpha.0.N`, N counted from the first commit;
+  - the SDK appends `+<commit>` to `InformationalVersion`, which `/api/status`, the viewer data and both programs'
+    `--version` show (`Hosting/AppVersion.cs`);
+  - workflows must check out the full history (`fetch-depth: 0`), or MinVer cannot find the tag and the height.
+- **The first tag** `v0.2.0` goes on `main` when `develop` is first merged there.
 - SemVer tags: `vMAJOR.MINOR.PATCH`, with optional pre-releases `v0.2.0-rc.1`. Until 1.0, minor versions may break
   compatibility; the release notes say when, especially for the control API that the OpenSim module uses.
 - **Mapping to the package formats:**

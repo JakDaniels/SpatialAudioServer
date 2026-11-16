@@ -5,6 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.1.0</Version>
+    <!-- Versions come from git tags (PACKAGING-PLAN.md "Versioning"): tag v0.2.0 gives 0.2.0, commits after it
+         0.2.1-alpha.0.N. Before the first tag: 0.2.0-alpha.0.N. The SDK appends +<commit> to InformationalVersion.
+         CI checkouts need the full history (fetch-depth: 0), or the height is wrong. -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerMinimumMajorMinor>0.2</MinVerMinimumMajorMinor>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="8.0.0" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

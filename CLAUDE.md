@@ -59,6 +59,9 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   results in `docs/benchmarks.md`, which holds all benchmark numbers: keep PLAN.md to conclusions).
   Parked: the intermittent pairchains test failure; one unexplained test-host crash (PLAN.md Phase 5).
 
+- **Packaging (PACKAGING-PLAN.md) started:** day-to-day work is on the `develop` branch (no CI tests there; `main`
+  gets the full tests on pull requests). Versions from git tags via MinVer (`--version` on both programs); no tag yet.
+
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.
 - Auth: API key for control API, one-time join token for client signalling, separate admin password for admin UI.
