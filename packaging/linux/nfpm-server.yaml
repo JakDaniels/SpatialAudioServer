@@ -28,7 +28,8 @@ depends:
 recommends:
   - systemd
 
-# The .rpm (Fedora, RHEL 10 and rebuilds): the same contents and scripts, Fedora's package names. openSUSE names
+# The .rpm (Fedora; not RHEL 10, whose GStreamer has no webrtcbin): the same contents and scripts, Fedora's package
+# names. openSUSE names
 # them differently again (PACKAGING-PLAN.md: a variant of its own, later).
 overrides:
   rpm:

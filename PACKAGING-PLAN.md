@@ -39,7 +39,7 @@ architecture installs on all of them, with its GStreamer dependencies at `>= 1.2
 | Family | Examples with GStreamer ≥ 1.24 (to confirm per release) | Package |
 |---|---|---|
 | Debian / Ubuntu | Ubuntu 24.04, 25.x, 26.04; Debian 13 | `.deb` |
-| Fedora / RHEL | Fedora 40 and later; RHEL / Rocky / Alma 10 (to check) | `.rpm` |
+| Fedora | Fedora 40 and later. **Not RHEL / Rocky / Alma 10:** their GStreamer has no `webrtcbin` (step 5) | `.rpm` |
 | openSUSE | Tumbleweed, Leap 16 (to check) | `.rpm`, different package names (see below) |
 
 **1.24 is the floor we must prove, not assume.** We develop on 1.28. There are two risks:
@@ -80,7 +80,7 @@ scripts.
 
 **Dependencies, by family:**
 
-| | Debian / Ubuntu | Fedora / RHEL | openSUSE |
+| | Debian / Ubuntu | Fedora | openSUSE |
 |---|---|---|---|
 | core and base | `gstreamer1.0-plugins-base` (≥ 1.24) | `gstreamer1-plugins-base` | `gstreamer-plugins-base` |
 | webrtcbin, audiomixmatrix, … | `gstreamer1.0-plugins-bad` | `gstreamer1-plugins-bad-free` | `gstreamer-plugins-bad` |
@@ -88,9 +88,9 @@ scripts.
 | ICE (libnice) | `gstreamer1.0-nice` | `libnice-gstreamer1` | `gstreamer-plugin-libnice` (to check) |
 | other | `libsqlite3-0`, `libicu*` (or invariant globalisation) | `sqlite-libs`, `libicu` | `libsqlite3-0`, `libicu` |
 
-The names differ between Fedora/RHEL and openSUSE, so either build **two `.rpm` variants**, or use capability
+The names differ between Fedora and openSUSE, so either build **two `.rpm` variants**, or use capability
 dependencies that both provide. Fedora generates `gstreamer1(element-webrtcbin)` provides automatically; whether
-openSUSE has an equivalent is to check. **Proposal:** a Fedora/RHEL `.rpm` first, openSUSE afterwards. The binding
+openSUSE has an equivalent is to check. **Proposal:** a Fedora `.rpm` first, openSUSE afterwards. The binding
 calls the GStreamer libraries directly, so GObject Introspection typelibs (`gir1.2-*`) are not needed at run time
 (to confirm in the 1.24 test).
 
@@ -385,17 +385,22 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
    sudo, the service starts, the admin UI and web client work, an upgrade to the next draft restarts the service
    and keeps keys and settings, and remove (data kept) and purge (data and `/etc` gone, the `spatialaudio` user
    kept) behave. The load tool package installs and passes load runs on 24.04 and on 22.04 (GStreamer 1.20).
-5. The rest of Linux: `.rpm` (Fedora/RHEL), arm64, openSUSE.
-   *Built (2026-11-16), to be tested in CI only (no machines here for them):* the `.rpm` for Fedora, RHEL 10 and
-   rebuilds comes from the same nfpm files (`overrides: rpm:` with Fedora's package names), and arm64 is
+5. The rest of Linux: `.rpm` (Fedora), arm64, openSUSE.
+   *Built (2026-11-16), to be tested in CI only (no machines here for them):* the `.rpm` for Fedora comes from the
+   same nfpm files (`overrides: rpm:` with Fedora's package names), and arm64 is
    cross-built on the x64 runner (`build-packages.sh arm64`: `aarch64` binaries checked). `drafts.yml` then
-   installs the x64 packages in clean containers of Ubuntu 24.04 and 26.04, Debian 13, Fedora (latest) and Rocky
-   Linux 10 (with EPEL and CRB enabled), and the load tool alone on Ubuntu 22.04, and tries them with
+   installs the x64 packages in clean containers of Ubuntu 24.04 and 26.04, Debian 13 and Fedora (latest), and the load tool alone on Ubuntu 22.04, and tries them with
    `scripts/test-packages.sh`: the wrapper creates a key as the service user, the server starts as that user with
    the service's environment and reports no missing GStreamer elements, and a short load run passes. Not covered
-   there: systemd itself (containers have none), SELinux on Fedora/RHEL (the program under `/usr/lib` gets the
+   there: systemd itself (containers have none), SELinux on Fedora (the program under `/usr/lib` gets the
    `lib_t` label; to check on a real host whether the service needs a context of its own), and arm64 (no arm64
    runners while private). openSUSE: later, as its own variant.
+   - **Fedora:** the first CI run passed every check (GStreamer 1.26 there).
+   - **RHEL 10 and rebuilds are not supported (decided 2026-11-16).** The first CI run on Rocky Linux 10 installed
+     the packages (GStreamer 1.26.7, EPEL and CRB enabled), but the server stopped at start-up: "Missing GStreamer
+     elements: webrtcbin". RHEL builds `gstreamer1-plugins-bad-free` without it, and EPEL does not add it. That
+     would change if RHEL or EPEL ships webrtcbin, or with a GStreamer bundled into a RHEL package, as the Windows
+     MSI will do (a larger job with its own security-update duty); not planned for now.
 6. **Windows:** code change 4, the GStreamer selection and the server and load tool MSIs, tested on Windows.
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
 8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,
@@ -410,7 +415,7 @@ it gets its own release (a zip per OpenSim version) in its own repository.
 
 ## Open points
 
-1. ~~The 1.24 test result~~: passed (2026-11-16), so Ubuntu 24.04 and RHEL/Rocky 10 stay targets.
+1. ~~The 1.24 test result~~: passed (2026-11-16), so Ubuntu 24.04 stays a target (RHEL 10 is out for another reason: step 5).
 2. **openSUSE:** a separate `.rpm` variant, or capability dependencies, or not at first.
 3. **MSI versions for pre-releases:** none, or a counted build number.
 4. **Windows service account:** `LocalService`, or a virtual account (`NT SERVICE\SpatialAudioServer`), which can
