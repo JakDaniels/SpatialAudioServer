@@ -250,11 +250,12 @@ Each of these is small, and each needs its own change and tests when the work st
 .github/workflows/gstreamer-watch.yml   weekly: an issue when GStreamer has a newer release than the Windows pin
 ```
 
-- **Started (2026-11-16, on `develop`):** `ci.yml` with `test-1.28` and `test-1.24` (installing GStreamer and .NET on
-  each run for now), also runnable by hand on any branch ("Run workflow") once the file is on `main`. Until then a **draft pull
-  request** from `develop` into `main` runs it: that gives the 1.24 question its first answer before any merge. Still to come: `windows`, `load-22.04`, the prepared images.
-  - Private repositories get 2-core runners (4 once public); the media tests have only run on 4+ cores so far, so
-    the first runs also show whether their timings hold.
+- **Running (2026-11-16):** `ci.yml` with `test-1.28` and `test-1.24` (installing GStreamer and .NET on each run
+  for now). `develop` is the repository's default branch while private, so "Run workflow" runs it by hand on
+  `develop`. Still to come: `windows`, `load-22.04`, the prepared images.
+  - **Both pass the full suite** (183 tests) on the private repository's 2-core runners, about 12 minutes per job.
+  - **GStreamer 1.24 is supported** (Ubuntu 24.04's 1.24.2). Getting there needed three changes, listed in PLAN.md
+    "GStreamer version differences".
 - **Versions** come from MinVer (see Versioning):
   - Draft builds are never on a release tag, so they get pre-release versions such as `0.2.1-alpha.0.14`, 14 commits
     after `v0.2.0`. A draft cannot be mistaken for a release.
@@ -376,7 +377,7 @@ it gets its own release (a zip per OpenSim version) in its own repository.
 
 ## Open points
 
-1. **The 1.24 test result** (order step 2) decides Ubuntu 24.04 and RHEL/Rocky 10.
+1. ~~The 1.24 test result~~: passed (2026-11-16), so Ubuntu 24.04 and RHEL/Rocky 10 stay targets.
 2. **openSUSE:** a separate `.rpm` variant, or capability dependencies, or not at first.
 3. **MSI versions for pre-releases:** none, or a counted build number.
 4. **Windows service account:** `LocalService`, or a virtual account (`NT SERVICE\SpatialAudioServer`), which can
