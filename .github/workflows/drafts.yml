@@ -2,7 +2,7 @@
 # They replace the files of the single pre-release "develop (draft)" (tag develop-draft, moved to the commit built):
 # release files do not count against the Actions storage that workflow artefacts would fill. Pre-release versions
 # only (0.2.1~alpha.0.N), so a draft is never mistaken for a release and the real one upgrades it cleanly.
-# Now: Linux .deb and .rpm (Fedora/RHEL) for x64 and arm64, server and load tool, each x64 package then installed
+# Now: Linux .deb and .rpm (Fedora) for x64 and arm64, server and load tool, each x64 package then installed
 # and tried on its distributions. Still to come: openSUSE, the Windows MSIs.
 name: drafts
 
@@ -77,7 +77,7 @@ jobs:
               sudo apt install ./spatialaudioserver_${version}_amd64.deb
               sudo apt install ./spatialaudioserver-loadtest_${version}_amd64.deb
 
-          Fedora, RHEL 10 and rebuilds (EPEL may be needed there), x64 (x86_64) or arm64 (aarch64):
+          Fedora, x64 (x86_64) or arm64 (aarch64):
 
               sudo dnf install ./spatialaudioserver-${version}-1.x86_64.rpm
               sudo dnf install ./spatialaudioserver-loadtest-${version}-1.x86_64.rpm
@@ -106,8 +106,7 @@ jobs:
           - image: ubuntu:22.04
             what: loadtest # GStreamer 1.20: the load tool only
           - image: fedora:latest
-          - image: rockylinux/rockylinux:10
-            prepare: dnf install -y -q epel-release dnf-plugins-core && dnf config-manager --set-enabled crb
+          # Not RHEL 10 and its rebuilds: their GStreamer has no webrtcbin (PACKAGING-PLAN.md, step 5).
     container: ${{ matrix.image }}
     steps:
       # For scripts/test-packages.sh (without git in the container this downloads the files, which is enough).

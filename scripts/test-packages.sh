@@ -6,7 +6,7 @@
 #   scripts/test-packages.sh DIR [server+loadtest|loadtest]
 # DIR holds the packages (.deb or .rpm, whichever this system uses); the x64 ones are tested.
 set -eu
-dir="$1"
+dir="$(cd "$1" && pwd)" # absolute: apt takes "packages/x.deb" for a package name, "/…/x.deb" for a file
 what="${2:-server+loadtest}"
 
 if command -v apt-get >/dev/null; then
