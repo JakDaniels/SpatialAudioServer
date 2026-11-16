@@ -26,6 +26,7 @@ internal sealed class RoomPipeline : IDisposable
     private readonly ConcurrentDictionary<Guid, ParticipantMedia> _participants = new();
     private readonly BusWatcher _bus;
     private readonly ViewerData _viewers;
+    private readonly Timer? _inactivity;
     private int _disposed;
 
     public RoomPipeline(RoomSnapshot room, MediaOptions options, ILogger log, ViewerDepartures? departures = null)
@@ -47,6 +48,45 @@ internal sealed class RoomPipeline : IDisposable
             room.SpatialProfile));
         _viewers = new ViewerData(_worker, options, () => _engine.InputLevels,
             id => _participants.TryGetValue(id, out var p) ? p.Endpoint?.Rtc : null, departures);
+        if (options.InactiveConnectionTimeout > TimeSpan.Zero)
+        {
+            var every = TimeSpan.FromMilliseconds(Math.Clamp(options.InactiveConnectionTimeout.TotalMilliseconds / 4, 250, 5000));
+            _inactivity = new Timer(_ => _worker.Post(CheckInactivity), null, every, every);
+        }
+    }
+
+    /// <summary>
+    /// Worker: a connection that says it is connected but has delivered no audio for Media:InactiveConnectionTimeout
+    /// is reported failed, so the sweeper removes it like any other dead connection; if audio comes back first, it is
+    /// reported connected again. GStreamer 1.28 notices a vanished client by itself (ICE consent freshness, ~27 s);
+    /// 1.24 does not, so there this is the only way. Clients send RTP all the time, also when muted (silence or DTX
+    /// frames).
+    /// </summary>
+    private void CheckInactivity()
+    {
+        var now = Environment.TickCount64;
+        var timeout = (long)_options.InactiveConnectionTimeout.TotalMilliseconds;
+        foreach (var p in _participants.Values)
+        {
+            if (p.Endpoint is not { Removed: false, Connected: true } endpoint)
+            {
+                continue;
+            }
+            var silentFor = now - Volatile.Read(ref endpoint.LastInbound);
+            if (!endpoint.Inactive && silentFor >= timeout)
+            {
+                endpoint.Inactive = true;
+                _log.LogWarning("Room {RoomId}: participant {ParticipantId} has sent nothing for {Seconds:F0} s; reporting its connection failed",
+                    RoomId, p.Id, silentFor / 1000.0);
+                StateChanged?.Invoke(p.Id, ParticipantState.Failed);
+            }
+            else if (endpoint.Inactive && silentFor < timeout)
+            {
+                endpoint.Inactive = false;
+                _log.LogInformation("Room {RoomId}: participant {ParticipantId} is sending again", RoomId, p.Id);
+                StateChanged?.Invoke(p.Id, ParticipantState.Connected);
+            }
+        }
     }
 
     /// <summary>The integration reports these viewer keys gone (see <see cref="ViewerData.Gone"/>).</summary>
@@ -222,6 +262,7 @@ internal sealed class RoomPipeline : IDisposable
         {
             _log.LogError(ex, "Room {RoomId}: teardown failed", RoomId);
         }
+        _inactivity?.Dispose();
         _viewers.Dispose();
         _worker.Dispose();
         _bus.Dispose();
@@ -262,6 +303,13 @@ internal sealed class RoomPipeline : IDisposable
                     }
                 });
             }
+            _worker.Post(() =>
+            {
+                // The inactivity clock starts at connection: a client that never sends counts as inactive too.
+                endpoint.Connected = state == WebRTCPeerConnectionState.Connected;
+                endpoint.Inactive = false;
+                Volatile.Write(ref endpoint.LastInbound, Environment.TickCount64);
+            });
             StateChanged?.Invoke(p.Id, Map(state));
         };
         rtc.DataChannelOpened += () => _log.LogInformation("Room {RoomId}: participant {ParticipantId} data channel '{Label}' is open",
@@ -299,6 +347,11 @@ internal sealed class RoomPipeline : IDisposable
                 return;
             }
             endpoint.SourceAttached = true;
+            pad.AddProbe(PadProbeType.Buffer, (_, _) =>
+            {
+                Volatile.Write(ref endpoint.LastInbound, Environment.TickCount64);
+                return PadProbeReturn.Ok;
+            });
             _engine.AttachSource(p.Id, pad);
         }
         _log.LogInformation("Room {RoomId}: participant {ParticipantId} audio is arriving", RoomId, p.Id);
@@ -356,5 +409,8 @@ internal sealed class RoomPipeline : IDisposable
         public bool ListenerAttached { get; set; }
         public bool SourceAttached { get; set; } // under Sync
         public bool Removed { get; set; } // under Sync
+        public bool Connected { get; set; } // worker
+        public bool Inactive { get; set; } // worker: reported failed by CheckInactivity
+        public long LastInbound; // Environment.TickCount64 of the last incoming buffer (or of connecting)
     }
 }

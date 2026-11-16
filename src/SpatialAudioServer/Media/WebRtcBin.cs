@@ -184,7 +184,7 @@ public sealed partial class WebRtcBin : IDisposable
     /// GStreamer 1.28 creates a transceiver per offered m-line when the offer is applied, and that one is used.
     /// Older webrtcbin (1.24) creates them only with the answer, so there is none yet: then requesting
     /// <c>sink_{mlineIndex}</c> first creates a transceiver locked to that m-line (by index, not by caps), which the
-    /// answer uses.
+    /// answer uses. It is the only transceiver then (a data channel has none), so it is index 0.
     /// </para>
     /// </remarks>
     public Pad PrepareSendPad(int mlineIndex, Caps codec)
@@ -194,8 +194,8 @@ public sealed partial class WebRtcBin : IDisposable
         if (transceiver is null)
         {
             pad = RequestSinkPad(mlineIndex);
-            transceiver = pad.GetProperty<WebRTCRTPTransceiver>("transceiver")
-                ?? throw new InvalidOperationException($"webrtcbin's sink_{mlineIndex} pad has no transceiver.");
+            transceiver = Element.EmitSignal<WebRTCRTPTransceiver>("get-transceiver", 0)
+                ?? throw new InvalidOperationException($"webrtcbin made no transceiver for its sink_{mlineIndex} pad.");
         }
         using (transceiver)
         {
