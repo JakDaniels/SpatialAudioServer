@@ -1,6 +1,7 @@
 # Packaging and releases: plan
 
-Status: **under way** (2026-11-16): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested).
+Status: **under way** (2026-11-16): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
+step 5 built (`.rpm`, arm64), its CI install tests not yet run.
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -385,6 +386,16 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
    and keeps keys and settings, and remove (data kept) and purge (data and `/etc` gone, the `spatialaudio` user
    kept) behave. The load tool package installs and passes load runs on 24.04 and on 22.04 (GStreamer 1.20).
 5. The rest of Linux: `.rpm` (Fedora/RHEL), arm64, openSUSE.
+   *Built (2026-11-16), to be tested in CI only (no machines here for them):* the `.rpm` for Fedora, RHEL 10 and
+   rebuilds comes from the same nfpm files (`overrides: rpm:` with Fedora's package names), and arm64 is
+   cross-built on the x64 runner (`build-packages.sh arm64`: `aarch64` binaries checked). `drafts.yml` then
+   installs the x64 packages in clean containers of Ubuntu 24.04 and 26.04, Debian 13, Fedora (latest) and Rocky
+   Linux 10 (with EPEL and CRB enabled), and the load tool alone on Ubuntu 22.04, and tries them with
+   `scripts/test-packages.sh`: the wrapper creates a key as the service user, the server starts as that user with
+   the service's environment and reports no missing GStreamer elements, and a short load run passes. Not covered
+   there: systemd itself (containers have none), SELinux on Fedora/RHEL (the program under `/usr/lib` gets the
+   `lib_t` label; to check on a real host whether the service needs a context of its own), and arm64 (no arm64
+   runners while private). openSUSE: later, as its own variant.
 6. **Windows:** code change 4, the GStreamer selection and the server and load tool MSIs, tested on Windows.
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
 8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,

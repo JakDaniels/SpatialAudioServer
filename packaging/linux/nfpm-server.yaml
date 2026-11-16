@@ -28,6 +28,24 @@ depends:
 recommends:
   - systemd
 
+# The .rpm (Fedora, RHEL 10 and rebuilds): the same contents and scripts, Fedora's package names. openSUSE names
+# them differently again (PACKAGING-PLAN.md: a variant of its own, later).
+overrides:
+  rpm:
+    depends:
+      - gstreamer1-plugins-base >= 1.24
+      - gstreamer1-plugins-good >= 1.24
+      - gstreamer1-plugins-bad-free >= 1.24
+      - libnice-gstreamer1
+      - openssl-libs
+      - shadow-utils # useradd, in the install script
+      - util-linux # runuser, in the command wrapper
+      - glibc
+      - libgcc
+      - libstdc++
+    recommends:
+      - systemd
+
 contents:
   # The program: a self-contained .NET publish (runtime included), read-only.
   - src: dist/stage/server
