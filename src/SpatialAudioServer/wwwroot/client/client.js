@@ -54,6 +54,13 @@ async function loadRooms() {
     $("room").innerHTML = `<option value="">Enter the API key first</option>`;
     return;
   }
+  // A key travels in an HTTP header, so it can only be printable ASCII (sas_… keys are); anything else (e.g. pasted
+  // text) would make fetch throw an unhelpful error about ByteStrings.
+  if (!/^[\x21-\x7e]+$/.test(apiKey())) {
+    log("error: that is not an API key: a key has no spaces or special characters (e.g. sas_…)");
+    $("room").innerHTML = `<option value="">Not an API key</option>`;
+    return;
+  }
   try {
     const [status, rooms] = await Promise.all([
       request("GET", "/api/status", { apiKey: apiKey() }),
