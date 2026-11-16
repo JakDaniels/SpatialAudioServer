@@ -926,24 +926,52 @@ its own, and offered to GStreamer once it has proved itself.
 
 - A separate repository (e.g. `gst-acousticspace`), not part of SpatialAudioServer. That keeps it usable by anyone,
   and it is what GStreamer would expect to see when it is proposed.
-- **Licence:**
-  - LGPL-2.1-or-later, as GStreamer's C plugins, or MPL-2.0, as most of gst-plugins-rs. Either keeps adoption open.
-  - SpatialAudioServer stays Apache-2.0: it only loads the plugin at run time.
+- **Licence: MPL-2.0** (decided 2026-11-16), as most of gst-plugins-rs, its intended upstream home (see the
+  language below). Using that licence from the first commit means no relicensing if it is adopted:
+  - copyleft per file: changes to the plugin's own files stay open, and nothing else is affected (programs that load
+    it, GStreamer, closed products using it);
+  - compatible with Apache-2.0. SpatialAudioServer stays Apache-2.0: it only loads the plugin at run time, through
+    GStreamer's plugin registry;
+  - packages carry the licence text and point to the source (the public repository). The Windows MSI already meets
+    the same duty for its embedded LGPL GStreamer.
 
-## Language: C or Rust
+## Language: Rust
 
-| | C | Rust |
+*Decided 2026-11-16.*
+
+| | C | Rust (chosen) |
 |---|---|---|
 | Build | Meson, from GStreamer's plugin template | `gstreamer-rs` with `cargo-c`, built as an ordinary plugin library |
 | Fit | traditional; the sketches above are C | GStreamer's preferred language for new elements |
 | Upstream home | gst-plugins-bad (then good) | gst-plugins-rs, an official module released with GStreamer and packaged by distributions |
 
-The DSP is the same either way: cached coefficients per path, delay-buffer taps, multiply-adds. **Leaning towards
-Rust:**
+The DSP is the same either way: cached coefficients per path, delay-buffer taps, multiply-adds. Rust because:
 - a many-input, many-output engine is easier to keep memory-safe in it;
-- gst-plugins-rs is probably the realistic way into GStreamer's releases.
+- gst-plugins-rs is probably the realistic way into GStreamer's releases;
+- FFT: `rustfft` (MIT/Apache-2.0, SIMD on x86 and arm64) for partitioned convolution. The usual C choice, FFTW,
+  is GPL and would not fit an MPL plugin.
 
-To decide when work starts.
+The C sketches above stay as descriptions of the algorithms.
+
+**Performance:** no meaningful cost compared with C.
+- Same LLVM back end as clang, no runtime or garbage collector.
+- Bounds checks are removed or cheap when loops run over slices and iterators (`chunks_exact`, `zip`) rather than
+  indexing.
+- SIMD through `std::arch` (SSE/AVX, NEON) or auto-vectorisation.
+- The gstreamer-rs layer costs a little per buffer (reference counts, locks), not per sample.
+- Precedent: gst-plugins-rs already ships real-time audio DSP, including `hrtfrender` (binaural rendering).
+
+What matters more than the language, as in C:
+- partitioned FFT convolution for long reverbs, not direct convolution;
+- no allocation or contended locks in the per-buffer path;
+- denormals flushed to zero (or a tiny offset added) in decaying tails.
+
+Other costs: the plugin library is a few MB (Rust links statically), and builds are slower, so CI builds the plugin
+only when its code changes (the Actions minutes budget in PACKAGING-PLAN.md).
+
+**To check first:** whether gstreamer-rs supports subclassing `GstAudioAggregator` (the base class of `audiomixer`)
+in the way the design needs. If not, the element builds on `GstAggregator` and handles audio formats itself: more
+work, no slower.
 
 ## GStreamer versions
 
@@ -990,7 +1018,7 @@ packages from its develop branch.
 
 ## Testing
 
-- **In its own repository:** unit tests with GStreamer's check framework (`gst-check`, or `gst::check` in Rust):
+- **In its own repository:** unit tests with GStreamer's check framework (`gst::check` in gstreamer-rs):
   - known inputs, checking gain, ITD and taps on the outputs;
   - pads added and removed while playing;
   - a listener's own input never in their own mix;
@@ -1004,4 +1032,4 @@ acoustic-space mixer is specialised, so expect discussion. The way there:
 1. working and tested out of tree;
 2. documentation (element docs, examples with `gst-launch-1.0`);
 3. ideally users besides SpatialAudioServer;
-4. then a merge request on GStreamer's GitLab: gst-plugins-rs if it is in Rust, otherwise gst-plugins-bad.
+4. then a merge request to gst-plugins-rs on GStreamer's GitLab.
