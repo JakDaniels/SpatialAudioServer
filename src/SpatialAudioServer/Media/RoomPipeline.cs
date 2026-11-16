@@ -383,6 +383,10 @@ internal sealed class RoomPipeline : IDisposable
             _engine.Release(p.Id);
         }
         _pipeline.Remove(endpoint.Rtc.Element);
+        // We made this webrtcbin and it is stopped and out of the pipeline, so the wrapper may release it now
+        // (GstSharp.Net's ownership rules) instead of when the collector gets to it. That matters on GStreamer 1.24:
+        // its ICE agent and threads only go when webrtcbin is finalised (1.28 closes them on the way to NULL).
+        endpoint.Rtc.Element.Dispose();
         p.Endpoint = null;
     }
 

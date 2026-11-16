@@ -347,8 +347,8 @@ tested without GStreamer.
      reports are ignored. GStreamer 1.24 has no consent freshness (its connection stays "connected" for ever), so
      there is also an inactivity rule on every version (2026-11-16): a connected participant that has delivered no
      audio for `Media:InactiveConnectionTimeout` (30 s) is reported failed, and connected again if audio returns.
-     Clients send RTP all the time, also when muted (silence or DTX frames); to confirm with Firestorm (mic off
-     for over 30 s must not drop the viewer).
+     Clients send RTP all the time, also when muted (silence or DTX frames); confirmed with Firestorm 7.2
+     (2026-11-16: mic off for over a minute, both region connections stayed connected).
    - Still to do: TURN tested for real; Firefox + Chrome manual tests on the LAN.
    - **Parked (pairchains only):** the user expects pairchains won't be efficient enough, so its issues are parked;
      it stays in the engine suites for comparison. A second intermittent case (2026-11-13, 1 in ~5 full runs):
