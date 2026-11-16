@@ -28,6 +28,8 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     Args = cliCommand ? [] : args,
     ContentRootPath = ContentRoot.Resolve(),
 });
+// SAS_CONFIG_DIR (packages: /etc/spatialaudioserver): site settings on top of the program's own appsettings.json.
+var configDirectory = ConfigDirectory.AddFromEnvironment(builder.Configuration, builder.Environment.EnvironmentName);
 builder.Services.AddSingleton(new StartupFlags(deleteRooms));
 // No effect unless started by systemd (Type=notify, journal-friendly logs) or as a Windows service (Event Log).
 builder.Host.UseSystemd();
@@ -125,6 +127,11 @@ if (cliCommand)
     return args[0] == "admin"
         ? AdminCommand.Run(app.Services, args[1..], Console.Out)
         : ApiKeyCommand.Run(app.Services, args[1..], Console.Out);
+}
+
+if (configDirectory is not null)
+{
+    app.Logger.LogInformation("Site configuration from {Directory} ({Variable})", Path.GetFullPath(configDirectory), ConfigDirectory.Variable);
 }
 
 app.UseNetworkAccess(); // forwarded headers from trusted proxies, then the admin / control API allow-lists
