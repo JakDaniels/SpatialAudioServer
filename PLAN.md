@@ -344,7 +344,11 @@ tested without GStreamer.
      client vanishes, the server's webrtcbin reports `failed` (no `disconnected` first) after ~27 s, when ICE
      consent freshness lapses (RFC 7675; libnice's 30 s, not configurable). So removal comes ~27 s + timeout after
      the client goes. A re-offer resets the clock (state goes back to connecting); a replaced endpoint's late state
-     reports are ignored.
+     reports are ignored. GStreamer 1.24 has no consent freshness (its connection stays "connected" for ever), so
+     there is also an inactivity rule on every version (2026-11-16): a connected participant that has delivered no
+     audio for `Media:InactiveConnectionTimeout` (30 s) is reported failed, and connected again if audio returns.
+     Clients send RTP all the time, also when muted (silence or DTX frames); to confirm with Firestorm (mic off
+     for over 30 s must not drop the viewer).
    - Still to do: TURN tested for real; Firefox + Chrome manual tests on the LAN.
    - **Parked (pairchains only):** the user expects pairchains won't be efficient enough, so its issues are parked;
      it stays in the engine suites for comparison. A second intermittent case (2026-11-13, 1 in ~5 full runs):

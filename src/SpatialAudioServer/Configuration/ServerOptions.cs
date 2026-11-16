@@ -173,6 +173,13 @@ public sealed class MediaOptions
     public TimeSpan DeadConnectionTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
+    /// A connection that says it is connected but has delivered no audio this long is reported failed (then removed
+    /// after <see cref="DeadConnectionTimeout"/>). GStreamer 1.24 has no ICE consent freshness, so this is how it
+    /// notices a vanished client; on 1.28 consent freshness usually comes first. Zero disables it.
+    /// </summary>
+    public TimeSpan InactiveConnectionTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
     /// A room's pipeline starts with its first participant and stops once the room has been empty this long (so a quick
     /// leave and rejoin does not rebuild it). Zero stops it as soon as the last participant leaves.
     /// </summary>

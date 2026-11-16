@@ -87,6 +87,11 @@ internal sealed class StartupService(
         {
             throw new InvalidOperationException($"Media:Network:PublicAddress '{network.PublicAddress}' is not an IP address.");
         }
+        if (media.Value.InactiveConnectionTimeout < TimeSpan.Zero)
+        {
+            throw new InvalidOperationException(
+                $"Media:InactiveConnectionTimeout must not be negative (is {media.Value.InactiveConnectionTimeout}); 0 disables it.");
+        }
         if (media.Value.DeadConnectionTimeout < TimeSpan.Zero)
         {
             throw new InvalidOperationException(
