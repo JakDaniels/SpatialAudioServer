@@ -980,8 +980,9 @@ packages from its develop branch.
   - per participant: `x`, `y`, `z`, `yaw` (and later `pitch`, `roll`), `gain`, `active`;
   - per element: the room preset (`environment`), and later geometry.
 
-  Request-pad properties are GStreamer's usual way to control per-stream settings (as `audiomixer` and
-  `audiomixmatrix` do), they work with any binding, and the server already sets such properties. The element turns
+  Request-pad properties are GStreamer's usual way to control per-stream settings (as `audiomixer`'s `volume` and
+  `mute` on its sink pads), they work with any binding, and the server already sets element properties of this
+  kind (`audiomixmatrix`'s matrix). The element turns
   property changes into its coefficient updates; the audio path never sees them.
 - **Positions:** the server's spatial policy already computes where each participant is and how it faces
   (`EffectivePose`), so the engine passes those on. The distance curve and the profiles (`outdoor`, `meeting`) map onto
