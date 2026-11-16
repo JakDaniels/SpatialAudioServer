@@ -1,7 +1,7 @@
 # Packaging and releases: plan
 
 Status: **under way** (2026-11-16): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
-step 5 built (`.rpm`, arm64), its CI install tests not yet run.
+step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers.
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -386,7 +386,7 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
    and keeps keys and settings, and remove (data kept) and purge (data and `/etc` gone, the `spatialaudio` user
    kept) behave. The load tool package installs and passes load runs on 24.04 and on 22.04 (GStreamer 1.20).
 5. The rest of Linux: `.rpm` (Fedora), arm64, openSUSE.
-   *Built (2026-11-16), to be tested in CI only (no machines here for them):* the `.rpm` for Fedora comes from the
+   *Built and tested in CI (2026-11-16; no machines here for them):* the `.rpm` for Fedora comes from the
    same nfpm files (`overrides: rpm:` with Fedora's package names), and arm64 is
    cross-built on the x64 runner (`build-packages.sh arm64`: `aarch64` binaries checked). `drafts.yml` then
    installs the x64 packages in clean containers of Ubuntu 24.04 and 26.04, Debian 13 and Fedora (latest), and the load tool alone on Ubuntu 22.04, and tries them with
@@ -395,7 +395,8 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
    there: systemd itself (containers have none), SELinux on Fedora (the program under `/usr/lib` gets the
    `lib_t` label; to check on a real host whether the service needs a context of its own), and arm64 (no arm64
    runners while private). openSUSE: later, as its own variant.
-   - **Fedora:** the first CI run passed every check (GStreamer 1.26 there).
+   - **Passed every check** (second run): Ubuntu 24.04 and 26.04, Debian 13 and Fedora (server and load tool),
+     Ubuntu 22.04 (load tool).
    - **RHEL 10 and rebuilds are not supported (decided 2026-11-16).** The first CI run on Rocky Linux 10 installed
      the packages (GStreamer 1.26.7, EPEL and CRB enabled), but the server stopped at start-up: "Missing GStreamer
      elements: webrtcbin". RHEL builds `gstreamer1-plugins-bad-free` without it, and EPEL does not add it. That
