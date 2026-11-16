@@ -1,0 +1,16 @@
+<!-- The server MSI (PACKAGING-PLAN.md "Windows installers"). Built on Windows by scripts\build-windows.ps1, which
+     passes the version and the staged folders:
+       dotnet build packaging\windows\server\Server.wixproj -p:ProductVersion=0.2.1.5 -p:Stage=<dist\stage-win> -->
+<Project Sdk="WixToolset.Sdk/6.0.2">
+  <PropertyGroup>
+    <OutputName>SpatialAudioServer</OutputName>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <DefineConstants>ProductVersion=$(ProductVersion);Stage=$(Stage);Here=$(MSBuildThisFileDirectory)..</DefineConstants>
+    <SuppressValidation>false</SuppressValidation>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" Version="6.0.2" />
+    <PackageReference Include="WixToolset.Firewall.wixext" Version="6.0.2" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="6.0.2" />
+  </ItemGroup>
+</Project>

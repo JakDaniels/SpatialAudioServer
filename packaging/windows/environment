@@ -1,0 +1,8 @@
+# C:\Program Files\SpatialAudioServer\environment (installed with the program, replaced on upgrade).
+# Where configuration and data live, read by SpatialAudioServer.exe at start-up (Hosting/ProgramEnvironment.cs), so
+# the service and an administrator's "SpatialAudioServer.exe apikey ..." agree. Variables already set win.
+# Site settings belong in C:\ProgramData\SpatialAudioServer\appsettings.json, not here.
+DOTNET_ENVIRONMENT=Production
+SAS_CONFIG_DIR=%ProgramData%\SpatialAudioServer
+Storage__DatabasePath=%ProgramData%\SpatialAudioServer\data\spatialaudio.db
+Server__DevCertificatePath=%ProgramData%\SpatialAudioServer\data\devcert.pfx

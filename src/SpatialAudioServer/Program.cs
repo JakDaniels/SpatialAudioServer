@@ -19,6 +19,8 @@ if (args is ["--version"])
     Console.WriteLine(AppVersion.Informational);
     return 0;
 }
+// Windows installations: where configuration and data live (an "environment" file beside the program).
+var programEnvironment = ProgramEnvironment.ApplyFromProgramFolder();
 var cliCommand = args is ["apikey", ..] or ["admin", ..];
 const string DeleteRoomsFlag = "--delete-existing-rooms";
 var deleteRooms = !cliCommand && args.Contains(DeleteRoomsFlag);
@@ -129,6 +131,10 @@ if (cliCommand)
         : ApiKeyCommand.Run(app.Services, args[1..], Console.Out);
 }
 
+if (programEnvironment.Count > 0)
+{
+    app.Logger.LogInformation("From {File} beside the program: {Variables}", ProgramEnvironment.FileName, string.Join(", ", programEnvironment));
+}
 if (configDirectory is not null)
 {
     app.Logger.LogInformation("Site configuration from {Directory} ({Variable})", Path.GetFullPath(configDirectory), ConfigDirectory.Variable);

@@ -1,0 +1,111 @@
+<!-- The server MSI (PACKAGING-PLAN.md "Windows installers"):
+     - the program and its own GStreamer in C:\Program Files\SpatialAudioServer\ (on PATH, for the apikey/admin
+       commands), with the "environment" file pointing it at ProgramData;
+     - C:\ProgramData\SpatialAudioServer\: the site settings (appsettings.json, kept) and data\ (database, keys,
+       certificate), kept on upgrade and uninstall;
+     - the Windows service, automatic start, as its own virtual account NT SERVICE\SpatialAudioServer, which may read
+       the settings and write data\ (and nobody else but SYSTEM and Administrators);
+     - optional (not selected by default): Windows Firewall rules for TCP 5000-5001 and UDP 40000-40999.
+     The service's SID below is S-1-5-80 plus the SHA-1 of "SPATIALAUDIOSERVER", so it can be named before the
+     service exists. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">
+  <Package Name="SpatialAudioServer" Manufacturer="SpatialAudioServer developers" Version="$(ProductVersion)"
+           UpgradeCode="9CF2C135-40F4-4E96-AA55-019226920A67" Scope="perMachine">
+    <!-- Same-version upgrades: drafts share major.minor.patch and differ only in the fourth part (MSI ignores it). -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/JakDaniels/SpatialAudioServer" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="SpatialAudioServer">
+        <Directory Id="GStreamerFolder" Name="gstreamer" />
+        <Directory Id="DocsFolder" Name="docs" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="SiteFolder" Name="SpatialAudioServer">
+        <Directory Id="DataFolder" Name="data" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Server" Title="SpatialAudioServer" Description="The server, its GStreamer and the Windows service."
+             Level="1" AllowAbsent="no" Display="expand">
+      <ComponentGroupRef Id="Program" />
+      <ComponentGroupRef Id="GStreamer" />
+      <ComponentGroupRef Id="Docs" />
+      <ComponentRef Id="Service" />
+      <ComponentRef Id="SiteConfig" />
+      <ComponentRef Id="DataDir" />
+      <ComponentRef Id="OnPath" />
+      <Feature Id="Firewall" Title="Windows Firewall rules"
+               Description="Allow TCP 5000-5001 (HTTP, HTTPS) and UDP 40000-40999 (WebRTC media) in. Change them by hand if you change the ports in the settings."
+               Level="2">
+        <ComponentRef Id="FirewallRules" />
+      </Feature>
+    </Feature>
+
+    <ui:WixUI Id="WixUI_FeatureTree" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(Here)\license.rtf" />
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="Program" Directory="INSTALLFOLDER">
+      <Files Include="$(Stage)\server\**">
+        <Exclude Files="$(Stage)\server\SpatialAudioServer.exe" />
+      </Files>
+      <Component>
+        <File Source="$(Here)\environment" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="GStreamer" Directory="GStreamerFolder">
+      <Files Include="$(Stage)\gstreamer\**" />
+    </ComponentGroup>
+
+    <ComponentGroup Id="Docs" Directory="DocsFolder">
+      <Files Include="$(Stage)\docs\**" />
+    </ComponentGroup>
+
+    <Component Id="Service" Directory="INSTALLFOLDER">
+      <File Id="ServerExe" Source="$(Stage)\server\SpatialAudioServer.exe" KeyPath="yes" />
+      <ServiceInstall Name="SpatialAudioServer" DisplayName="SpatialAudioServer"
+                      Description="Audio conferencing server (MCU) with spatial audio, for WebRTC clients."
+                      Type="ownProcess" Start="auto" ErrorControl="normal" Vital="yes"
+                      Account="NT SERVICE\SpatialAudioServer">
+        <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart"
+                            ThirdFailureActionType="restart" RestartServiceDelayInSeconds="10" ResetPeriodInDays="1" />
+      </ServiceInstall>
+      <ServiceControl Id="ServiceControl" Name="SpatialAudioServer" Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+    </Component>
+
+    <!-- Site settings: installed once, never overwritten, left on uninstall. Readable by the service only. -->
+    <Component Id="SiteConfig" Directory="SiteFolder" Guid="8E40584D-904F-4DA7-A3AB-21A95B0EC6B4"
+               NeverOverwrite="yes" Permanent="yes">
+      <File Id="SiteAppSettings" Source="$(Here)\appsettings.json" KeyPath="yes" />
+      <CreateFolder>
+        <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1200a9;;;S-1-5-80-682313988-44994354-3184143106-2427368497-2751928733)" />
+      </CreateFolder>
+    </Component>
+
+    <!-- Data: the service may write here (and SYSTEM and Administrators); kept on uninstall. -->
+    <Component Id="DataDir" Directory="DataFolder" Guid="1F1D472A-EC1D-437B-939F-C54B31C071C8" Permanent="yes">
+      <CreateFolder>
+        <PermissionEx Sddl="D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;0x1301bf;;;S-1-5-80-682313988-44994354-3184143106-2427368497-2751928733)" />
+      </CreateFolder>
+    </Component>
+
+    <Component Id="OnPath" Directory="INSTALLFOLDER" Guid="2C635018-47A1-4DA8-ADDB-78F1237FED14">
+      <Environment Id="ServerOnPath" Name="PATH" Value="[INSTALLFOLDER]" Part="last" Action="set" System="yes" />
+      <RegistryValue Root="HKLM" Key="Software\SpatialAudioServer" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+    </Component>
+
+    <Component Id="FirewallRules" Directory="INSTALLFOLDER" Guid="830E1B72-9525-4A0E-89FC-53F14EA38698">
+      <fw:FirewallException Id="FirewallHttp" Name="SpatialAudioServer (HTTP, HTTPS)" Protocol="tcp" Port="5000,5001" Scope="any" Profile="all" />
+      <fw:FirewallException Id="FirewallMedia" Name="SpatialAudioServer (WebRTC media)" Protocol="udp" Port="40000-40999" Scope="any" Profile="all" />
+      <RegistryValue Root="HKLM" Key="Software\SpatialAudioServer" Name="FirewallRules" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+  </Fragment>
+</Wix>
