@@ -377,6 +377,8 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
    `drafts.yml` (by hand on `develop`, nfpm 2.48.0 pinned by checksum). Packages are self-contained with
    invariant globalisation (no libicu dependency); file modes are normalised (0644, programs 0755). The load tool
    is `/usr/bin/sas-loadtest`, a launcher for the real program beside its voices.
+   Release files are named with the SemVer version (`spatialaudioserver_0.2.1-alpha.0.5_amd64.deb`), since GitHub
+   turns `~` in a file name into `.`; the version inside the package keeps its `~`.
 5. The rest of Linux: `.rpm` (Fedora/RHEL), arm64, openSUSE.
 6. **Windows:** code change 4, the GStreamer selection and the server and load tool MSIs, tested on Windows.
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
