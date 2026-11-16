@@ -796,8 +796,17 @@ tested without GStreamer.
 
 - **Binding maintenance:** GstSharp.Net has effectively one maintainer; all GStreamer use stays behind `Media/`, and
   GirCore is the fallback.
-- **GStreamer version differences:** minimum 1.24, developed on 1.28.2; webrtcbin keeps getting fixes. ICE
-  port-range / NAT 1:1 control may be needed for public deployment.
+- **GStreamer version differences:** minimum 1.24, developed on 1.28.2; webrtcbin keeps getting fixes. CI runs the
+  full suite on both (PACKAGING-PLAN.md). What 1.24 (Ubuntu 24.04's 1.24.2) needed, found by CI on 2026-11-16:
+  - **Answering:** 1.24 creates a remote offer's transceivers only with the answer, so `get-transceiver` finds none
+    after the offer. Requesting `sink_{mline}` first creates one locked to that m-line (`WebRtcBin.PrepareSendPad`);
+    1.28 keeps its own path.
+  - **Dead clients:** 1.24 has no ICE consent freshness, so a vanished client stays "connected"; the inactivity
+    rule (`Media:InactiveConnectionTimeout`, see Phase 5 "Dead connections") covers it, on every version.
+  - **ICE threads:** 1.24 stops a connection's ICE thread only when its ICE object is finalised (1.28 closes it on
+    the way to NULL: `gst_webrtc_ice_close`, since 1.28). Each removed webrtcbin is now released at once; the ICE
+    object then still waits for a garbage collection (some managed wrapper refers to it), which a busy server runs
+    regularly. The churn tests collect before counting threads.
 - **Windows:** needs the official MSVC GStreamer runtime (full install: gst-plugins-bad for webrtc, libnice, dtls,
   srtp). Verified 2026-11-14: the binding finds it and the server runs, load tests pass.
 - **CPU at scale:** encoders per listener dominate; measured in [docs/benchmarks.md](docs/benchmarks.md). Distance
