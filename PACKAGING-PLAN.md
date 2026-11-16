@@ -1,7 +1,8 @@
 # Packaging and releases: plan
 
-Status: **under way** (2026-11-16): versioning done on `develop`, the rest is still a plan. Decisions so far are
-marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the specification of the server itself.
+Status: **under way** (2026-11-16): versioning done and `ci.yml` started on `develop`, the rest is still a plan.
+Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
+specification of the server itself.
 
 ## Goals
 
@@ -22,8 +23,8 @@ marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays 
 ## Supported systems
 
 **Decided:** the **server** on any `.deb`- or `.rpm`-based distribution that ships **GStreamer 1.24 or later**; the
-**load tool** also on **Ubuntu 22.04** (GStreamer 1.20), where it is already used for load runs (the committed
-self-contained build in `scripts/loadtest-linux-x64/` runs there). The first target to test is **Ubuntu 24.04**
+**load tool** also on **Ubuntu 22.04** (GStreamer 1.20), where it is already used for load runs (the
+self-contained build from `scripts/build-loadtest.sh` runs there). The first target to test is **Ubuntu 24.04**
 (GStreamer 1.24.2): a `.deb` for it comes first.
 
 | Package | GStreamer floor | Also on |
@@ -249,6 +250,11 @@ Each of these is small, and each needs its own change and tests when the work st
 .github/workflows/gstreamer-watch.yml   weekly: an issue when GStreamer has a newer release than the Windows pin
 ```
 
+- **Started (2026-11-16, on `develop`):** `ci.yml` with `test-1.28` and `test-1.24` (installing GStreamer and .NET on
+  each run for now), also runnable by hand on any branch ("Run workflow") once the file is on `main`. Until then a **draft pull
+  request** from `develop` into `main` runs it: that gives the 1.24 question its first answer before any merge. Still to come: `windows`, `load-22.04`, the prepared images.
+  - Private repositories get 2-core runners (4 once public); the media tests have only run on 4+ cores so far, so
+    the first runs also show whether their timings hold.
 - **Versions** come from MinVer (see Versioning):
   - Draft builds are never on a release tag, so they get pre-release versions such as `0.2.1-alpha.0.14`, 14 commits
     after `v0.2.0`. A draft cannot be mistaken for a release.
