@@ -166,15 +166,14 @@ internal sealed class RoomPipeline : IDisposable
         p.Endpoint = endpoint;
         try
         {
-            // Deterministic answerer order (see WebRtcBin.PrepareSendTransceiver): offer first, then bind the send
-            // branch to the transceiver the offer created, by requesting that m-line's sink pad explicitly.
+            // Deterministic answerer order (see WebRtcBin.PrepareSendPad): offer first, then bind the send branch to
+            // the offered m-line's transceiver by requesting that m-line's sink pad explicitly.
             endpoint.Rtc.ApplyRemoteOffer(offerSdp);
+            Pad rtcSink;
             using (var codec = Caps.FromString(MediaBlocks.SendCaps(payloadType)) ?? throw new InvalidOperationException("Bad send caps."))
             {
-                endpoint.Rtc.PrepareSendTransceiver(mline, codec);
+                rtcSink = endpoint.Rtc.PrepareSendPad(mline, codec);
             }
-            var rtcSink = endpoint.Rtc.Element.RequestPadSimple($"sink_{mline}")
-                ?? throw new InvalidOperationException($"webrtcbin gave no sink_{mline} pad.");
             endpoint.ListenerAttached = true;
             _engine.AttachListener(p.Id, payloadType, rtcSink);
             return endpoint.Rtc.CreateAndApplyAnswer();
