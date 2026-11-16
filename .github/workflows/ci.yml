@@ -1,8 +1,7 @@
 # Full tests (PACKAGING-PLAN.md "Branches and the GitHub workflows"): on pull requests into main and pushes to main.
-# develop runs no CI (tests are run locally). Once this file is on main, "Run workflow" on the Actions page runs it on
-# any branch by hand; before that, a draft pull request from develop into main runs it.
-# Still to come: the windows job (embedded GStreamer) and load-22.04 (needs the load tool .deb), and prepared
-# container images in place of installing GStreamer and .NET on every run.
+# develop runs no CI (tests are run locally); "Run workflow" on the Actions page runs it on any branch by hand.
+# The jobs run in the prepared images from ci-images.yml (GStreamer and .NET already installed).
+# Still to come: the windows job (embedded GStreamer) and load-22.04 (needs the load tool .deb).
 name: ci
 
 on:
@@ -20,6 +19,7 @@ concurrency:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   test:
@@ -29,46 +29,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - gstreamer: '1.28'
-            image: ubuntu:26.04
-          - gstreamer: '1.24' # the floor for the server packages
-            image: ubuntu:24.04
-    container: ${{ matrix.image }}
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-      DOTNET_NOLOGO: '1'
+        gstreamer: ['1.28', '1.24'] # 1.24: the floor for the server packages
+    container:
+      # Lower case: registry paths must be (expressions cannot lower-case the owner name).
+      image: ghcr.io/jakdaniels/sas-ci:${{ matrix.gstreamer }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Install GStreamer and tools
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            ca-certificates git curl \
-            gstreamer1.0-tools gstreamer1.0-nice \
-            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
-            libgstreamer-plugins-bad1.0-0 \
-            $(apt-cache search --names-only '^libicu[0-9]+$' | cut -d' ' -f1)
-          gst-inspect-1.0 --version
+      - name: GStreamer and .NET
+        run: gst-inspect-1.0 --version && dotnet --version
 
       # Full history: MinVer needs the tags and the commit count for the version.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # The checkout belongs to another user than the container's root, so git (and MinVer) refuse it without this.
-      - name: Trust the checkout
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ matrix.image }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}
-          restore-keys: nuget-${{ matrix.image }}-
+          key: nuget-${{ matrix.gstreamer }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}
+          restore-keys: nuget-${{ matrix.gstreamer }}-
 
       - name: Build
         run: dotnet build src
