@@ -4,6 +4,9 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+- Load tool: GstSharp.Net's libraries are separate files beside the program instead of inside it, as their LGPL
+  licence asks (they can be replaced); copy them along when moving a hand-built load tool.
+
 ## 0.2.0 (2026-11-17)
 
 The first release.
