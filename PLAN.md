@@ -878,5 +878,5 @@ GStreamer fake client against it). Findings:
   Apache-2.0. The source clone in `docs/reference/GstSharp.Net` is git-ignored and must stay out of this repo.
 - Risk: effectively single-maintainer and ~3 months old. Mitigated by the `Media/` boundary and the GirCore fallback.
 
-Still open from Phase 0: a Chrome/Edge test of the spike page (Firefox works, and the test web client works in
-headless Chrome). The Windows run was done on 2026-11-14.
+Phase 0 is complete: the test web client works in Firefox, Edge (checked by hand 2026-11-17) and headless Chrome,
+and the Windows run was done on 2026-11-14.

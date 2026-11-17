@@ -11,7 +11,7 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 - Planning is complete; all requirements questions are answered (see "Resolved requirements" in PLAN.md).
 - Machine: Ubuntu 26.04, .NET SDK 10.0.115, GStreamer 1.28.2.
 - **Phase 0 mostly done:** binding chosen = `GstSharp.Net` 1.28.17 (GirCore is the fallback). Spike in `spikes/WebRtcEcho`
-  (`dotnet run -- --selftest` passes). Findings are in PLAN.md "Binding choice". Firefox browser test passed. Still open: Chrome/Edge test.
+  (`dotnet run -- --selftest` passes). Findings are in PLAN.md "Binding choice". Browser tests passed (Firefox, Edge; headless Chrome).
 - **Phase 1 (skeleton) done:** solution `src/SpatialAudioServer.slnx` (server + `SpatialAudioServer.Tests`, all under `src/`).
   `dotnet test src` runs 23 tests; `dotnet run --project src/SpatialAudioServer` serves HTTP 5000 / HTTPS 5001;
   `dotnet run --project src/SpatialAudioServer -- apikey create <label>` makes a control-API key.
