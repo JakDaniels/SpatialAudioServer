@@ -9,14 +9,15 @@
 #     pull request's own run: no second run on main); waits if that is still running; if nothing equivalent was
 #     tested (a docs-only pull request, a commit made on main), starts ci.yml on main and waits (about 15 minutes);
 #     stops if it failed;
-#  3. opens an editor for the tag's message (the release notes' top part), prefilled with the commits since the last
-#     release: edit it into what changed; an empty message stops;
+#  3. opens an editor for the tag's message (the release notes' top part), prefilled with the "## Unreleased" section
+#     of CHANGELOG.md on main (kept up to date with each change to the server or the load tool): usually just save;
+#     with no such section, the commits since the last release; an empty message stops;
 #  4. pushes the tag, which starts release.yml (a draft release with every package, about 20 minutes), and prints
 #     the run's address and the command that publishes the draft once it is ready (publish it by hand after a look);
 #     with --wait, waits for the run and prints the draft's address;
-#  5. right after the tag is pushed: the tag's message becomes a section "## 0.2.0 (date)" at the top of
-#     CHANGELOG.md, committed on the local develop (made without touching the working tree, whatever is checked
-#     out): push develop to keep it; it reaches main with the next merge.
+#  5. right after the tag is pushed: in CHANGELOG.md on the local develop, the tag's message becomes the section
+#     "## 0.2.0 (date)" and "## Unreleased" starts again, holding only entries develop gained after the merge; a
+#     commit made without touching the working tree, whatever is checked out: push develop to keep it.
 # Needs git and gh (logged in). Only the tag is pushed (step 4); --dry-run stops before it and starts nothing.
 set -euo pipefail
 
@@ -38,7 +39,19 @@ remote=origin
 die() { echo "make-release: $*" >&2; exit 1; }
 step() { echo; echo "== $*"; }
 
-# The tag's message as a section at the top of CHANGELOG.md, committed on the local develop (not pushed). Made with a
+# CHANGELOG.md's parts: the file's own heading and introduction (head), the "## Unreleased" section's lines
+# (unreleased), and the released sections (released).
+changelog_part() {
+  awk -v part="$1" '
+    /^## / { seen = 1; inside = ($0 ~ /^## Unreleased/); if (inside) next }
+    part == "head" && !seen { print }
+    part == "unreleased" && inside { print }
+    part == "released" && seen && !inside { print }'
+}
+trim_blank() { sed -e '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'; }
+
+# After the tag: on the local develop (not pushed), CHANGELOG.md's released entries become the section "## VERSION
+# (date)" (the tag's message), and "## Unreleased" keeps only what develop gained after the merge. Made with a
 # scratch index, so the working tree and whatever is checked out are left alone.
 add_changelog() {
   local tag="$1" version="${1#v}" base date work commit
@@ -55,22 +68,27 @@ add_changelog() {
   fi
   date="$(git tag -l --format='%(taggerdate:short)' "$tag")"
   [ -n "$date" ] || date="$(git log -1 --format=%cs "$tag")"
+  # Unreleased entries on develop that the release (the tag's CHANGELOG.md) did not have.
+  git show "$tag:CHANGELOG.md" 2>/dev/null | changelog_part unreleased | grep -v '^$' > "$work/released" || true
+  changelog_part unreleased < "$work/old" | grep -vxF -f "$work/released" | trim_blank > "$work/left" || true
   {
+    if [ -n "$(changelog_part head < "$work/old" | tr -d '[:space:]')" ]; then
+      changelog_part head < "$work/old" | trim_blank
+    else
+      echo "# Changelog"; echo; echo "What changed in each release: the same text as its release notes."
+    fi
+    echo
+    echo "## Unreleased"
+    echo
+    if [ -s "$work/left" ]; then cat "$work/left"; echo; fi
     echo "## $version ($date)"
     echo
-    git tag -l --format='%(contents)' "$tag" | sed '/-----BEGIN PGP SIGNATURE-----/,$d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'
-    echo
-  } > "$work/section"
-  if [ -s "$work/old" ]; then
-    # Before the first release's section (after the file's own heading and introduction), or at the end.
-    awk -v section="$work/section" '
-      !done && /^## / { while ((getline line < section) > 0) print line; done = 1 }
-      { print }
-      END { if (!done) { print ""; while ((getline line < section) > 0) print line } }' "$work/old" > "$work/new"
-  else
-    { echo "# Changelog"; echo; echo "What changed in each release: the same text as its release notes."; echo
-      cat "$work/section"; } > "$work/new"
-  fi
+    git tag -l --format='%(contents)' "$tag" | sed '/-----BEGIN PGP SIGNATURE-----/,$d' | trim_blank
+    if [ -n "$(changelog_part released < "$work/old" | tr -d '[:space:]')" ]; then
+      echo
+      changelog_part released < "$work/old" | trim_blank
+    fi
+  } > "$work/new"
   GIT_INDEX_FILE="$work/index" git read-tree "$base"
   GIT_INDEX_FILE="$work/index" git update-index --add --cacheinfo "100644,$(git hash-object -w "$work/new"),CHANGELOG.md"
   commit="$(git commit-tree "$(GIT_INDEX_FILE="$work/index" git write-tree)" -p "$base" -m "CHANGELOG: $version")"
@@ -163,15 +181,19 @@ esac
 step "Tag message"
 message_file="$(mktemp)"
 trap 'rm -f "$message_file" "$message_file.clean"' EXIT
-# Notes already in CHANGELOG.md on develop for this version (a release tagged again) are offered as they are.
+# The notes: this version's section on develop (a release tagged again), or main's "## Unreleased" section.
 written="$(git show refs/heads/develop:CHANGELOG.md 2>/dev/null \
-  | awk -v head="## $version " 'index($0, head) == 1 { f = 1; next } f && /^## / { exit } f { print }' \
-  | sed -e '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')"
+  | awk -v head="## $version " 'index($0, head) == 1 { f = 1; next } f && /^## / { exit } f { print }' | trim_blank)"
+from="$version's section of CHANGELOG.md on develop"
+if [ -z "$written" ]; then
+  written="$(git show "$sha:CHANGELOG.md" 2>/dev/null | changelog_part unreleased | trim_blank)"
+  from="the Unreleased section of CHANGELOG.md on main"
+fi
 {
   if [ -n "$written" ]; then
     echo "$written"
     echo
-    echo "# These notes are $version's section of CHANGELOG.md on develop."
+    echo "# From $from: save as it is, or edit."
   else
     echo "What changed in $version (replace this with the release's notes: the first line is the summary)."
     echo

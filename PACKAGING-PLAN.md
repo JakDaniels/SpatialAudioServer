@@ -450,10 +450,13 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
        unpublished draft; a published release is never touched.
    - **Release notes (open point 7, decided):** the annotated tag's message, under a line naming the version and
      commit, then the install instructions; edited on the draft if needed, then published by hand.
-   - **Changelog:** `CHANGELOG.md` on develop gets each release's notes (the script commits them after tagging). The
-     packages carry a changelog made at build time from the tags' messages (`scripts/changelog.sh`, the same in
-     `build-windows.ps1`), so a release's packages hold its own notes: `/usr/share/doc/<package>/CHANGELOG.md`
-     and each MSI's `docs` folder; drafts get an "Unreleased" heading on top.
+   - **Changelog (2026-11-17):** `CHANGELOG.md` has an `## Unreleased` section that gains a line with each commit
+     changing the server or the load tool (what and why; nothing for CI, packaging, tests or docs: CLAUDE.md). At
+     release the script offers that section as the tag message (just save), and afterwards, on develop, makes it
+     the version's section and starts `Unreleased` again. The packages carry a changelog made at build time from
+     the tags' messages (`scripts/changelog.sh`, the same in `build-windows.ps1`), so a release's packages hold its
+     own notes: `/usr/share/doc/<package>/CHANGELOG.md` and each MSI's `docs` folder; drafts show the Unreleased
+     entries on top.
    - **The first attempt at v0.2.0 (2026-11-17)** stopped at "Make the release": the `~` to `-` rename tried to
      rename release files (no `~`) to themselves. Fixed; the tag was deleted (nothing had been published) and is
      made again after the fix reaches main.
