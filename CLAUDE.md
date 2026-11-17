@@ -90,6 +90,9 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 
 ## Working preferences
 - Commits end with: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commit only when asked.
+- **Every new source file** starts with `Copyright 2026 Simon Annetts/Jak Daniels` and
+  `SPDX-License-Identifier: Apache-2.0` in its comment syntax (after a shebang or `<!doctype html>`); C# is enforced
+  by the build (IDE0073). Third-party notices go in NOTICE, which the packages and MSIs ship.
 - **CHANGELOG.md:** every commit that changes the server or the load tool themselves (`src/SpatialAudioServer`,
   including `wwwroot`, and `src/SpatialAudioServer.LoadTest`) adds one brief line under `## Unreleased`, in the same
   commit: `- Server: what changed, and why.` or `- Load tool: …`, written for people who run them. No entries for

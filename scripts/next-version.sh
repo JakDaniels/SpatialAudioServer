@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Prints the next release's version after the newest release tag (vX.Y.Z), for release.yml after a merge:
 #   scripts/next-version.sh ["LABELS"]      (the pull request's labels, separated by spaces)
 # The patch version goes up (0.2.0 → 0.2.1); with the label "minor" the minor version (0.3.0), with "major" the

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Builds the Linux packages (PACKAGING-PLAN.md): the server and the load tool as .deb and .rpm, into dist/.
 #   scripts/build-packages.sh [x64|arm64]      (default x64)
 # Needs the .NET SDK and nfpm (https://nfpm.goreleaser.com; CI pins its version). The version comes from git tags

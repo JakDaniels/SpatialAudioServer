@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # The changelog (CHANGELOG.md: an "## Unreleased" section kept up to date with each change to the server or the load
 # tool, then one section per release, newest first; each release's section is its tag's message).
 #
@@ -63,7 +66,7 @@ case "${1:-}" in
     ;;
 
   -*)
-    sed -n '5,14s/^# //p' "$0" >&2
+    sed -n '8,17s/^# //p' "$0" >&2
     exit 2
     ;;
 

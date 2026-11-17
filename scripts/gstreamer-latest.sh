@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Prints the newest stable GStreamer with an MSVC x86_64 Windows installer, and that installer's SHA-256 as published
 # beside it, for gstreamer-watch.yml (compared with the Windows installers' pin in packages.yml):
 #   scripts/gstreamer-latest.sh        →  1.28.9 <sha256>

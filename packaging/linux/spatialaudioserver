@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # spatialaudioserver: the server's administration commands (PACKAGING-PLAN.md, code change 3), run the way the
 # service runs: as its user and with its environment, so they see the same configuration and database and the
 # files they write stay the service's.
@@ -18,12 +21,12 @@ case "${1:-}" in
   apikey|admin) ;;
   --version) exec "$program" --version ;;
   --help|-h)
-    sed -n '6,8s/^#   /usage: /p' "$0"
+    sed -n '9,11s/^#   /usage: /p' "$0"
     echo "The server runs as a service: systemctl start spatialaudioserver"
     exit 0
     ;;
   *)
-    sed -n '6,8s/^#   /usage: /p' "$0" >&2
+    sed -n '9,11s/^#   /usage: /p' "$0" >&2
     echo "The server runs as a service: systemctl start spatialaudioserver" >&2
     exit 2
     ;;

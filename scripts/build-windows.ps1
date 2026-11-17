@@ -1,3 +1,6 @@
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Builds the Windows installers (PACKAGING-PLAN.md "Windows installers"): the server and the load tool as MSIs, each
 # with its own GStreamer, into dist\.
 #   scripts\build-windows.ps1 -GStreamerRoot <folder of an installed GStreamer 1.28 (MSVC, x64)> -GStreamerVersion 1.28.8
@@ -76,6 +79,7 @@ $global:LASTEXITCODE = 0
 foreach ($docs in @("$stage\docs", "$stage\loadtest-docs")) {
     [IO.File]::WriteAllText("$docs\CHANGELOG.md", ($changelog -join "`n") + "`n")
     Copy-Item LICENSE "$docs\LICENSE.txt"
+    Copy-Item NOTICE "$docs\NOTICE.txt"
     Set-Content -Path "$docs\THIRD-PARTY-NOTICES.txt" -Value $notices -Encoding utf8
 }
 

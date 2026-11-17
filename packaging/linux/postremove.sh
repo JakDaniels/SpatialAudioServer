@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # After removing spatialaudioserver. The data (/var/lib/spatialaudioserver: rooms, keys, history) and the service user
 # stay, so a reinstall carries on; "apt purge" removes the data too (dpkg removes /etc/spatialaudioserver itself).
 set -e

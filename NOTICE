@@ -1,0 +1,20 @@
+SpatialAudioServer
+Copyright 2026 Simon Annetts/Jak Daniels
+https://github.com/JakDaniels/SpatialAudioServer
+
+Licensed under the Apache License, Version 2.0 (see LICENSE). Under its section 4(d), anyone who distributes this
+work or a work derived from it must include the attribution notices in this file.
+
+This product includes or ships with the following third-party software, each under its own licence:
+
+- elkjs (graph layout in the admin UI), https://github.com/kieler/elkjs, unmodified, under the Eclipse Public
+  License 2.0: src/SpatialAudioServer/wwwroot/admin/vendor/elkjs/ (LICENSE.md there).
+- The load tool's bot voices, rendered with Piper from voices with their own training-data licences:
+  scripts/loadtest-linux-x64/voices/ (CREDITS.md there).
+- The Windows installers: GStreamer and the libraries it uses (GNU LGPL 2.1 or later, and their own open-source
+  licences; texts in the installed gstreamer\share\licenses), and the .NET runtime and ASP.NET Core (MIT), as listed
+  in the installers' THIRD-PARTY-NOTICES.txt.
+- The programs as built include, as separate libraries: GstSharp.Net (.NET bindings for GStreamer,
+  https://github.com/masa-iwm/GstSharp.Net; GNU LGPL 2.1 or later); the .NET runtime, ASP.NET Core,
+  Microsoft.Extensions.* and Microsoft.Data.Sqlite (MIT); SQLitePCLRaw (Apache License 2.0) with SQLite (public
+  domain).

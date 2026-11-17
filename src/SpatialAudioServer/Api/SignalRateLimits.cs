@@ -1,3 +1,6 @@
+// Copyright 2026 Simon Annetts/Jak Daniels
+// SPDX-License-Identifier: Apache-2.0
+
 using System.Net;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;

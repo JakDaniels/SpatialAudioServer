@@ -1,3 +1,6 @@
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Installs the Windows MSIs on this (clean, administrator) machine and checks they work: the service starts as its
 # virtual account with the embedded GStreamer (no other GStreamer may be found: run it after removing the one the
 # build used), the apikey command reaches the service's database, every GStreamer element is there, the load tool

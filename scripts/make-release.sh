@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Tags a release of main (PACKAGING-PLAN.md step 7), from the repository root, after the pull request from develop
 # into main has passed and been merged:
 #   scripts/make-release.sh 0.2.0 [--dry-run | --wait]   (or 0.2.0-rc.1 for a pre-release)
@@ -21,7 +24,7 @@
 # Needs git and gh (logged in). Only the tag is pushed (step 4); --dry-run stops before it and starts nothing.
 set -euo pipefail
 
-usage() { sed -n '4,5s/^# //p' "$0" >&2; exit 2; }
+usage() { sed -n '7,8s/^# //p' "$0" >&2; exit 2; }
 mode=release
 if [ "${1:-}" = --changelog ]; then mode=changelog; shift; fi
 [ $# -ge 1 ] || usage

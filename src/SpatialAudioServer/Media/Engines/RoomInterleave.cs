@@ -1,3 +1,6 @@
+// Copyright 2026 Simon Annetts/Jak Daniels
+// SPDX-License-Identifier: Apache-2.0
+
 using System.Runtime.InteropServices;
 using Gst;
 using static SpatialAudioServer.Media.Engines.MediaBlocks;

@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Installs the Linux packages in this (clean, root) system and checks they work, as far as a container allows (no
 # systemd): the server package installs with its dependencies, its command wrapper creates an API key as the service
 # user, the server starts as that user with the service's environment, finds every GStreamer element it needs, and

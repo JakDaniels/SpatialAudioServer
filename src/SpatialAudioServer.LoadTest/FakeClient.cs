@@ -1,3 +1,6 @@
+// Copyright 2026 Simon Annetts/Jak Daniels
+// SPDX-License-Identifier: Apache-2.0
+
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;

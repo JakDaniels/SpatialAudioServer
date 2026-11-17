@@ -1,3 +1,6 @@
+// Copyright 2026 Simon Annetts/Jak Daniels
+// SPDX-License-Identifier: Apache-2.0
+
 "use strict";
 // Admin UI: signs in with the admin password (session cookie), then polls the control API (/api/rooms…) and the
 // admin-only endpoints (/api/admin/…). No build step, no libraries.
