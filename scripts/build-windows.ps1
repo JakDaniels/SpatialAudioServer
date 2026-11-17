@@ -56,7 +56,15 @@ Copy-Item scripts\loadtest-linux-x64\README.md "$stage\loadtest-docs"
 $changelog = @('# Changelog', '', 'What changed in each release: the same text as its release notes.', '')
 & git describe --exact-match --tags --match 'v[0-9]*' HEAD 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    $changelog += @("## Unreleased ($version)", '', 'A build between releases: what changed since the last release is not written up yet.', '')
+    # The "## Unreleased" entries of CHANGELOG.md.
+    $inside = $false
+    $unreleased = foreach ($line in (Get-Content -ErrorAction SilentlyContinue CHANGELOG.md)) {
+        if ($line -match '^## ') { $inside = $line -match '^## Unreleased'; continue }
+        if ($inside) { $line }
+    }
+    $text = ($unreleased -join "`n").Trim()
+    if (-not $text) { $text = 'Nothing noted since the last release.' }
+    $changelog += @("## Unreleased ($version)", '', $text, '')
 }
 foreach ($tag in (& git for-each-ref --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v[0-9]*')) {
     $date = (& git tag -l --format='%(taggerdate:short)' $tag) -join ''

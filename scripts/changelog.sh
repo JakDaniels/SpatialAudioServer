@@ -3,7 +3,8 @@
 # CHANGELOG.md, which scripts/make-release.sh adds to. The packages carry it (build-packages.sh; build-windows.ps1
 # does the same in PowerShell), so a release's packages hold its own notes, which CHANGELOG.md gets only later.
 #   scripts/changelog.sh [VERSION]
-# With the build's VERSION, a build that is not a release (a draft) gets an "Unreleased" heading on top.
+# With the build's VERSION, a build that is not a release (a draft) gets on top the "## Unreleased" entries of
+# CHANGELOG.md, headed with that version.
 set -euo pipefail
 
 echo "# Changelog"
@@ -13,7 +14,9 @@ echo
 if [ -n "${1:-}" ] && ! git describe --exact-match --tags --match 'v[0-9]*' HEAD >/dev/null 2>&1; then
   echo "## Unreleased ($1)"
   echo
-  echo "A build between releases: what changed since the last release is not written up yet."
+  unreleased="$(awk '/^## / { inside = ($0 ~ /^## Unreleased/); next } inside' CHANGELOG.md 2>/dev/null \
+    | sed -e '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')"
+  echo "${unreleased:-Nothing noted since the last release.}"
   echo
 fi
 git for-each-ref --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v[0-9]*' | while read -r tag; do
