@@ -1,6 +1,6 @@
 # SpatialAudioServer
 
-[![ci (develop)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/ci.yml?query=branch%3Adevelop) [![drafts (develop)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/drafts.yml/badge.svg?branch=develop)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/drafts.yml) [![ci (main)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/ci.yml?query=branch%3Amain)
+[![ci (develop)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/ci.yml?query=branch%3Adevelop) [![drafts (develop)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/drafts.yml/badge.svg?branch=develop)](https://github.com/JakDaniels/SpatialAudioServer/actions/workflows/drafts.yml)
 
 An MCU-style audio conferencing server with spatial audio, written in C# (.NET 10) on GStreamer.
 

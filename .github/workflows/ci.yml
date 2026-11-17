@@ -1,14 +1,12 @@
-# Full tests (PACKAGING-PLAN.md "Branches and the GitHub workflows"): on pull requests into main and pushes to main.
-# develop runs no CI (tests are run locally); "Run workflow" on the Actions page runs it on any branch by hand.
+# Full tests (PACKAGING-PLAN.md "Branches and the GitHub workflows"): on pull requests into main, and by hand ("Run
+# workflow" on the Actions page, any branch). Not again on main after a merge: the merge commit has the same files as
+# the pull request's head, which this has tested (release.yml accepts that run). develop runs no CI by itself.
 # The jobs run in the prepared images from ci-images.yml (GStreamer and .NET already installed).
 # Still to come: the windows job (embedded GStreamer) and load-22.04 (needs the load tool .deb).
 name: ci
 
 on:
   pull_request:
-    branches: [main]
-    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
-  push:
     branches: [main]
     paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   workflow_dispatch:

@@ -3,8 +3,9 @@
 # builds every package (packages.yml, as drafts.yml does) into a draft GitHub release named after the version, with
 # the tag's message at the top of its notes. While the repository is private the draft is checked, its notes edited
 # and published by hand. Versions with a pre-release part (v0.2.0-rc.1) become pre-releases.
-# The tests are not run again: the check job stops unless the tag is on main and ci.yml passed for that commit
-# (a docs-only commit skips ci.yml: run it by hand on main, then re-run this).
+# The tests are not run again: the check job stops unless the tag is on main and ci.yml passed for that commit, or
+# for the pull request's head merged into it with the same files (a docs-only pull request skips ci.yml: run it by
+# hand on main, then re-run this; scripts/make-release.sh does that itself).
 name: release
 
 on:
@@ -48,12 +49,19 @@ jobs:
             echo "::error::$TAG ($sha) is not on main"
             exit 1
           fi
-          passed="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$sha&status=success" -q .total_count)"
-          if [ "$passed" = 0 ]; then
-            echo "::error::ci.yml has not passed for $sha: run it on main (Actions, ci, Run workflow), then re-run this"
+          # ci.yml passed for this commit, or for the one a merge brought in (the pull request's head, which ci.yml
+          # tested) when its files are the same: main had nothing of its own, so the code is what was tested.
+          tested=""
+          for candidate in "$sha" $(git rev-parse -q --verify "$sha^2" || true); do
+            git diff --quiet "$candidate" "$sha" || continue
+            passed="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$candidate&status=success" -q .total_count)"
+            if [ "$passed" != 0 ]; then tested="$candidate"; break; fi
+          done
+          if [ -z "$tested" ]; then
+            echo "::error::ci.yml has not passed for $sha (nor for the same files): run it on main (Actions, ci, Run workflow), then re-run this"
             exit 1
           fi
-          echo "ci.yml passed for $sha ($passed run(s)); version $version"
+          echo "ci.yml passed for $tested (the same files as $sha); version $version"
           # The notes start with the tag's message (an annotated tag; the API, since the checkout may not keep it).
           message=""
           ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" -q '.object.type + " " + .object.sha')"
