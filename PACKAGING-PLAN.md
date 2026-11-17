@@ -1,8 +1,9 @@
 # Packaging and releases: plan
 
-Status: **under way** (2026-11-16): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
+Status: **under way** (2026-11-17): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
 step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers; step 6 (Windows MSIs) built and
-tested in CI.
+tested in CI and by hand; step 7 done: **v0.2.0 released** (2026-11-17, published as a private release). Next:
+step 8 (going public).
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -439,7 +440,9 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      just `SpatialAudioServer` / `SpatialAudioServer.LoadTest` are Windows's own, made by "Allow access" on its
      prompt for a program run by hand; they are not the MSI's and an uninstall leaves them.
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
-   - **Written (2026-11-17), not yet run:** the build and the package tests moved from `drafts.yml` into the
+   - **Done (2026-11-17): v0.2.0 released** with it (second attempt, see below): every job passed, 11 files named
+     `0.2.0`, notes from CHANGELOG.md, the packaged changelog with the 0.2.0 section; published by hand.
+     The build and the package tests moved from `drafts.yml` into the
      reusable `packages.yml` (inputs: the kind of release, its tag, the expected version, the notes' first part), so
      drafts and releases build the same way; `drafts.yml` now only calls it. `release.yml` runs on a pushed tag `v*`:
      - a `check` job stops unless the tag is `vMAJOR.MINOR.PATCH[-pre]`, its commit is on `main`, and `ci.yml` passed
