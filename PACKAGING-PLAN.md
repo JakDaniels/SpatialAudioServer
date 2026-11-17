@@ -489,6 +489,15 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      (e.g. to a `badges` branch); not wanted for drafts, whose run page already shows each platform.
 8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,
    and the GitHub Pages apt/yum repository.
+   - **History rewritten (done 2026-11-17):** the self-contained load tool binary
+     (`scripts/loadtest-linux-x64/SpatialAudioServer.LoadTest`, about 950 MB over 19 versions, committed until
+     CI built it) was removed from every commit with `git filter-repo`, then `develop`, `main`, `v0.2.0` and
+     `develop-draft` were force-pushed. Every branch and tag kept the same files; one commit that only rebuilt the
+     binary ("Load tool: rebuild with --npc") became empty and was dropped, so the commit IDs changed (main
+     55b5aa0 → e4d0a93; the v0.2.0 notes were updated). A clone went from 137 MB to under 4 MB. Other clones must
+     be re-cloned or reset (`git fetch --force --tags origin && git reset --hard origin/develop`). The old commits
+     stay reachable on GitHub only through the merged pull requests' refs, which clones do not fetch; GitHub
+     Support can purge them before going public if wanted.
 
 The planned `acousticspace` GStreamer plugin (docs/gstreamer_acousticspace_design.md, "Development and Packaging")
 gets its own repository and its own packages the same way: `.deb`/`.rpm` into the system plugin directory, recommended
