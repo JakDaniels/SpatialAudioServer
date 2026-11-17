@@ -16,4 +16,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- GstSharp.Net is LGPL-2.1-or-later (NOTICE): in a single-file publish its assemblies stay beside the program as
+       separate files that can be replaced, as that licence asks, instead of going into the bundle. -->
+  <Target Name="KeepLgplAssembliesOutsideTheBundle" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <_LgplAssembly Include="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('GstSharp.Net'))" />
+      <ResolvedFileToPublish Remove="@(_LgplAssembly)" />
+      <ResolvedFileToPublish Include="@(_LgplAssembly)" ExcludeFromSingleFile="true" />
+    </ItemGroup>
+  </Target>
+
 </Project>

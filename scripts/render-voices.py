@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 """Renders the speaking bots' voice clips (scripts/loadtest-linux-x64/voices) with Piper.
 
 The load tool joins a bot's name clip ("Bot, 3."), and in spatial rooms a direction clip ("North-west, behind, to

@@ -29,6 +29,10 @@ please run the full suite before opening the pull request.
   `- Server: what changed, and why.` or `- Load tool: …`, written for the people who run them. Changes to CI,
   packaging, tests or documentation get no entry. These lines become the next release's notes.
 - The admin UI and the test web client are plain HTML and JavaScript, with no build step; please keep them that way.
+- Every source file starts with the copyright and licence header, in its own comment syntax:
+  `// Copyright 2026 Simon Annetts/Jak Daniels` and `// SPDX-License-Identifier: Apache-2.0`. For C# the IDE adds it
+  (`.editorconfig`) and the build fails without it; for JavaScript, CSS, HTML and scripts, copy it from a
+  neighbouring file. Third-party files (`vendor/`) keep their own.
 
 ## Releases
 

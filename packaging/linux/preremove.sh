@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Before removing spatialaudioserver (deb: "remove"; rpm: 0). Upgrades (deb "upgrade", rpm 1) leave it running.
 set -e
 case "${1:-}" in

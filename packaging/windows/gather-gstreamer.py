@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 """Copies the parts of a GStreamer (MSVC) installation that SpatialAudioServer and its load tool need into a private
 tree for the Windows installers (PACKAGING-PLAN.md "GStreamer on Windows"):
 

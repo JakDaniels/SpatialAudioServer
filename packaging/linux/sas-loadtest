@@ -1,3 +1,6 @@
 #!/bin/sh
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # sas-loadtest: the SpatialAudioServer load tool. It finds its voices beside the real program, so run that.
 exec /usr/lib/spatialaudioserver-loadtest/SpatialAudioServer.LoadTest "$@"

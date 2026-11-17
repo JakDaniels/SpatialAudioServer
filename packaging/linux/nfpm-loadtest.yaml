@@ -43,10 +43,14 @@ overrides:
       - flite # --audio flite
 
 contents:
-  # A single self-contained file, with the voices beside it (where it looks for them).
+  # A self-contained program, with the voices beside it (where it looks for them), and GstSharp.Net's assemblies as
+  # separate files (LGPL: replaceable; see the load tool's .csproj).
   - src: dist/stage/loadtest/SpatialAudioServer.LoadTest
     dst: /usr/lib/spatialaudioserver-loadtest/SpatialAudioServer.LoadTest
     file_info: { mode: 0755 }
+  - src: dist/stage/loadtest/GstSharp.Net*.dll
+    dst: /usr/lib/spatialaudioserver-loadtest/
+    file_info: { mode: 0644 }
   - src: dist/stage/loadtest/voices
     dst: /usr/lib/spatialaudioserver-loadtest/voices
     type: tree
@@ -58,6 +62,9 @@ contents:
     file_info: { mode: 0644 }
   - src: dist/stage/CHANGELOG.md
     dst: /usr/share/doc/spatialaudioserver-loadtest/CHANGELOG.md
+    file_info: { mode: 0644 }
+  - src: NOTICE
+    dst: /usr/share/doc/spatialaudioserver-loadtest/NOTICE
     file_info: { mode: 0644 }
   - src: LICENSE
     dst: /usr/share/doc/spatialaudioserver-loadtest/copyright

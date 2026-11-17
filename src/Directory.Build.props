@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Code-style rules set to warnings in .editorconfig (the copyright header, IDE0073) also stop the build. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <!-- Versions come from git tags (PACKAGING-PLAN.md "Versioning"): tag v0.2.0 gives 0.2.0, commits after it
          0.2.1-alpha.0.N. Before the first tag: 0.2.0-alpha.0.N. The SDK appends +<commit> to InformationalVersion.
          CI checkouts need the full history (fetch-depth: 0), or the height is wrong. -->

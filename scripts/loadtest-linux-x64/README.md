@@ -2,9 +2,11 @@
 
 `SpatialAudioServer.LoadTest` fills rooms on a running server with fake WebRTC clients, each sending its own tone. It checks
 that every client hears everyone else and not itself, and it reports the server's CPU, memory and threads from
-`/api/status`. It is a single file with .NET built in. It is not in the repository (since 2026-11-16): build it with
+`/api/status`. It is one program with .NET built in, plus GstSharp.Net's assemblies (`GstSharp.Net*.dll`) kept as
+separate files beside it, as their LGPL licence asks. It is not in the repository: build it with
 `scripts/build-loadtest.sh` on a machine with the .NET SDK, which puts it in this folder, then copy the whole folder
-(with `voices/`) to the load machine. Later the draft and release packages provide it (PACKAGING-PLAN.md).
+(with `voices/` and the DLLs) to the load machine. The packages (`spatialaudioserver-loadtest`, `sas-loadtest`) are
+the easier way (README, Installing).
 
 Run it on a different machine from the server, because the fake clients cost about as much CPU as the server does.
 A 32-person run needs roughly 2.5 free cores.

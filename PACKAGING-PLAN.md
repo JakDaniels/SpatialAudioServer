@@ -3,7 +3,9 @@
 Status: **under way** (2026-11-17): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
 step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers; step 6 (Windows MSIs) built and
 tested in CI and by hand; step 7 done: **v0.2.0 released** (2026-11-17); step 8: **public** since 2026-11-17
-(settings done). Next: the GitHub Pages apt/yum repositories.
+(settings done), and the signed apt/dnf repositories are live on GitHub Pages. The plan is complete; left are
+extras: openSUSE ([#15](https://github.com/JakDaniels/SpatialAudioServer/issues/15)), the optional GitHub Support purge, and checks on real Fedora (SELinux, dnf from the
+repository) and arm64 hardware ([#16](https://github.com/JakDaniels/SpatialAudioServer/issues/16)).
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -172,7 +174,7 @@ release of ours). On Linux the distribution updates GStreamer, so Linux packages
 
 - **Windows:** unsigned, as decided. Expect SmartScreen's "Windows protected your PC" until the download builds
   reputation; the release notes and the README say how to get past it, and give the SHA-256 checksum to compare.
-  Free option to look at later: [SignPath Foundation](https://signpath.org/) signs open-source projects' releases at
+  Free option to look at later ([#17](https://github.com/JakDaniels/SpatialAudioServer/issues/17)): [SignPath Foundation](https://signpath.org/) signs open-source projects' releases at
   no cost (it needs the project to meet their criteria and the build to run in CI, which this plan has).
 - **Linux:** packages can be GPG-signed for free. Needed only once there is an apt/yum repository (below); for files
   attached to a release, the checksums are enough.
@@ -272,7 +274,7 @@ Each of these is small, and each needs its own change and tests when the work st
 
 - **Running (2026-11-16):** `ci.yml` with `test-1.28` and `test-1.24` (GStreamer and .NET already installed
   in the prepared images). `develop` was the repository's default branch while private (`main` once public), so "Run workflow" ran it
-  by hand on `develop`. Still to come: `windows`, `load-22.04`.
+  by hand on `develop`. Still to come: `load-22.04`, and a decision on `windows` ([#14](https://github.com/JakDaniels/SpatialAudioServer/issues/14)).
   - **Both pass the full suite** (183 tests) on the private repository's 2-core runners, about 12 minutes per job.
   - **GStreamer 1.24 is supported** (Ubuntu 24.04's 1.24.2). Getting there needed three changes, listed in PLAN.md
     "GStreamer version differences".
@@ -330,6 +332,11 @@ with GitHub's Pages deployment. No deploy key either.
   verifies with the key imported and fails without it; both `repomd.xml` and `Release.gpg` signatures are good; the
   builder refuses a key other than the published one.
 - **Owner's settings:** Settings → Pages → Source "GitHub Actions"; the secret `SAS_SIGNING_KEY`.
+- **Live (2026-11-17):** the first run (by hand on main) deployed v0.2.0. Checked from outside: every file served,
+  the live key is the project key (`FDAB7F3A2631D29B2E7241F6E90038A888E70DFC`, RSA 4096, expires 2031-11-16), a
+  real `apt-get update` against the live address accepts the signed index and offers 0.2.0, `apt-get download`
+  fetches a package checked against it, and both `repomd.xml` signatures are good. Not yet tried: a real
+  `dnf install` from the repository on a Fedora machine.
 
 The original plan, for reference:
 
@@ -503,7 +510,10 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      `ci.yml` run as above, takes the next version (`scripts/next-version.sh`: patch, or minor / major by the
      pull request's label `minor` / `major`), tags the merge commit with the `## Unreleased` entries of CHANGELOG.md
      as the message, builds and tests everything into a draft release, publishes it when the pull request has the
-     label `publish`, and commits the version's section to CHANGELOG.md on develop (pull develop afterwards). No
+     label `publish`, and on develop merges main back in and commits the version's section to CHANGELOG.md (pull
+     develop afterwards). The merge back matters: the tag is on main's merge commit, and without it develop's
+     history lacks the tag, so MinVer versioned drafts after v0.2.0 as `0.2.0-alpha.N`, below the release (found
+     2026-11-17; main was merged into develop by hand once, and `make-release.sh` does the same for hand-made tags). No
      Unreleased entries (only CI, packaging or docs changes merged): no release. By hand still works: push a tag
      (`scripts/make-release.sh`), e.g. for a pre-release `v0.3.0-rc.1` or after a docs-only merge.
    - **README badges for releases:** a row of static "download" badges per platform (Ubuntu/Debian, Fedora,

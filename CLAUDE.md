@@ -49,7 +49,7 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   (`outdoor`); rooms may choose `meeting` (SL's Vivox curve) via `spatialProfile` (module `SpatialProfile`).
   Group and P2P calls (PLAN.md Phase 7 (h)): add-on `SasCallsModule` replaces core's `ChatSessionRequest`; core patch
   for Mantis in os-webrtc-sas `core-patches/` (not applied to the tree here). P2P and group calls tested live
-  (groups V2 on MariaDB `opensim_groups` for this standalone). Next: ringing across simulators.
+  (groups V2 on MariaDB `opensim_groups` for this standalone). Ringing across simulators: os-webrtc-sas#1.
   NPCs (PLAN.md Phase 8): web users and bots shown in-world as NPCs, first version (module `WebUserAvatars`, web
   client tick box, load tool `--npc`); voice agents set up from OSSL are ideas only.
   Test OpenSim standalone runs in `screen -S opensim` from `docs/reference/opensim/bin` (avatars Test One/Test Two).
@@ -57,13 +57,25 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   token expiry, graceful shutdown, signalling rate limits, input limits, security headers, run docs in
   `docs/running.md` (Linux + Windows). No Dockerfile for now. Windows run done 2026-11-14 (server + load tests pass;
   results in `docs/benchmarks.md`, which holds all benchmark numbers: keep PLAN.md to conclusions).
-  Parked: the intermittent pairchains test failure; one unexplained test-host crash (PLAN.md Phase 5).
+  Parked: the intermittent pairchains test failures (#13); one unexplained test-host crash (PLAN.md Phase 5).
 
 - **Packaging and releases (PACKAGING-PLAN.md) done:** .deb/.rpm (Fedora) for x64 and arm64, Windows MSIs with
   their own GStreamer; `drafts.yml` (by hand, on develop) for test builds; merging a pull request develop → main
   releases (CI runs on the pull request). v0.2.0 released 2026-11-17. **Both repositories are public** (default
   branch `main`, rulesets on main: pull request, merge commits only, checks `test-1.28`/`test-1.24`). Day-to-day
-  work stays on `develop`. Next there: the GitHub Pages apt/yum repositories.
+  work stays on `develop`. Signed apt/dnf repositories at https://jakdaniels.github.io/SpatialAudioServer/
+  (`pages.yml`, rebuilt from the latest two releases whenever one is published; key in `packaging/signing-key.asc`).
+
+- **Open work is in GitHub issues** (since 2026-11-17), in both repositories: `gh issue list -R JakDaniels/SpatialAudioServer`
+  and `gh issue list -R JakDaniels/os-webrtc-sas` (labels `server`, `web-client`, `ci-packaging`, `testing`, `parked`,
+  `needs-decision`). Work spanning both has an issue in each, linked. PLAN.md keeps the design, decisions and their
+  reasons; status lives in the issues (PLAN.md links to them), not in both. Close issues from commits or pull
+  requests (`Fixes #n`; across repositories `Fixes JakDaniels/os-webrtc-sas#n`).
+  **Project board** (public): https://github.com/users/JakDaniels/projects/1, holding both repositories' issues, with
+  Status Parked / ToDo / In Progress / In Testing / Ready for Release / Done. Move cards as work goes (`gh project
+  item-edit`; needs the `project` scope): In Progress when starting, In Testing while waiting on the user's hands-on
+  test, Ready for Release once tested on develop; closing (at the release merge) moves it to Done. New
+  os-webrtc-sas issues may need adding by hand (`gh project item-add 1 --owner JakDaniels --url …`).
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.
@@ -78,6 +90,9 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 
 ## Working preferences
 - Commits end with: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commit only when asked.
+- **Every new source file** starts with `Copyright 2026 Simon Annetts/Jak Daniels` and
+  `SPDX-License-Identifier: Apache-2.0` in its comment syntax (after a shebang or `<!doctype html>`); C# is enforced
+  by the build (IDE0073). Third-party notices go in NOTICE, which the packages and MSIs ship.
 - **CHANGELOG.md:** every commit that changes the server or the load tool themselves (`src/SpatialAudioServer`,
   including `wwwroot`, and `src/SpatialAudioServer.LoadTest`) adds one brief line under `## Unreleased`, in the same
   commit: `- Server: what changed, and why.` or `- Load tool: …`, written for people who run them. No entries for

@@ -1,0 +1,9 @@
+root = true
+
+# Every C# file starts with the copyright and licence header (NOTICE, LICENSE); the IDE adds it to new files, and the
+# build fails without it (IDE0073 as a warning, TreatWarningsAsErrors, EnforceCodeStyleInBuild in
+# src/Directory.Build.props). Other source files (JavaScript, CSS, HTML, scripts) carry the same two lines in their
+# own comment syntax, by hand.
+[*.cs]
+file_header_template = Copyright 2026 Simon Annetts/Jak Daniels\nSPDX-License-Identifier: Apache-2.0
+dotnet_diagnostic.IDE0073.severity = warning

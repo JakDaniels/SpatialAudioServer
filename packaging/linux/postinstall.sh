@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # After installing or upgrading spatialaudioserver (deb: "configure [old-version]"; rpm: 1 = install, 2 = upgrade).
 set -e
 

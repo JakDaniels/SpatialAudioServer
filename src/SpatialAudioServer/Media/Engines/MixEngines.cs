@@ -1,3 +1,6 @@
+// Copyright 2026 Simon Annetts/Jak Daniels
+// SPDX-License-Identifier: Apache-2.0
+
 namespace SpatialAudioServer.Media.Engines;
 
 /// <summary>An available mix engine, as listed by <c>GET /api/status</c>.</summary>

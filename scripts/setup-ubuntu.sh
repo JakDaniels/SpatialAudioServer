@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Dev machine setup for Ubuntu 24.04/26.04. Safe to re-run.
 set -euo pipefail
 sudo apt-get update

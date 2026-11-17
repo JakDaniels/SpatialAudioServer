@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Tags a release of main (PACKAGING-PLAN.md step 7), from the repository root, after the pull request from develop
 # into main has passed and been merged:
 #   scripts/make-release.sh 0.2.0 [--dry-run | --wait]   (or 0.2.0-rc.1 for a pre-release)
@@ -21,7 +24,7 @@
 # Needs git and gh (logged in). Only the tag is pushed (step 4); --dry-run stops before it and starts nothing.
 set -euo pipefail
 
-usage() { sed -n '4,5s/^# //p' "$0" >&2; exit 2; }
+usage() { sed -n '7,8s/^# //p' "$0" >&2; exit 2; }
 mode=release
 if [ "${1:-}" = --changelog ]; then mode=changelog; shift; fi
 [ $# -ge 1 ] || usage
@@ -41,35 +44,48 @@ step() { echo; echo "== $*"; }
 
 trim_blank() { sed -e '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'; }
 
-# After the tag: on the local develop (not pushed), CHANGELOG.md's released entries become the section "## VERSION
+# After the tag, on the local develop (not pushed): main is merged back in, so the tag (on main) is in develop's
+# history and MinVer versions drafts after it; then CHANGELOG.md's released entries become the section "## VERSION
 # (date)" (the tag's message), and "## Unreleased" keeps only what develop gained after the merge
-# (scripts/changelog.sh --rollover). Made with a scratch index, so the working tree and whatever is checked out are
-# left alone.
+# (scripts/changelog.sh --rollover). Made without a checkout (merge-tree, a scratch index), so the working tree and
+# whatever is checked out are left alone. release.yml does the same after a merge.
 add_changelog() {
-  local tag="$1" version="${1#v}" base work commit status=0
-  base="$(git rev-parse refs/heads/develop)"
-  if ! git merge-base --is-ancestor "$remote/develop" "$base"; then
+  local tag="$1" version="${1#v}" develop base tagged merged work commit status=0
+  develop="$(git rev-parse refs/heads/develop)"
+  if ! git merge-base --is-ancestor "$remote/develop" "$develop"; then
     echo "CHANGELOG.md: local develop is behind $remote/develop; pull it, then: scripts/make-release.sh --changelog $version"
     return 0
   fi
+  base="$develop"
+  tagged="$(git rev-parse "$tag^{commit}")"
+  if ! git merge-base --is-ancestor "$tagged" "$base"; then
+    # main holds only what came from develop, so the merge changes no files; a conflict means commits made on main.
+    merged="$(git merge-tree --write-tree "$base" "$tagged")" \
+      || { echo "CHANGELOG.md: merging $tag into develop conflicts; merge main into develop by hand."; return 0; }
+    base="$(git commit-tree "$merged" -p "$base" -p "$tagged" -m "Merge $version from main into develop")"
+  fi
   work="$(mktemp -d)"
   git show "$base:CHANGELOG.md" 2>/dev/null | scripts/changelog.sh --rollover "$tag" > "$work/new" || status=$?
-  if [ "$status" = 3 ]; then
+  if [ "$status" = 0 ]; then
+    GIT_INDEX_FILE="$work/index" git read-tree "$base"
+    GIT_INDEX_FILE="$work/index" git update-index --add --cacheinfo "100644,$(git hash-object -w "$work/new"),CHANGELOG.md"
+    commit="$(git commit-tree "$(GIT_INDEX_FILE="$work/index" git write-tree)" -p "$base" -m "CHANGELOG: $version")"
+  elif [ "$status" = 3 ]; then
     echo "CHANGELOG.md on develop already has $version"
-    rm -rf "$work"; return 0
+    commit="$base"
+  else
+    rm -rf "$work"
+    die "CHANGELOG.md: scripts/changelog.sh --rollover failed"
   fi
-  [ "$status" = 0 ] || die "CHANGELOG.md: scripts/changelog.sh --rollover failed"
-  GIT_INDEX_FILE="$work/index" git read-tree "$base"
-  GIT_INDEX_FILE="$work/index" git update-index --add --cacheinfo "100644,$(git hash-object -w "$work/new"),CHANGELOG.md"
-  commit="$(git commit-tree "$(GIT_INDEX_FILE="$work/index" git write-tree)" -p "$base" -m "CHANGELOG: $version")"
   rm -rf "$work"
+  [ "$commit" != "$develop" ] || return 0
   if [ "$(git symbolic-ref -q --short HEAD)" = develop ]; then
     git merge --ff-only --quiet "$commit" \
-      || { echo "CHANGELOG.md: develop could not move to ${commit::7} (CHANGELOG.md changed here?): git merge --ff-only $commit"; return 0; }
+      || { echo "develop could not move to ${commit::7} (files changed here?): git merge --ff-only $commit"; return 0; }
   else
-    git update-ref -m "make-release: CHANGELOG $version" refs/heads/develop "$commit" "$base"
+    git update-ref -m "make-release: $version" refs/heads/develop "$commit" "$develop"
   fi
-  echo "CHANGELOG.md: $version added on develop (${commit::7}); push develop to keep it"
+  echo "develop: $version merged in from main and added to CHANGELOG.md (${commit::7}); push develop to keep it"
 }
 
 echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' \

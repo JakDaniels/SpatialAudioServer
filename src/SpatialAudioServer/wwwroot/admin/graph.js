@@ -1,3 +1,6 @@
+// Copyright 2026 Simon Annetts/Jak Daniels
+// SPDX-License-Identifier: Apache-2.0
+
 "use strict";
 // Pipeline view for one room (graph.html?room=ID). Polls the admin graph snapshot, groups the room's top-level
 // elements into summary blocks (one per participant stage, the room input, each shared mix), lays the result out with

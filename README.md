@@ -118,5 +118,6 @@ Tests: `dotnet test src`.
 
 ## Licence
 
-Apache-2.0, see [LICENSE](LICENSE). The admin UI includes [elkjs](https://github.com/kieler/elkjs) for graph layout,
+Copyright 2026 Simon Annetts/Jak Daniels. Apache-2.0, see [LICENSE](LICENSE); attribution and third-party notices
+in [NOTICE](NOTICE), which copies and derived works must carry along (licence section 4(d)). The admin UI includes [elkjs](https://github.com/kieler/elkjs) for graph layout,
 unmodified, under its own licence (EPL-2.0; `src/SpatialAudioServer/wwwroot/admin/vendor/elkjs/`).

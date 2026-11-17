@@ -1,3 +1,6 @@
+<!-- Copyright 2026 Simon Annetts/Jak Daniels
+     SPDX-License-Identifier: Apache-2.0 -->
+
 <!-- The load tool MSI: the program, its voices and its own GStreamer in C:\Program Files\SpatialAudioServer Load Test\,
      on PATH (SpatialAudioServer.LoadTest.exe, or sas-loadtest as on Linux). No service. -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"

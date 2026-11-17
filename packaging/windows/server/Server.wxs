@@ -1,3 +1,6 @@
+<!-- Copyright 2026 Simon Annetts/Jak Daniels
+     SPDX-License-Identifier: Apache-2.0 -->
+
 <!-- The server MSI (PACKAGING-PLAN.md "Windows installers"):
      - the program and its own GStreamer in C:\Program Files\SpatialAudioServer\ (on PATH, for the apikey/admin
        commands), with the "environment" file pointing it at ProgramData;

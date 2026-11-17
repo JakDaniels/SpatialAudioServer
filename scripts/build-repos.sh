@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 Simon Annetts/Jak Daniels
+# SPDX-License-Identifier: Apache-2.0
+
 # Builds the apt and dnf repositories for GitHub Pages (PACKAGING-PLAN.md "Package repositories"), signed with the
 # project key, from release packages already downloaded:
 #   scripts/build-repos.sh PACKAGES_DIR SITE_DIR SITE_URL
