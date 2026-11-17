@@ -143,8 +143,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh workflow run pages.yml -R "$GITHUB_REPOSITORY" --ref main
 
-  # After a merge: CHANGELOG.md on develop gets the version's section, and Unreleased keeps only what develop gained
-  # since (scripts/changelog.sh --rollover). A tag pushed by hand leaves this to scripts/make-release.sh.
+  # After a merge, on develop: main is merged back in, so the new tag (on main's merge commit) is in develop's history
+  # and MinVer versions drafts after it (0.2.1-alpha.N after v0.2.0, not 0.2.0-alpha.N); then CHANGELOG.md gets the
+  # version's section, and Unreleased keeps only what develop gained since (scripts/changelog.sh --rollover). A tag
+  # pushed by hand leaves both to scripts/make-release.sh.
   changelog:
     needs: prepare
     if: needs.prepare.outputs.release == 'true' && github.event_name == 'pull_request'
@@ -156,7 +158,7 @@ jobs:
           ref: develop
           fetch-depth: 0
 
-      - name: CHANGELOG.md on develop
+      - name: Merge main back, and CHANGELOG.md, on develop
         env:
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
@@ -165,12 +167,23 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for attempt in 1 2 3; do
             git reset --quiet --hard origin/develop
+            # main holds only what came from develop, so this merge changes no files; a conflict means someone
+            # committed to main directly, and a person has to merge it.
+            if ! git merge-base --is-ancestor "$TAG" HEAD; then
+              git merge --no-ff --no-edit -m "Merge ${TAG#v} from main into develop" "$TAG^{commit}" \
+                || { echo "::error::Merging main into develop conflicts: merge it by hand."; exit 1; }
+            fi
             status=0
             scripts/changelog.sh --rollover "$TAG" < CHANGELOG.md > "$RUNNER_TEMP/CHANGELOG.md" || status=$?
-            if [ "$status" = 3 ]; then echo "CHANGELOG.md already has ${TAG#v}"; exit 0; fi
-            [ "$status" = 0 ] || exit "$status"
-            cp "$RUNNER_TEMP/CHANGELOG.md" CHANGELOG.md
-            git commit --quiet -m "CHANGELOG: ${TAG#v}" CHANGELOG.md
+            if [ "$status" = 0 ]; then
+              cp "$RUNNER_TEMP/CHANGELOG.md" CHANGELOG.md
+              git commit --quiet -m "CHANGELOG: ${TAG#v}" CHANGELOG.md
+            elif [ "$status" = 3 ]; then
+              echo "CHANGELOG.md already has ${TAG#v}"
+            else
+              exit "$status"
+            fi
+            [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/develop)" ] || exit 0 # nothing to push
             # develop may have moved meanwhile: fetch and try again.
             if git push origin HEAD:develop; then exit 0; fi
             git fetch --quiet origin develop

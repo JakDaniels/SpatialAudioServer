@@ -510,7 +510,10 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      `ci.yml` run as above, takes the next version (`scripts/next-version.sh`: patch, or minor / major by the
      pull request's label `minor` / `major`), tags the merge commit with the `## Unreleased` entries of CHANGELOG.md
      as the message, builds and tests everything into a draft release, publishes it when the pull request has the
-     label `publish`, and commits the version's section to CHANGELOG.md on develop (pull develop afterwards). No
+     label `publish`, and on develop merges main back in and commits the version's section to CHANGELOG.md (pull
+     develop afterwards). The merge back matters: the tag is on main's merge commit, and without it develop's
+     history lacks the tag, so MinVer versioned drafts after v0.2.0 as `0.2.0-alpha.N`, below the release (found
+     2026-11-17; main was merged into develop by hand once, and `make-release.sh` does the same for hand-made tags). No
      Unreleased entries (only CI, packaging or docs changes merged): no release. By hand still works: push a tag
      (`scripts/make-release.sh`), e.g. for a pre-release `v0.3.0-rc.1` or after a docs-only merge.
    - **README badges for releases:** a row of static "download" badges per platform (Ubuntu/Debian, Fedora,
