@@ -63,7 +63,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   their own GStreamer; `drafts.yml` (by hand, on develop) for test builds; merging a pull request develop → main
   releases (CI runs on the pull request). v0.2.0 released 2026-11-17. **Both repositories are public** (default
   branch `main`, rulesets on main: pull request, merge commits only, checks `test-1.28`/`test-1.24`). Day-to-day
-  work stays on `develop`. Next there: the GitHub Pages apt/yum repositories.
+  work stays on `develop`. Signed apt/dnf repositories at https://jakdaniels.github.io/SpatialAudioServer/
+  (`pages.yml`, rebuilt from the latest two releases whenever one is published; key in `packaging/signing-key.asc`).
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.

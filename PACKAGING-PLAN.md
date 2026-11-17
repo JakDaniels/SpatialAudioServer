@@ -3,7 +3,9 @@
 Status: **under way** (2026-11-17): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
 step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers; step 6 (Windows MSIs) built and
 tested in CI and by hand; step 7 done: **v0.2.0 released** (2026-11-17); step 8: **public** since 2026-11-17
-(settings done). Next: the GitHub Pages apt/yum repositories.
+(settings done), and the signed apt/dnf repositories are live on GitHub Pages. The plan is complete; left are
+extras: openSUSE, the optional GitHub Support purge, and checks on real Fedora (SELinux, dnf from the
+repository) and arm64 hardware.
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -330,6 +332,11 @@ with GitHub's Pages deployment. No deploy key either.
   verifies with the key imported and fails without it; both `repomd.xml` and `Release.gpg` signatures are good; the
   builder refuses a key other than the published one.
 - **Owner's settings:** Settings → Pages → Source "GitHub Actions"; the secret `SAS_SIGNING_KEY`.
+- **Live (2026-11-17):** the first run (by hand on main) deployed v0.2.0. Checked from outside: every file served,
+  the live key is the project key (`FDAB7F3A2631D29B2E7241F6E90038A888E70DFC`, RSA 4096, expires 2031-11-16), a
+  real `apt-get update` against the live address accepts the signed index and offers 0.2.0, `apt-get download`
+  fetches a package checked against it, and both `repomd.xml` signatures are good. Not yet tried: a real
+  `dnf install` from the repository on a Fedora machine.
 
 The original plan, for reference:
 
