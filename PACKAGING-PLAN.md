@@ -1,8 +1,9 @@
 # Packaging and releases: plan
 
-Status: **under way** (2026-11-16): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
+Status: **under way** (2026-11-17): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
 step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers; step 6 (Windows MSIs) built and
-tested in CI.
+tested in CI and by hand; step 7 done: **v0.2.0 released** (2026-11-17, published as a private release). Next:
+step 8 (going public).
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -251,18 +252,26 @@ Each of these is small, and each needs its own change and tests when the work st
   windows     fetch and embed the pinned GStreamer, publish win-x64 → WiX → server MSI, load tool MSI
   draft       replace the files of the single pre-release "develop (draft)" with these, and SHA256SUMS
 
-.github/workflows/release.yml   on a tag v* on main (a commit whose ci.yml run was green)
-  check       the tag's form, on main, ci.yml green for its commit
-  packages    packages.yml, as for drafts, with the release version: while private a draft GitHub release, checked
-              and published by hand; once public: the published release, then the GitHub Pages apt/yum repositories
+.github/workflows/release.yml   a pull request merged into main, or a tag v* pushed by hand (step 7)
+  prepare     ci.yml green for the commit; after a merge: the next version and the tag, notes from CHANGELOG.md
+  packages    packages.yml, as for drafts, with the release version: a draft GitHub release
+  publish     with the pull request's label "publish" (once public, then the GitHub Pages apt/yum repositories too)
+  changelog   after a merge: the version's section in CHANGELOG.md on develop
 
 .github/workflows/packages.yml  reusable (workflow_call): linux, test, windows, shared by drafts.yml and release.yml
 
 .github/workflows/gstreamer-watch.yml   weekly: an issue when GStreamer has a newer release than the Windows pin
 ```
 
+- **gstreamer-watch.yml (done 2026-11-17):** Mondays (and by hand). `scripts/gstreamer-latest.sh` finds the newest
+  stable GStreamer (even minor version) with an MSVC x86_64 installer and the SHA-256 GStreamer publishes beside it.
+  When that is newer than `GSTREAMER_VERSION` in packages.yml, it opens the issue "GStreamer X.Y.Z for the Windows
+  installers" with the two values to change (and, for a new series, a reminder to check the plugin list and try
+  the MSIs by hand). One open issue at a time: older ones are closed as superseded, and all are closed once the
+  pin is current. Linux packages use the distributions' GStreamer, so only the Windows pin is watched.
+
 - **Running (2026-11-16):** `ci.yml` with `test-1.28` and `test-1.24` (GStreamer and .NET already installed
-  in the prepared images). `develop` is the repository's default branch while private, so "Run workflow" runs it
+  in the prepared images). `develop` was the repository's default branch while private (`main` once public), so "Run workflow" ran it
   by hand on `develop`. Still to come: `windows`, `load-22.04`.
   - **Both pass the full suite** (183 tests) on the private repository's 2-core runners, about 12 minutes per job.
   - **GStreamer 1.24 is supported** (Ubuntu 24.04's 1.24.2). Getting there needed three changes, listed in PLAN.md
@@ -439,7 +448,9 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      just `SpatialAudioServer` / `SpatialAudioServer.LoadTest` are Windows's own, made by "Allow access" on its
      prompt for a program run by hand; they are not the MSI's and an uninstall leaves them.
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
-   - **Written (2026-11-17), not yet run:** the build and the package tests moved from `drafts.yml` into the
+   - **Done (2026-11-17): v0.2.0 released** with it (second attempt, see below): every job passed, 11 files named
+     `0.2.0`, notes from CHANGELOG.md, the packaged changelog with the 0.2.0 section; published by hand.
+     The build and the package tests moved from `drafts.yml` into the
      reusable `packages.yml` (inputs: the kind of release, its tag, the expected version, the notes' first part), so
      drafts and releases build the same way; `drafts.yml` now only calls it. `release.yml` runs on a pushed tag `v*`:
      - a `check` job stops unless the tag is `vMAJOR.MINOR.PATCH[-pre]`, its commit is on `main`, and `ci.yml` passed
@@ -464,19 +475,49 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      when main has nothing of its own, has exactly the files of the pull request's head, which the pull request's
      run tested; `release.yml` and the script accept that run (checked with `git diff` between the two commits).
      If the files differ (a commit made on main) or nothing was tested (a docs-only pull request), CI runs on main.
-   - **Making a release:** open a pull request from `develop` into `main` and merge it once green (by hand, as
-     decided). Then `scripts/make-release.sh 0.2.0` (`--dry-run` first) from the repository root: it takes main's
-     latest commit on GitHub, finds the passed `ci.yml` run for it (the pull request's; it starts one on main and
-     waits when there is none), asks for the tag message in an editor, pushes only the tag (printing the
-     release run's address; `--wait` waits for it), and adds the notes to CHANGELOG.md on develop (push develop
-     afterwards). When the run is done, check the draft and publish it. (By hand: `git tag -a v0.2.0 <main commit>` and
-     `git push origin v0.2.0`.)
+   - **Making a release (automatic since 2026-11-17, after v0.2.0):** merging a pull request from `develop` into
+     `main` makes the release. `release.yml` (event: pull request closed and merged) checks the pull request's
+     `ci.yml` run as above, takes the next version (`scripts/next-version.sh`: patch, or minor / major by the
+     pull request's label `minor` / `major`), tags the merge commit with the `## Unreleased` entries of CHANGELOG.md
+     as the message, builds and tests everything into a draft release, publishes it when the pull request has the
+     label `publish`, and commits the version's section to CHANGELOG.md on develop (pull develop afterwards). No
+     Unreleased entries (only CI, packaging or docs changes merged): no release. By hand still works: push a tag
+     (`scripts/make-release.sh`), e.g. for a pre-release `v0.3.0-rc.1` or after a docs-only merge.
    - **README badges for releases:** a row of static "download" badges per platform (Ubuntu/Debian, Fedora,
      Windows), each linking to the latest release's files, plus the release workflow's status badge. GitHub's own
      badges are per workflow, not per job, so status per platform would need the workflow to write its own SVGs
      (e.g. to a `badges` branch); not wanted for drafts, whose run page already shows each platform.
 8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,
    and the GitHub Pages apt/yum repository.
+   - **Prepared (2026-11-17):** the history of both repositories checked (no keys, tokens or passwords in any
+     version; only private LAN addresses in examples; the commit emails stay, decided); `SECURITY.md`,
+     `CONTRIBUTING.md` and an Installing section in the README added; `ci.yml` also runs on pull requests into
+     `develop` (contributors' pull requests). Decided: `main` becomes the default branch, and os-webrtc-sas goes
+     public at the same time. The GitHub Pages repositories come afterwards, as their own piece of work.
+   - **The settings (repository owner, in the web UI), in this order:**
+     1. Merge `develop` into `main` by pull request (no release: nothing under Unreleased), so `main` has these
+        files and `gstreamer-watch.yml` (scheduled workflows run from the default branch).
+     2. Optional, before going public: ask GitHub Support to purge the commits from before the history rewrite
+        (still reachable through the merged pull requests).
+     3. Both repositories: Settings → General → Danger Zone → Change visibility → Public.
+     4. SpatialAudioServer: Settings → General → Default branch → `main`.
+     5. Settings → Code security → Private vulnerability reporting → Enable (SECURITY.md relies on it).
+     6. Settings → Rules → Rulesets → New branch ruleset for `main`: require a pull request, require the status
+        checks `test-1.28` and `test-1.24`, block force pushes. Not for `develop` beyond blocking force pushes:
+        release.yml pushes the CHANGELOG commit there.
+     7. The CI images: the package `sas-ci` (owner's Packages tab) → Package settings → Change visibility →
+        Public, or pull requests from forks cannot pull them.
+     8. Settings → Actions → General → "Fork pull request workflows from outside collaborators": require approval
+        for all outside collaborators.
+   - **History rewritten (done 2026-11-17):** the self-contained load tool binary
+     (`scripts/loadtest-linux-x64/SpatialAudioServer.LoadTest`, about 950 MB over 19 versions, committed until
+     CI built it) was removed from every commit with `git filter-repo`, then `develop`, `main`, `v0.2.0` and
+     `develop-draft` were force-pushed. Every branch and tag kept the same files; one commit that only rebuilt the
+     binary ("Load tool: rebuild with --npc") became empty and was dropped, so the commit IDs changed (main
+     55b5aa0 → e4d0a93; the v0.2.0 notes were updated). A clone went from 137 MB to under 4 MB. Other clones must
+     be re-cloned or reset (`git fetch --force --tags origin && git reset --hard origin/develop`). The old commits
+     stay reachable on GitHub only through the merged pull requests' refs, which clones do not fetch; GitHub
+     Support can purge them before going public if wanted.
 
 The planned `acousticspace` GStreamer plugin (docs/gstreamer_acousticspace_design.md, "Development and Packaging")
 gets its own repository and its own packages the same way: `.deb`/`.rpm` into the system plugin directory, recommended

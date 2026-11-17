@@ -4,6 +4,8 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+## 0.2.0 (2026-11-17)
+
 The first release.
 
 - Server: rooms and participants through a JSON control API (API keys), WebRTC clients joining with one-time
