@@ -1,0 +1,3 @@
+#!/bin/sh
+# sas-loadtest: the SpatialAudioServer load tool. It finds its voices beside the real program, so run that.
+exec /usr/lib/spatialaudioserver-loadtest/SpatialAudioServer.LoadTest "$@"

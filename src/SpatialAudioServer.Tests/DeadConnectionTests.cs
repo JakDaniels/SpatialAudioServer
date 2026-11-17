@@ -51,6 +51,47 @@ public sealed class DeadConnectionTests() : MediaTestBase(
     }
 }
 
+/// <summary>
+/// A client that stays connected but delivers no audio is reported failed after Media:InactiveConnectionTimeout and
+/// removed (GStreamer 1.24 has no ICE consent freshness, so this is how it notices a vanished client).
+/// </summary>
+[Collection("media")]
+public sealed class InactiveConnectionTests() : MediaTestBase(
+    SpatialAudioServer.Media.Engines.MixEngines.Default,
+    new Dictionary<string, string?>
+    {
+        ["Media:InactiveConnectionTimeout"] = "00:00:03",
+        ["Media:DeadConnectionTimeout"] = "00:00:01",
+    })
+{
+    [Fact]
+    public async Task A_connected_client_that_sends_nothing_is_removed_and_the_others_stay()
+    {
+        var room = await CreateRoomAsync();
+        var clients = new List<LoadTest.FakeClient> { await JoinAsync(room.Id, 0), await JoinAsync(room.Id, 1) };
+        await SettleAndMeasureAsync(clients, Others(clients));
+        var quiet = clients[1];
+
+        var clock = Stopwatch.StartNew();
+        quiet.StopSending();
+        var removed = false;
+        while (clock.Elapsed < TimeSpan.FromSeconds(20) && !removed)
+        {
+            using var response = await Api.GetAsync($"/api/rooms/{room.Id}/participants/{quiet.ParticipantId}");
+            removed = response.StatusCode == HttpStatusCode.NotFound;
+            await Task.Delay(250);
+        }
+
+        // 3 s without audio, then failed for 1 s, checked every 0.75 s and swept every 0.25 s: well inside 20 s,
+        // and well before ICE consent freshness (~27 s) could have done it.
+        Assert.True(removed, $"not removed after {clock.Elapsed.TotalSeconds:F0} s");
+        var remaining = await (await Api.GetAsync($"/api/rooms/{room.Id}/participants")).Read<List<ParticipantSnapshot>>();
+        var stay = Assert.Single(remaining);
+        Assert.Equal(clients[0].ParticipantId, stay.Id);
+        Assert.Equal(ParticipantState.Connected, stay.State);
+    }
+}
+
 /// <summary>Which states count as dead and for how long, driven directly (no media).</summary>
 public sealed class DeadConnectionRuleTests : IDisposable
 {

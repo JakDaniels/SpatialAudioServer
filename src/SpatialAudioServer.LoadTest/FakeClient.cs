@@ -20,6 +20,7 @@ namespace SpatialAudioServer.LoadTest;
 public sealed class FakeClient : IDisposable
 {
     private readonly Pipeline _pipeline;
+    private readonly Element _gate;
     private readonly WebRtcBin _rtc;
     private readonly ManualResetEventSlim _negotiationNeeded = new();
     private readonly CancellationTokenSource _stop = new();
@@ -75,12 +76,13 @@ public sealed class FakeClient : IDisposable
               $"volume name=tone volume={(talking ? volume : 0).ToString(CultureInfo.InvariantCulture)}";
         var send = Global.ParseBinFromDescription(
             source + " ! " +
-            "audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! opusenc ! rtpopuspay pt=111 ! " +
+            "audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! opusenc ! valve name=gate ! rtpopuspay pt=111 ! " +
             "capsfilter caps=\"application/x-rtp,media=audio,encoding-name=OPUS,payload=111,clock-rate=48000" +
             // A viewer's offer has an Opus a=fmtp line (which its munging then duplicates); caps fields become fmtp.
             (viewerStyle ? ",useinbandfec=(string)1" : "") + "\"",
             ghostUnlinkedPads: true);
         _tone = send.GetByName("tone")!;
+        _gate = send.GetByName("gate")!;
         if (clip is not null)
         {
             var appsrc = send.GetByName("clip") as AppSrc ?? throw new InvalidOperationException("appsrc has no AppSrc wrapper.");
@@ -135,6 +137,12 @@ public sealed class FakeClient : IDisposable
         _tone.SetProperty("volume", talking ? _volume : 0.0);
         Talking = talking;
     }
+
+    /// <summary>
+    /// Stops sending audio packets altogether (unlike <see cref="SetTalking"/>, which sends silence), while the
+    /// connection itself (ICE) stays up: a client that is connected but delivers nothing.
+    /// </summary>
+    public void StopSending() => _gate.SetProperty("drop", true);
 
     /// <summary>
     /// Behaves like a Second Life viewer (Firestorm's llwebrtc): an ordered "SLData" data channel created before

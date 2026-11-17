@@ -1,0 +1,89 @@
+# A release (PACKAGING-PLAN.md "Branches and the GitHub workflows", step 7): pushing a version tag on main, e.g.
+#   git tag -a v0.2.0 -m "What changed, for the release notes" <main commit> && git push origin v0.2.0
+# builds every package (packages.yml, as drafts.yml does) into a draft GitHub release named after the version, with
+# the tag's message at the top of its notes. While the repository is private the draft is checked, its notes edited
+# and published by hand. Versions with a pre-release part (v0.2.0-rc.1) become pre-releases.
+# The tests are not run again: the check job stops unless the tag is on main and ci.yml passed for that commit, or
+# for the pull request's head merged into it with the same files (a docs-only pull request skips ci.yml: run it by
+# hand on main, then re-run this; scripts/make-release.sh does that itself).
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # the release
+  actions: read # ci.yml's runs, for the check
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      intro: ${{ steps.check.outputs.intro }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag, branch and CI
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # vMAJOR.MINOR.PATCH, optionally -prerelease (MinVer's tag prefix is "v").
+          if ! echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::$TAG is not a version tag (v0.2.0 or v0.2.0-rc.1)"
+            exit 1
+          fi
+          version="${TAG#v}"
+          sha="$(git rev-parse "$TAG^{commit}")" # the commit, also for an annotated tag
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$TAG ($sha) is not on main"
+            exit 1
+          fi
+          # ci.yml passed for this commit, or for the one a merge brought in (the pull request's head, which ci.yml
+          # tested) when its files are the same: main had nothing of its own, so the code is what was tested.
+          tested=""
+          for candidate in "$sha" $(git rev-parse -q --verify "$sha^2" || true); do
+            git diff --quiet "$candidate" "$sha" || continue
+            passed="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$candidate&status=success" -q .total_count)"
+            if [ "$passed" != 0 ]; then tested="$candidate"; break; fi
+          done
+          if [ -z "$tested" ]; then
+            echo "::error::ci.yml has not passed for $sha (nor for the same files): run it on main (Actions, ci, Run workflow), then re-run this"
+            exit 1
+          fi
+          echo "ci.yml passed for $tested (the same files as $sha); version $version"
+          # The notes start with the tag's message (an annotated tag; the API, since the checkout may not keep it).
+          message=""
+          ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" -q '.object.type + " " + .object.sha')"
+          type="${ref%% *}" object="${ref#* }"
+          if [ "$type" = tag ]; then
+            message="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object" -q .message | sed '/-----BEGIN PGP SIGNATURE-----/,$d')"
+          fi
+          [ -n "$message" ] || message="(No tag message: write what changed here before publishing.)"
+          {
+            echo "version=$version"
+            echo "intro<<SAS_NOTES_END"
+            echo "SpatialAudioServer **{version}**, built from \`main\` at {sha}."
+            echo
+            echo "$message"
+            echo "SAS_NOTES_END"
+          } >> "$GITHUB_OUTPUT"
+
+  packages:
+    needs: check
+    uses: ./.github/workflows/packages.yml
+    with:
+      kind: release
+      tag: ${{ github.ref_name }}
+      version: ${{ needs.check.outputs.version }}
+      intro: ${{ needs.check.outputs.intro }}

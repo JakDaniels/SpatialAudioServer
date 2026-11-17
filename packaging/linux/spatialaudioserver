@@ -1,0 +1,46 @@
+#!/bin/sh
+# spatialaudioserver: the server's administration commands (PACKAGING-PLAN.md, code change 3), run the way the
+# service runs: as its user and with its environment, so they see the same configuration and database and the
+# files they write stay the service's.
+#
+#   sudo spatialaudioserver apikey create <label> [--expires 90d|date] | list | revoke <id>
+#   sudo spatialaudioserver admin set-password | clear-password | hash-password
+#   spatialaudioserver --version | --help
+#
+# The server itself runs as the systemd service (systemctl start spatialaudioserver), not from here.
+set -eu
+
+program=/usr/lib/spatialaudioserver/SpatialAudioServer
+user=spatialaudio
+environment=/etc/spatialaudioserver/environment
+
+case "${1:-}" in
+  apikey|admin) ;;
+  --version) exec "$program" --version ;;
+  --help|-h)
+    sed -n '6,8s/^#   /usage: /p' "$0"
+    echo "The server runs as a service: systemctl start spatialaudioserver"
+    exit 0
+    ;;
+  *)
+    sed -n '6,8s/^#   /usage: /p' "$0" >&2
+    echo "The server runs as a service: systemctl start spatialaudioserver" >&2
+    exit 2
+    ;;
+esac
+
+if [ "$(id -u)" -eq 0 ]; then
+  as_service_user="runuser -u $user --"
+elif [ "$(id -un)" = "$user" ]; then
+  as_service_user=""
+else
+  echo "spatialaudioserver: run it with sudo (it acts as the service user '$user')" >&2
+  exit 1
+fi
+
+# The service's environment file (KEY=value lines), exported to the program as systemd does for the service.
+set -a
+. "$environment"
+set +a
+cd /var/lib/spatialaudioserver
+exec $as_service_user "$program" "$@"

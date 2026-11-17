@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using SpatialAudioServer.Api;
+using SpatialAudioServer.Hosting;
 using SpatialAudioServer.Media;
 using SpatialAudioServer.Rooms;
 
@@ -39,6 +40,16 @@ public static class LoadTestProgram
 
     private static async Task<int> RunMainAsync(string[] args)
     {
+        if (args is ["--version"])
+        {
+            Console.WriteLine(AppVersion.Of(typeof(Program).Assembly));
+            return 0;
+        }
+        if (args is ["--help"] or ["-h"] or ["-?"] or ["/?"])
+        {
+            Console.WriteLine(Options.Usage);
+            return 0;
+        }
         Options options;
         try
         {
@@ -532,6 +543,7 @@ public static class LoadTestProgram
             "Usage: SpatialAudioServer.LoadTest --api-key KEY [--server http://host:5000] [--participants 4] [--rooms 1]\n" +
             "                                   [--duration 20] [--warmup 10] [--jitter-ms 100] [--insecure] [--engine a,b,...]\n" +
             "                                   [--talkers K] [--spatial]\n" +
+            "       SpatialAudioServer.LoadTest --version | --help\n" +
             "  The API key can also come from SAS_API_KEY. --insecure accepts the server's self-signed certificate.\n" +
             "  --engine runs the same load against each named mix engine in turn and prints a comparison\n" +
             "  (default: the server's default engine; GET /api/status lists them).\n" +

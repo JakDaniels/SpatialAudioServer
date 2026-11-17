@@ -1,6 +1,6 @@
-using System.Reflection;
 using Microsoft.Extensions.Options;
 using SpatialAudioServer.Configuration;
+using SpatialAudioServer.Hosting;
 using SpatialAudioServer.Media;
 using SpatialAudioServer.Media.Engines;
 using SpatialAudioServer.Rooms;
@@ -29,7 +29,7 @@ public sealed record GstStatusDto(bool Enabled, bool Ok, string? Version, IReadO
 public static class ControlApi
 {
     private static readonly string Version =
-        typeof(ControlApi).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown";
+        AppVersion.Informational;
 
     public static void MapControlApi(this IEndpointRouteBuilder app)
     {

@@ -1,0 +1,63 @@
+# Full tests (PACKAGING-PLAN.md "Branches and the GitHub workflows"): on pull requests into main, and by hand ("Run
+# workflow" on the Actions page, any branch). Not again on main after a merge: the merge commit has the same files as
+# the pull request's head, which this has tested (release.yml accepts that run). develop runs no CI by itself.
+# The jobs run in the prepared images from ci-images.yml (GStreamer and .NET already installed).
+# Still to come: the windows job (embedded GStreamer) and load-22.04 (needs the load tool .deb).
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  test:
+    name: test-${{ matrix.gstreamer }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        gstreamer: ['1.28', '1.24'] # 1.24: the floor for the server packages
+    container:
+      # Lower case: registry paths must be (expressions cannot lower-case the owner name).
+      image: ghcr.io/jakdaniels/sas-ci:${{ matrix.gstreamer }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: GStreamer and .NET
+        run: gst-inspect-1.0 --version && dotnet --version
+
+      # Full history: MinVer needs the tags and the commit count for the version.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ matrix.gstreamer }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}
+          restore-keys: nuget-${{ matrix.gstreamer }}-
+
+      - name: Build
+        run: dotnet build src
+
+      - name: Version
+        run: dotnet src/SpatialAudioServer/bin/Debug/net10.0/SpatialAudioServer.dll --version
+
+      # A hung test fails the run after 5 minutes instead of using up the job's time (no dump: too large to keep).
+      - name: Test
+        run: >
+          dotnet test src --no-build
+          --blame-hang-timeout 5m --blame-hang-dump-type none
+          --logger "console;verbosity=normal"

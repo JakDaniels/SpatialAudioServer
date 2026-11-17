@@ -21,8 +21,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   mixes, everyone else shares one encoder). Server Opus defaults: complexity 5, 40 ms frames.
   `dotnet test src` runs 65 tests, with the end-to-end suites run once per engine.
 - GStreamer 1.28.2 source is cloned (git-ignored) in `docs/reference/gstreamer` for reading element internals.
-- Load runs go from a Ubuntu 22.04 box using the committed self-contained tool (`scripts/loadtest-linux-x64/`,
-  rebuild with `scripts/build-loadtest.sh`). 32 people / 3 talkers: matrix-shared 49% of 4 cores (meets the
+- Load runs go from a Ubuntu 22.04 box using the self-contained tool (`scripts/loadtest-linux-x64/`, no longer
+  committed: build it with `scripts/build-loadtest.sh` and copy the folder). 32 people / 3 talkers: matrix-shared 49% of 4 cores (meets the
   < 60% gate), matrix 64%. Phase 2 done.
 - Firestorm viewer source (git-ignored) is in `docs/reference/phoenix-firestorm`; its WebRTC protocol is summarised
   in PLAN.md Phase 7 (viewer-style fake clients + `trickle:false` answers cover it in tests).
@@ -58,6 +58,9 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   `docs/running.md` (Linux + Windows). No Dockerfile for now. Windows run done 2026-11-14 (server + load tests pass;
   results in `docs/benchmarks.md`, which holds all benchmark numbers: keep PLAN.md to conclusions).
   Parked: the intermittent pairchains test failure; one unexplained test-host crash (PLAN.md Phase 5).
+
+- **Packaging (PACKAGING-PLAN.md) started:** day-to-day work is on the `develop` branch (no CI tests there; `main`
+  gets the full tests on pull requests). Versions from git tags via MinVer (`--version` on both programs); no tag yet.
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.

@@ -1,0 +1,36 @@
+# Draft packages for testing (PACKAGING-PLAN.md "Branches and the GitHub workflows"): by hand only, from develop.
+# They replace the files of the single pre-release "develop (draft)" (tag develop-draft, moved to the commit built):
+# release files do not count against the Actions storage that workflow artefacts would fill. Pre-release versions
+# only (0.2.1~alpha.0.N), so a draft is never mistaken for a release and the real one upgrades it cleanly.
+# The build and the tests are packages.yml, shared with release.yml. Windows minutes count double while private.
+name: drafts
+
+on:
+  workflow_dispatch:
+    inputs:
+      test:
+        description: Install and try the x64 packages on each distribution (about 2 minutes each)
+        type: boolean
+        default: true
+      windows:
+        description: Build and try the Windows MSIs (about 15 minutes, billed double)
+        type: boolean
+        default: true
+
+permissions:
+  contents: write # the develop (draft) release and its tag
+
+concurrency:
+  group: drafts
+  cancel-in-progress: false
+
+jobs:
+  packages:
+    if: github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/packages.yml
+    with:
+      kind: develop-draft
+      tag: develop-draft
+      intro: 'Draft packages for testing, built from `develop` at {sha}: **{version}**. Not a release.'
+      test: ${{ inputs.test }}
+      windows: ${{ inputs.windows }}

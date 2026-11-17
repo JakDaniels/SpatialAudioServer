@@ -1,7 +1,10 @@
 # Packaging and releases: plan
 
-Status: **plan only, nothing built yet** (2026-11-16). Decisions so far are marked **Decided**; open points are
-listed at the end. [PLAN.md](PLAN.md) stays the specification of the server itself.
+Status: **under way** (2026-11-16): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
+step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers; step 6 (Windows MSIs) built and
+tested in CI.
+Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
+specification of the server itself.
 
 ## Goals
 
@@ -22,8 +25,8 @@ listed at the end. [PLAN.md](PLAN.md) stays the specification of the server itse
 ## Supported systems
 
 **Decided:** the **server** on any `.deb`- or `.rpm`-based distribution that ships **GStreamer 1.24 or later**; the
-**load tool** also on **Ubuntu 22.04** (GStreamer 1.20), where it is already used for load runs (the committed
-self-contained build in `scripts/loadtest-linux-x64/` runs there). The first target to test is **Ubuntu 24.04**
+**load tool** also on **Ubuntu 22.04** (GStreamer 1.20), where it is already used for load runs (the
+self-contained build from `scripts/build-loadtest.sh` runs there). The first target to test is **Ubuntu 24.04**
 (GStreamer 1.24.2): a `.deb` for it comes first.
 
 | Package | GStreamer floor | Also on |
@@ -37,7 +40,7 @@ architecture installs on all of them, with its GStreamer dependencies at `>= 1.2
 | Family | Examples with GStreamer ≥ 1.24 (to confirm per release) | Package |
 |---|---|---|
 | Debian / Ubuntu | Ubuntu 24.04, 25.x, 26.04; Debian 13 | `.deb` |
-| Fedora / RHEL | Fedora 40 and later; RHEL / Rocky / Alma 10 (to check) | `.rpm` |
+| Fedora | Fedora 40 and later. **Not RHEL / Rocky / Alma 10:** their GStreamer has no `webrtcbin` (step 5) | `.rpm` |
 | openSUSE | Tumbleweed, Leap 16 (to check) | `.rpm`, different package names (see below) |
 
 **1.24 is the floor we must prove, not assume.** We develop on 1.28. There are two risks:
@@ -64,6 +67,7 @@ scripts.
 | Program (self-contained `linux-x64` / `linux-arm64` publish) | `/usr/lib/spatialaudioserver/` |
 | Command wrapper (`spatialaudioserver apikey …`, `admin …`) | `/usr/bin/spatialaudioserver` |
 | Configuration (a config file: kept and merged on upgrade) | `/etc/spatialaudioserver/appsettings.json` |
+| Where things are, for the unit and the wrapper (a config file) | `/etc/spatialaudioserver/environment` |
 | Data: SQLite database, `keys/`, dev certificate | `/var/lib/spatialaudioserver/` (owned by the service user) |
 | Service | `/usr/lib/systemd/system/spatialaudioserver.service` (the hardened unit from `docs/internet.md`) |
 | Docs | `/usr/share/doc/spatialaudioserver/` (README, running.md, internet.md, licences) |
@@ -77,7 +81,7 @@ scripts.
 
 **Dependencies, by family:**
 
-| | Debian / Ubuntu | Fedora / RHEL | openSUSE |
+| | Debian / Ubuntu | Fedora | openSUSE |
 |---|---|---|---|
 | core and base | `gstreamer1.0-plugins-base` (≥ 1.24) | `gstreamer1-plugins-base` | `gstreamer-plugins-base` |
 | webrtcbin, audiomixmatrix, … | `gstreamer1.0-plugins-bad` | `gstreamer1-plugins-bad-free` | `gstreamer-plugins-bad` |
@@ -85,9 +89,9 @@ scripts.
 | ICE (libnice) | `gstreamer1.0-nice` | `libnice-gstreamer1` | `gstreamer-plugin-libnice` (to check) |
 | other | `libsqlite3-0`, `libicu*` (or invariant globalisation) | `sqlite-libs`, `libicu` | `libsqlite3-0`, `libicu` |
 
-The names differ between Fedora/RHEL and openSUSE, so either build **two `.rpm` variants**, or use capability
+The names differ between Fedora and openSUSE, so either build **two `.rpm` variants**, or use capability
 dependencies that both provide. Fedora generates `gstreamer1(element-webrtcbin)` provides automatically; whether
-openSUSE has an equivalent is to check. **Proposal:** a Fedora/RHEL `.rpm` first, openSUSE afterwards. The binding
+openSUSE has an equivalent is to check. **Proposal:** a Fedora `.rpm` first, openSUSE afterwards. The binding
 calls the GStreamer libraries directly, so GObject Introspection typelibs (`gir1.2-*`) are not needed at run time
 (to confirm in the 1.24 test).
 
@@ -175,11 +179,15 @@ release of ours). On Linux the distribution updates GStreamer, so Linux packages
 ## Versioning
 
 - **Decided:** versions come from git tags, so a release is made by pushing a tag.
-- **Proposal:** [MinVer](https://github.com/adamralph/minver), one package reference in `Directory.Build.props`, with
-  no code changes:
+- **Done (2026-11-16, on `develop`):** [MinVer](https://github.com/adamralph/minver) 8.0.0 in
+  `src/Directory.Build.props`, so the server, the load tool and the tests share one version:
   - tag `v0.2.0` → every build of that commit is `0.2.0`;
   - builds after it are `0.2.1-alpha.0.N` (N commits on);
-  - the commit hash goes into `InformationalVersion`, as today (`/api/status` and the OpenSim module show it).
+  - before the first tag (`MinVerMinimumMajorMinor` 0.2): `0.2.0-alpha.0.N`, N counted from the first commit;
+  - the SDK appends `+<commit>` to `InformationalVersion`, which `/api/status`, the viewer data and both programs'
+    `--version` show (`Hosting/AppVersion.cs`);
+  - workflows must check out the full history (`fetch-depth: 0`), or MinVer cannot find the tag and the height.
+- **The first tag** `v0.2.0` goes on `main` when `develop` is first merged there.
 - SemVer tags: `vMAJOR.MINOR.PATCH`, with optional pre-releases `v0.2.0-rc.1`. Until 1.0, minor versions may break
   compatibility; the release notes say when, especially for the control API that the OpenSim module uses.
 - **Mapping to the package formats:**
@@ -197,16 +205,22 @@ release of ours). On Linux the distribution updates GStreamer, so Linux packages
 
 Each of these is small, and each needs its own change and tests when the work starts:
 
-1. **Configuration from `/etc` and `ProgramData`:** the program looks for `appsettings.json` next to itself today.
-   The packages need it in `/etc/spatialaudioserver/` and `C:\ProgramData\SpatialAudioServer\`, e.g. an environment
-   variable or command-line switch naming the configuration directory, set by the service unit. Environment
-   variables already work for single settings.
-2. **Data outside the program folder:** `Storage:DatabasePath` already takes a path, and the cookie `keys/` and the
-   dev certificate follow it. Packages set it to `/var/lib/spatialaudioserver/spatialaudio.db` (Windows:
-   `ProgramData`). The dev certificate path needs the same treatment.
-3. **The command wrapper:** `spatialaudioserver apikey …` run by an administrator must use the service's
-   configuration and database, and run as the service user (so files stay owned by it). The wrapper does
-   `sudo -u spatialaudio …` with the same environment the unit sets.
+1. **Configuration from `/etc` and `ProgramData`** (done 2026-11-16): `SAS_CONFIG_DIR` names a directory whose
+   `appsettings.json` (and `appsettings.{Environment}.json`) apply on top of the program's own and below
+   environment variables (`Hosting/ConfigDirectory.cs`). Packages: `/etc/spatialaudioserver`,
+   `C:\ProgramData\SpatialAudioServer`.
+2. **Data outside the program folder** (done, no code needed): `Storage:DatabasePath` and
+   `Server:DevCertificatePath` take any path, and the cookie `keys/` follow the database. The Linux package sets
+   both in `/etc/spatialaudioserver/environment` (below `/var/lib/spatialaudioserver/`).
+3. **The command wrapper** (done): `packaging/linux/spatialaudioserver` runs `apikey …` and `admin …` as the
+   service user (`runuser` from root, or directly as that user), with the service's environment file, so commands
+   see the same configuration and database and the files stay the service's. With no command it prints usage:
+   the server itself runs as the service. The files in `packaging/linux/`:
+   - `spatialaudioserver.service`: the hardened unit, `EnvironmentFile=/etc/spatialaudioserver/environment`,
+     `StateDirectory=spatialaudioserver` (so systemd creates `/var/lib/spatialaudioserver` for the service user);
+   - `environment`: where things are (configuration directory, database, dev certificate), read by the unit and
+     the wrapper alike;
+   - `appsettings.json`: the commented template for `/etc/spatialaudioserver/appsettings.json`.
 4. **Windows: the embedded GStreamer.** At start-up, if `<install dir>\gstreamer\` exists, set `GST_PLUGIN_PATH`,
    `GST_PLUGIN_SYSTEM_PATH`, `GST_REGISTRY` and the DLL search path for the process, before GStreamer initialises
    (server and load tool).
@@ -226,7 +240,7 @@ Each of these is small, and each needs its own change and tests when the work st
 - **No self-hosted runner.**
 
 ```
-.github/workflows/ci.yml        pull requests into main, and pushes to main (skipped for docs-only changes)
+.github/workflows/ci.yml        pull requests into main (skipped for docs-only changes), and by hand
   test-1.28   ubuntu:26.04 container (GStreamer 1.28): build, full test suite (≈ 8 min)
   test-1.24   ubuntu:24.04 container (GStreamer 1.24, the floor): the same
   windows     windows-latest: fetch the pinned GStreamer (hash checked), embed it, full test suite against it
@@ -238,13 +252,21 @@ Each of these is small, and each needs its own change and tests when the work st
   draft       replace the files of the single pre-release "develop (draft)" with these, and SHA256SUMS
 
 .github/workflows/release.yml   on a tag v* on main (a commit whose ci.yml run was green)
-  linux, windows   as in drafts.yml, with the release version
-  release     SHA256SUMS; while private: a draft GitHub release, checked and published by hand;
-              once public: the published release, then the GitHub Pages apt/yum repositories updated
+  check       the tag's form, on main, ci.yml green for its commit
+  packages    packages.yml, as for drafts, with the release version: while private a draft GitHub release, checked
+              and published by hand; once public: the published release, then the GitHub Pages apt/yum repositories
+
+.github/workflows/packages.yml  reusable (workflow_call): linux, test, windows, shared by drafts.yml and release.yml
 
 .github/workflows/gstreamer-watch.yml   weekly: an issue when GStreamer has a newer release than the Windows pin
 ```
 
+- **Running (2026-11-16):** `ci.yml` with `test-1.28` and `test-1.24` (GStreamer and .NET already installed
+  in the prepared images). `develop` is the repository's default branch while private, so "Run workflow" runs it
+  by hand on `develop`. Still to come: `windows`, `load-22.04`.
+  - **Both pass the full suite** (183 tests) on the private repository's 2-core runners, about 12 minutes per job.
+  - **GStreamer 1.24 is supported** (Ubuntu 24.04's 1.24.2). Getting there needed three changes, listed in PLAN.md
+    "GStreamer version differences".
 - **Versions** come from MinVer (see Versioning):
   - Draft builds are never on a release tag, so they get pre-release versions such as `0.2.1-alpha.0.14`, 14 commits
     after `v0.2.0`. A draft cannot be mistaken for a release.
@@ -267,8 +289,11 @@ Each of these is small, and each needs its own change and tests when the work st
     GitHub's free arm64 Linux runners can run the suite there.
 - **Caching:**
   - NuGet packages, and the pinned GStreamer download for Windows.
-  - **Prepared container images** (`ghcr.io/<owner>/sas-ci:1.24`, `:1.28`, `:22.04`, with GStreamer and .NET
-    installed), so a test job does not spend 3–4 minutes installing them. Rebuilt only when their Dockerfile changes.
+  - **Prepared container images** (done 2026-11-16): `ghcr.io/<owner>/sas-ci:1.28`, `:1.24` (GStreamer and the .NET
+    SDK installed) and `:22.04` (GStreamer only, for the load tool `.deb`), from `.github/ci-images/Dockerfile`.
+    `ci-images.yml` builds and pushes them when the Dockerfile changes, monthly (security updates, .NET patches) and
+    by hand. They save about a minute per job (installing took ~40 s, .NET ~15 s) and a dependency on outside
+    downloads mid-run. The packages stay private with the repository; ci.yml pulls them with its own token.
 - **Load tool on 22.04:**
   - The `load-22.04` job installs the load tool `.deb` and checks it starts and finds its GStreamer elements. That
     needs `sas-loadtest --check`, a small addition.
@@ -323,7 +348,7 @@ Each of these is small, and each needs its own change and tests when the work st
 
 | Run | Minutes (Windows counted ×2) | How often |
 |---|---|---|
-| `ci.yml`: a pull request into main (1.28 and 1.24 suites ≈ 20, Windows suite ≈ 25 ×2, 22.04 check ≈ 3) | ≈ 75 | per merge; another ≈ 75 if the push to main runs it again (it can be skipped when the pull request's run was for the same commit) |
+| `ci.yml`: a pull request into main (1.28 and 1.24 suites ≈ 20, Windows suite ≈ 25 ×2, 22.04 check ≈ 3) | ≈ 75 | per merge; not again on main (2026-11-17: the merge has the pull request's files, already tested) |
 | `drafts.yml`, Linux only | ≈ 5 | when you want something to test |
 | `drafts.yml`, Linux and Windows | ≈ 25 | likewise |
 | `release.yml` | ≈ 25 | per release |
@@ -351,9 +376,94 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
 3. **Code changes 1–3** (configuration directory, data paths, command wrapper).
 4. **`drafts.yml` with the `.deb` for Ubuntu 24.04 (x64)**, server and load tool: test by hand on 24.04; the load tool
    `.deb` also on 22.04.
-5. The rest of Linux: `.rpm` (Fedora/RHEL), arm64, openSUSE.
+   *Built and tested (2026-11-16):* `scripts/build-packages.sh [x64|arm64]` (the .NET publishes, then nfpm
+   with `packaging/linux/nfpm-server.yaml` and `nfpm-loadtest.yaml`; also by hand, with nfpm installed) and
+   `drafts.yml` (by hand on `develop`, nfpm 2.48.0 pinned by checksum). Packages are self-contained with
+   invariant globalisation (no libicu dependency); file modes are normalised (0644, programs 0755). The load tool
+   is `/usr/bin/sas-loadtest`, a launcher for the real program beside its voices.
+   Release files are named with the SemVer version (`spatialaudioserver_0.2.1-alpha.0.5_amd64.deb`), since GitHub
+   turns `~` in a file name into `.`; the version inside the package keeps its `~`.
+   Tested by hand: on Ubuntu 24.04 (GStreamer 1.24.2) the server package installs (with the dependencies apt
+   pulls in, mostly for `gstreamer1.0-plugins-bad`), the wrapper sets the admin password and creates keys through
+   sudo, the service starts, the admin UI and web client work, an upgrade to the next draft restarts the service
+   and keeps keys and settings, and remove (data kept) and purge (data and `/etc` gone, the `spatialaudio` user
+   kept) behave. The load tool package installs and passes load runs on 24.04 and on 22.04 (GStreamer 1.20).
+5. The rest of Linux: `.rpm` (Fedora), arm64, openSUSE.
+   *Built and tested in CI (2026-11-16; no machines here for them):* the `.rpm` for Fedora comes from the
+   same nfpm files (`overrides: rpm:` with Fedora's package names), and arm64 is
+   cross-built on the x64 runner (`build-packages.sh arm64`: `aarch64` binaries checked). `drafts.yml` then
+   installs the x64 packages in clean containers of Ubuntu 24.04 and 26.04, Debian 13 and Fedora (latest), and the load tool alone on Ubuntu 22.04, and tries them with
+   `scripts/test-packages.sh`: the wrapper creates a key as the service user, the server starts as that user with
+   the service's environment and reports no missing GStreamer elements, and a short load run passes. Not covered
+   there: systemd itself (containers have none), SELinux on Fedora (the program under `/usr/lib` gets the
+   `lib_t` label; to check on a real host whether the service needs a context of its own), and arm64 (no arm64
+   runners while private). openSUSE: later, as its own variant.
+   - **Passed every check** (second run): Ubuntu 24.04 and 26.04, Debian 13 and Fedora (server and load tool),
+     Ubuntu 22.04 (load tool).
+   - **RHEL 10 and rebuilds are not supported (decided 2026-11-16).** The first CI run on Rocky Linux 10 installed
+     the packages (GStreamer 1.26.7, EPEL and CRB enabled), but the server stopped at start-up: "Missing GStreamer
+     elements: webrtcbin". RHEL builds `gstreamer1-plugins-bad-free` without it, and EPEL does not add it. That
+     would change if RHEL or EPEL ships webrtcbin, or with a GStreamer bundled into a RHEL package, as the Windows
+     MSI will do (a larger job with its own security-update duty); not planned for now.
 6. **Windows:** code change 4, the GStreamer selection and the server and load tool MSIs, tested on Windows.
+   *Built and tested in CI (2026-11-17); to test by hand on Windows:*
+   - **Code change 4** (`Media/EmbeddedGStreamer.cs`): with `gstreamer\bin` beside the program, the process uses
+     only that GStreamer (plugin path, scanner, its own registry cache in the account's local app data, `PATH`,
+     GstSharp's `NativeLoader.Configure`). Plus an optional `environment` file beside the program
+     (`Hosting/ProgramEnvironment.cs`), the Windows counterpart of `/etc/spatialaudioserver/environment`: the MSI's
+     points configuration and data at `%ProgramData%\SpatialAudioServer`, for the service and for an
+     administrator's `SpatialAudioServer.exe apikey …` alike.
+   - **GStreamer:** 1.28.8, pinned by SHA-256. From 1.28 GStreamer ships one Inno Setup `.exe` per architecture
+     (517 MB for x64; no MSIs or merge modules any more). CI installs it silently into a scratch folder, and
+     `packaging/windows/gather-gstreamer.py` copies the listed plugins, GStreamer's libraries and every DLL they
+     import (walked with pefile; the Microsoft C++ runtime from System32 if GStreamer lacks it), the plugin
+     scanner and the licence texts. The scratch install is then removed, so the test proves the MSIs use their own.
+   - **MSIs** (WiX 6.0.2, `packaging/windows/`; WiX 7 needs its maintenance-fee EULA accepted):
+     - server: the service as the virtual account `NT SERVICE\SpatialAudioServer` (decided), started on install;
+       `C:\ProgramData\SpatialAudioServer` readable by it, `data\` writable by it, both closed to other users
+       (SDDL with the service's SID, which is derived from its name); the site `appsettings.json` installed once and
+       kept, with the media ports 40000–40999; the program on `PATH`; firewall rules for TCP 5000–5001 and UDP
+       40000–40999 as an optional feature, off by default (decided); upgrades in place.
+     - load tool: program, voices and GStreamer in `C:\Program Files\SpatialAudioServer Load Test\`, on `PATH`,
+       with `sas-loadtest.cmd`.
+     - MSI versions: `0.2.1-alpha.0.5` becomes `0.2.1.5` (MSI compares three parts; same-version upgrades allowed).
+   - **Test** (`scripts/test-windows.ps1`, on the runner): install with the firewall rules, the service's account,
+     an API key from the command, `/api/status` with every element, the load tool's run, uninstall (data kept).
+     **Passed** on `windows-latest` (second run; the first stopped at MinVer's version before a restore): 26 plugins
+     and 65 DLLs, 37 MB of GStreamer; MSIs 53 MB (server) and 58 MB (load tool); the service as its virtual account,
+     both firewall rules, GStreamer 1.28.8 with no missing elements (the build's GStreamer removed first), the load
+     run 100 % heard; about 6 minutes. WiX warns ICE61 (same-version upgrades, intended) and ICE60 (cosmetic).
+     **Tested by hand** on Windows (2026-11-17): alpha.0.91 installed (feature tree, service account, embedded
+     GStreamer used although another is installed, ProgramData ACLs, browser client, admin UI, firewall feature
+     added later, load tool, uninstall keeping the data), then alpha.0.94 upgraded over it. Firewall rules named
+     just `SpatialAudioServer` / `SpatialAudioServer.LoadTest` are Windows's own, made by "Allow access" on its
+     prompt for a program run by hand; they are not the MSI's and an uninstall leaves them.
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
+   - **Written (2026-11-17), not yet run:** the build and the package tests moved from `drafts.yml` into the
+     reusable `packages.yml` (inputs: the kind of release, its tag, the expected version, the notes' first part), so
+     drafts and releases build the same way; `drafts.yml` now only calls it. `release.yml` runs on a pushed tag `v*`:
+     - a `check` job stops unless the tag is `vMAJOR.MINOR.PATCH[-pre]`, its commit is on `main`, and `ci.yml` passed
+       for that commit (a docs-only commit skips `ci.yml`: run it by hand on main, then re-run the release);
+     - `packages.yml` then builds everything, checks the build's version equals the tag's, makes a **draft**
+       release "SpatialAudioServer X.Y.Z" (a pre-release for `-rc.1` etc.), tests the packages from it (drafts
+       cannot be found by tag, so by the release's API address) and adds the MSIs. A re-run replaces an
+       unpublished draft; a published release is never touched.
+   - **Release notes (open point 7, decided):** the annotated tag's message, under a line naming the version and
+     commit, then the install instructions; edited on the draft if needed, then published by hand.
+   - **One CI run per release (2026-11-17):** `ci.yml` no longer runs on pushes to main. A merge from develop,
+     when main has nothing of its own, has exactly the files of the pull request's head, which the pull request's
+     run tested; `release.yml` and the script accept that run (checked with `git diff` between the two commits).
+     If the files differ (a commit made on main) or nothing was tested (a docs-only pull request), CI runs on main.
+   - **Making a release:** open a pull request from `develop` into `main` and merge it once green (by hand, as
+     decided). Then `scripts/make-release.sh 0.2.0` (`--dry-run` first) from the repository root: it takes main's
+     latest commit on GitHub, finds the passed `ci.yml` run for it (the pull request's; it starts one on main and
+     waits when there is none), asks for the tag message in an editor, pushes only the tag, and waits for the
+     draft release. Then check the draft and publish it. (By hand: `git tag -a v0.2.0 <main commit>` and
+     `git push origin v0.2.0`.)
+   - **README badges for releases:** a row of static "download" badges per platform (Ubuntu/Debian, Fedora,
+     Windows), each linking to the latest release's files, plus the release workflow's status badge. GitHub's own
+     badges are per workflow, not per job, so status per platform would need the workflow to write its own SVGs
+     (e.g. to a `badges` branch); not wanted for drafts, whose run page already shows each platform.
 8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,
    and the GitHub Pages apt/yum repository.
 
@@ -366,13 +476,13 @@ it gets its own release (a zip per OpenSim version) in its own repository.
 
 ## Open points
 
-1. **The 1.24 test result** (order step 2) decides Ubuntu 24.04 and RHEL/Rocky 10.
+1. ~~The 1.24 test result~~: passed (2026-11-16), so Ubuntu 24.04 stays a target (RHEL 10 is out for another reason: step 5).
 2. **openSUSE:** a separate `.rpm` variant, or capability dependencies, or not at first.
 3. **MSI versions for pre-releases:** none, or a counted build number.
 4. **Windows service account:** `LocalService`, or a virtual account (`NT SERVICE\SpatialAudioServer`), which can
    own `ProgramData\SpatialAudioServer` alone.
 5. **Firewall rules on Windows:** add them by default, or leave them as an installer option.
 6. **Package names:** `spatialaudioserver` and `spatialaudioserver-loadtest`, with the command `sas-loadtest`.
-7. **Release notes:** a `CHANGELOG.md` kept by hand, or notes from the tag message.
+7. ~~**Release notes:**~~ the tag message, edited on the draft (step 7).
 8. **The repository name and owner for the Pages packages** (`sas-packages`), and whether to try framework-dependent
    packages to save space.

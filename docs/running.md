@@ -71,8 +71,11 @@ For testing, a fixed key can be set in configuration instead (`Auth:ApiKeys`, se
 ## 3. Configuration
 
 `appsettings.json` next to the program, overridden by `appsettings.{Environment}.json` (e.g. the git-ignored
-`appsettings.Development.json` that `dotnet run` uses) and then by environment variables, with `__` between levels:
-`Server__HttpsPort=443`, `Auth__ApiKeys__0=devkey`, `Media__IdleRoomTimeout=00:01:00`.
+`appsettings.Development.json` that `dotnet run` uses), then by the same two files in the directory named by
+`SAS_CONFIG_DIR` if it is set (the packages use `/etc/spatialaudioserver`, so site settings live apart from the
+program and survive upgrades), and then by environment variables, with `__` between levels:
+`Server__HttpsPort=443`, `Auth__ApiKeys__0=devkey`, `Media__IdleRoomTimeout=00:01:00`. The JSON files may contain
+`//` comments.
 
 | Setting | Default | |
 |---|---|---|
@@ -93,6 +96,7 @@ For testing, a fixed key can be set in configuration instead (`Auth:ApiKeys`, se
 | `Limits:SignalRequestsPerSecondPerAddress` | 300 | per client address on `/signal/…`; 0 = off |
 | `Media:IdleRoomTimeout` | 30 s | a room's pipeline starts with its first participant and stops this long after the last leaves |
 | `Media:DeadConnectionTimeout` | 10 s | a connection failed/disconnected this long is removed (`connection-lost`) |
+| `Media:InactiveConnectionTimeout` | 30 s | a connection that has delivered no audio this long counts as failed (GStreamer 1.24's only way to notice a vanished client) |
 | `Media:Engine`, `Media:SpatialEngine` | `matrix-shared`, `matrix` | default mix engine for new rooms |
 | `Media:IceServers` | `[]` | STUN/TURN (not needed on a LAN); a TURN entry takes `Username`/`Credential`, or a `Secret` (coturn `static-auth-secret`) for per-client credentials valid `CredentialLifetime` (12 h) |
 | `Media:Network:MinPort`, `MaxPort` | any | the media port range (UDP and ICE-TCP), for firewalls |
@@ -155,8 +159,8 @@ from the same folder before starting it, so they use the same `data\spatialaudio
 
 ## 6. Load tool
 
-The load tool needs GStreamer too. On Linux use the self-contained build in `scripts/loadtest-linux-x64/` (see its
-README). On Windows run it from the repository:
+The load tool needs GStreamer too. On Linux use the self-contained build made by `scripts/build-loadtest.sh` in
+`scripts/loadtest-linux-x64/` (see its README). On Windows run it from the repository:
 
 ```powershell
 $env:SAS_API_KEY = "sas_..."

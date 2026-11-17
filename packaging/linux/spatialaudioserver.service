@@ -1,0 +1,27 @@
+# The packaged service (PACKAGING-PLAN.md): the hardened unit from docs/internet.md, with the package's paths.
+# Local changes: sudo systemctl edit spatialaudioserver (e.g. AmbientCapabilities=CAP_NET_BIND_SERVICE to bind 443).
+[Unit]
+Description=SpatialAudioServer (WebRTC audio conferencing)
+Documentation=file:///usr/share/doc/spatialaudioserver/running.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=spatialaudio
+Group=spatialaudio
+EnvironmentFile=/etc/spatialaudioserver/environment
+ExecStart=/usr/lib/spatialaudioserver/SpatialAudioServer
+WorkingDirectory=/var/lib/spatialaudioserver
+# /var/lib/spatialaudioserver, owned by the service user and writable despite ProtectSystem=strict.
+StateDirectory=spatialaudioserver
+StateDirectoryMode=0750
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+TimeoutStopSec=30
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

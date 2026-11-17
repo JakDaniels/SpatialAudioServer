@@ -2,7 +2,9 @@
 
 `SpatialAudioServer.LoadTest` fills rooms on a running server with fake WebRTC clients, each sending its own tone. It checks
 that every client hears everyone else and not itself, and it reports the server's CPU, memory and threads from
-`/api/status`. It is a single file with .NET built in. Rebuild it with `scripts/build-loadtest.sh`.
+`/api/status`. It is a single file with .NET built in. It is not in the repository (since 2026-11-16): build it with
+`scripts/build-loadtest.sh` on a machine with the .NET SDK, which puts it in this folder, then copy the whole folder
+(with `voices/`) to the load machine. Later the draft and release packages provide it (PACKAGING-PLAN.md).
 
 Run it on a different machine from the server, because the fake clients cost about as much CPU as the server does.
 A 32-person run needs roughly 2.5 free cores.

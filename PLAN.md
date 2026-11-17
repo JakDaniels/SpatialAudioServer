@@ -205,7 +205,7 @@ src/SpatialAudioServer.Tests/    xUnit unit + integration tests (WebApplicationF
 src/SpatialAudioServer.LoadTest/ load tool: GStreamer fake clients (FakeClient, ToneMeter, bot voices); the tests use it too
 spikes/WebRtcEcho/               Phase 0 spike (not part of the solution)
 scripts/                         setup-ubuntu.sh, build-loadtest.sh, render-voices.py,
-                                 loadtest-linux-x64/ (committed self-contained load tool + voices)
+                                 loadtest-linux-x64/ (voices, README; the self-contained load tool is built here, not committed)
 docs/                            running.md (Linux/Windows run docs), benchmarks.md (load-test results), design notes;
                                  reference/ (git-ignored sources)
 ```
@@ -344,7 +344,11 @@ tested without GStreamer.
      client vanishes, the server's webrtcbin reports `failed` (no `disconnected` first) after ~27 s, when ICE
      consent freshness lapses (RFC 7675; libnice's 30 s, not configurable). So removal comes ~27 s + timeout after
      the client goes. A re-offer resets the clock (state goes back to connecting); a replaced endpoint's late state
-     reports are ignored.
+     reports are ignored. GStreamer 1.24 has no consent freshness (its connection stays "connected" for ever), so
+     there is also an inactivity rule on every version (2026-11-16): a connected participant that has delivered no
+     audio for `Media:InactiveConnectionTimeout` (30 s) is reported failed, and connected again if audio returns.
+     Clients send RTP all the time, also when muted (silence or DTX frames); confirmed with Firestorm 7.2
+     (2026-11-16: mic off for over a minute, both region connections stayed connected).
    - Still to do: TURN tested for real; Firefox + Chrome manual tests on the LAN.
    - **Parked (pairchains only):** the user expects pairchains won't be efficient enough, so its issues are parked;
      it stays in the engine suites for comparison. A second intermittent case (2026-11-13, 1 in ~5 full runs):
@@ -792,8 +796,17 @@ tested without GStreamer.
 
 - **Binding maintenance:** GstSharp.Net has effectively one maintainer; all GStreamer use stays behind `Media/`, and
   GirCore is the fallback.
-- **GStreamer version differences:** minimum 1.24, developed on 1.28.2; webrtcbin keeps getting fixes. ICE
-  port-range / NAT 1:1 control may be needed for public deployment.
+- **GStreamer version differences:** minimum 1.24, developed on 1.28.2; webrtcbin keeps getting fixes. CI runs the
+  full suite on both (PACKAGING-PLAN.md). What 1.24 (Ubuntu 24.04's 1.24.2) needed, found by CI on 2026-11-16:
+  - **Answering:** 1.24 creates a remote offer's transceivers only with the answer, so `get-transceiver` finds none
+    after the offer. Requesting `sink_{mline}` first creates one locked to that m-line (`WebRtcBin.PrepareSendPad`);
+    1.28 keeps its own path.
+  - **Dead clients:** 1.24 has no ICE consent freshness, so a vanished client stays "connected"; the inactivity
+    rule (`Media:InactiveConnectionTimeout`, see Phase 5 "Dead connections") covers it, on every version.
+  - **ICE threads:** 1.24 stops a connection's ICE thread only when its ICE object is finalised (1.28 closes it on
+    the way to NULL: `gst_webrtc_ice_close`, since 1.28). Each removed webrtcbin is now released at once; the ICE
+    object then still waits for a garbage collection (some managed wrapper refers to it), which a busy server runs
+    regularly. The churn tests collect before counting threads.
 - **Windows:** needs the official MSVC GStreamer runtime (full install: gst-plugins-bad for webrtc, libnice, dtls,
   srtp). Verified 2026-11-14: the binding finds it and the server runs, load tests pass.
 - **CPU at scale:** encoders per listener dominate; measured in [docs/benchmarks.md](docs/benchmarks.md). Distance

@@ -1,0 +1,52 @@
+# Builds the prepared CI images (.github/ci-images/Dockerfile) and pushes them to the GitHub container registry,
+# where ci.yml pulls them. Runs when the Dockerfile changes, monthly (Ubuntu security updates and .NET patch
+# releases), and by hand ("Run workflow"; needed once before ci.yml can use the images).
+name: ci-images
+
+on:
+  push:
+    branches: [develop, main]
+    paths: ['.github/ci-images/**', '.github/workflows/ci-images.yml']
+  schedule:
+    - cron: '17 4 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    name: sas-ci:${{ matrix.tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: '1.28'
+            base: ubuntu:26.04
+            dotnet: '1'
+          - tag: '1.24'
+            base: ubuntu:24.04
+            dotnet: '1'
+          - tag: '22.04'
+            base: ubuntu:22.04
+            dotnet: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and push
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Registry paths must be lower case; the owner name may not be.
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sas-ci:${{ matrix.tag }}"
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker build \
+            --build-arg BASE=${{ matrix.base }} \
+            --build-arg WITH_DOTNET=${{ matrix.dotnet }} \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            -t "$image" .github/ci-images
+          docker push "$image"
