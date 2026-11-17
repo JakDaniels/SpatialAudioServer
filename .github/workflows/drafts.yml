@@ -210,3 +210,20 @@ jobs:
             [IO.File]::AppendAllText("$PWD\SHA256SUMS", "$((Get-FileHash $msi -Algorithm SHA256).Hash.ToLowerInvariant())  $($msi.Name)`n")
           }
           gh release upload develop-draft (Get-ChildItem *.msi).Name SHA256SUMS --clobber
+          # The linux job wrote the notes before these existed: add the Windows part, before the checksum line.
+          $server = (Get-ChildItem SpatialAudioServer-[0-9]*-x64.msi).Name
+          $loadtest = (Get-ChildItem SpatialAudioServer-LoadTest-*-x64.msi).Name
+          $notes = (gh release view develop-draft --json body --jq .body) -join "`n"
+          $windows = @"
+          Windows 10 or later and Windows Server 2019 or later, x64. Each MSI carries its own GStreamer, so nothing
+          else needs installing. They are not signed: Windows may say "Windows protected your PC", then choose
+          "More info" and "Run anyway". The server runs as the SpatialAudioServer service; its firewall rules are
+          an optional feature.
+
+              $server
+              $loadtest
+
+          "@
+          $notes = $notes -replace '(?m)^Check the downloads', "$windows`nCheck the downloads"
+          [IO.File]::WriteAllText("$PWD\notes.md", $notes)
+          gh release edit develop-draft --notes-file notes.md
