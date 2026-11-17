@@ -252,9 +252,11 @@ Each of these is small, and each needs its own change and tests when the work st
   draft       replace the files of the single pre-release "develop (draft)" with these, and SHA256SUMS
 
 .github/workflows/release.yml   on a tag v* on main (a commit whose ci.yml run was green)
-  linux, windows   as in drafts.yml, with the release version
-  release     SHA256SUMS; while private: a draft GitHub release, checked and published by hand;
-              once public: the published release, then the GitHub Pages apt/yum repositories updated
+  check       the tag's form, on main, ci.yml green for its commit
+  packages    packages.yml, as for drafts, with the release version: while private a draft GitHub release, checked
+              and published by hand; once public: the published release, then the GitHub Pages apt/yum repositories
+
+.github/workflows/packages.yml  reusable (workflow_call): linux, test, windows, shared by drafts.yml and release.yml
 
 .github/workflows/gstreamer-watch.yml   weekly: an issue when GStreamer has a newer release than the Windows pin
 ```
@@ -437,6 +439,20 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      just `SpatialAudioServer` / `SpatialAudioServer.LoadTest` are Windows's own, made by "Allow access" on its
      prompt for a program run by hand; they are not the MSI's and an uninstall leaves them.
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
+   - **Written (2026-11-17), not yet run:** the build and the package tests moved from `drafts.yml` into the
+     reusable `packages.yml` (inputs: the kind of release, its tag, the expected version, the notes' first part), so
+     drafts and releases build the same way; `drafts.yml` now only calls it. `release.yml` runs on a pushed tag `v*`:
+     - a `check` job stops unless the tag is `vMAJOR.MINOR.PATCH[-pre]`, its commit is on `main`, and `ci.yml` passed
+       for that commit (a docs-only commit skips `ci.yml`: run it by hand on main, then re-run the release);
+     - `packages.yml` then builds everything, checks the build's version equals the tag's, makes a **draft**
+       release "SpatialAudioServer X.Y.Z" (a pre-release for `-rc.1` etc.), tests the packages from it (drafts
+       cannot be found by tag, so by the release's API address) and adds the MSIs. A re-run replaces an
+       unpublished draft; a published release is never touched.
+   - **Release notes (open point 7, decided):** the annotated tag's message, under a line naming the version and
+     commit, then the install instructions; edited on the draft if needed, then published by hand.
+   - **Making a release:** merge `develop` into `main` by pull request (green), then
+     `git tag -a v0.2.0 -m "What changed" <the merge commit> && git push origin v0.2.0`; check the draft
+     release, publish it.
    - **README badges for releases:** a row of static "download" badges per platform (Ubuntu/Debian, Fedora,
      Windows), each linking to the latest release's files, plus the release workflow's status badge. GitHub's own
      badges are per workflow, not per job, so status per platform would need the workflow to write its own SVGs
@@ -460,6 +476,6 @@ it gets its own release (a zip per OpenSim version) in its own repository.
    own `ProgramData\SpatialAudioServer` alone.
 5. **Firewall rules on Windows:** add them by default, or leave them as an installer option.
 6. **Package names:** `spatialaudioserver` and `spatialaudioserver-loadtest`, with the command `sas-loadtest`.
-7. **Release notes:** a `CHANGELOG.md` kept by hand, or notes from the tag message.
+7. ~~**Release notes:**~~ the tag message, edited on the draft (step 7).
 8. **The repository name and owner for the Pages packages** (`sas-packages`), and whether to try framework-dependent
    packages to save space.
