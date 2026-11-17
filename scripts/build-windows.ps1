@@ -14,7 +14,7 @@ function Run { param([string]$exe, [string[]]$arguments) & $exe @arguments; if (
 
 # Versions: SemVer from MinVer for the file names; MSI wants numbers only (major.minor.patch.build), so a pre-release
 # 0.2.1-alpha.0.5 becomes 0.2.1.5 (MSI compares the first three parts; the installers allow same-version upgrades).
-$version = (& dotnet msbuild src/SpatialAudioServer -t:MinVer -getProperty:MinVerVersion -nologo | Select-Object -Last 1).Trim()
+$version = (& dotnet msbuild src/SpatialAudioServer -restore -t:MinVer -getProperty:MinVerVersion -nologo | Select-Object -Last 1).Trim()
 if ($version -notmatch '^(\d+)\.(\d+)\.(\d+)(-.*\.(\d+))?$') { throw "Unexpected version '$version'" }
 $build = if ($Matches[5]) { $Matches[5] } else { '0' }
 $msiVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3]).$build"
