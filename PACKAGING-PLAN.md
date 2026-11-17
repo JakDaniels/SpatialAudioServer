@@ -252,15 +252,23 @@ Each of these is small, and each needs its own change and tests when the work st
   windows     fetch and embed the pinned GStreamer, publish win-x64 → WiX → server MSI, load tool MSI
   draft       replace the files of the single pre-release "develop (draft)" with these, and SHA256SUMS
 
-.github/workflows/release.yml   on a tag v* on main (a commit whose ci.yml run was green)
-  check       the tag's form, on main, ci.yml green for its commit
-  packages    packages.yml, as for drafts, with the release version: while private a draft GitHub release, checked
-              and published by hand; once public: the published release, then the GitHub Pages apt/yum repositories
+.github/workflows/release.yml   a pull request merged into main, or a tag v* pushed by hand (step 7)
+  prepare     ci.yml green for the commit; after a merge: the next version and the tag, notes from CHANGELOG.md
+  packages    packages.yml, as for drafts, with the release version: a draft GitHub release
+  publish     with the pull request's label "publish" (once public, then the GitHub Pages apt/yum repositories too)
+  changelog   after a merge: the version's section in CHANGELOG.md on develop
 
 .github/workflows/packages.yml  reusable (workflow_call): linux, test, windows, shared by drafts.yml and release.yml
 
 .github/workflows/gstreamer-watch.yml   weekly: an issue when GStreamer has a newer release than the Windows pin
 ```
+
+- **gstreamer-watch.yml (done 2026-11-17):** Mondays (and by hand). `scripts/gstreamer-latest.sh` finds the newest
+  stable GStreamer (even minor version) with an MSVC x86_64 installer and the SHA-256 GStreamer publishes beside it.
+  When that is newer than `GSTREAMER_VERSION` in packages.yml, it opens the issue "GStreamer X.Y.Z for the Windows
+  installers" with the two values to change (and, for a new series, a reminder to check the plugin list and try
+  the MSIs by hand). One open issue at a time: older ones are closed as superseded, and all are closed once the
+  pin is current. Linux packages use the distributions' GStreamer, so only the Windows pin is watched.
 
 - **Running (2026-11-16):** `ci.yml` with `test-1.28` and `test-1.24` (GStreamer and .NET already installed
   in the prepared images). `develop` is the repository's default branch while private, so "Run workflow" runs it

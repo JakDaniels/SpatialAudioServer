@@ -1,0 +1,86 @@
+# Weekly: is there a newer stable GStreamer than the one the Windows installers carry (the pin in packages.yml)?
+# If so, an issue "GStreamer X.Y.Z for the Windows installers" says what to change (version and SHA-256, the latter as
+# GStreamer publishes it beside the installer). One open issue at a time: an older one is closed when a newer
+# version appears. Linux packages use the distributions' GStreamer, so only the Windows pin is watched.
+name: gstreamer-watch
+
+on:
+  schedule:
+    - cron: '23 6 * * 1' # Mondays, 06:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare with the pin
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pinned="$(sed -n 's/^ *GSTREAMER_VERSION: *//p' .github/workflows/packages.yml | head -n 1)"
+          [ -n "$pinned" ] || { echo "::error::No GSTREAMER_VERSION in packages.yml"; exit 1; }
+          found="$(scripts/gstreamer-latest.sh)"
+          read -r latest sha <<< "$found"
+          echo "Pinned $pinned, newest stable $latest"
+          title="GStreamer $latest for the Windows installers"
+          suffix=" for the Windows installers"
+          current=false
+          [ "$(printf '%s\n%s\n' "$pinned" "$latest" | sort -V | tail -n 1)" != "$pinned" ] || current=true
+
+          # Open watch issues: when the pin is current, all are done; otherwise keep the one for this version and
+          # close any for an older one.
+          existing=""
+          while IFS=$'\t' read -r number issue_title; do
+            [ -n "$number" ] || continue
+            if $current; then
+              gh issue close "$number" -R "$GITHUB_REPOSITORY" --comment "Done: the Windows installers now carry GStreamer $pinned."
+            elif [ "$issue_title" = "$title" ]; then
+              existing="$number"
+            else
+              gh issue close "$number" -R "$GITHUB_REPOSITORY" --comment "Superseded: GStreamer $latest is out."
+            fi
+          done <<< "$(gh issue list -R "$GITHUB_REPOSITORY" --state open --search "in:title \"$suffix\"" \
+                        --json number,title -q ".[] | select(.title | endswith(\"$suffix\")) | [.number, .title] | @tsv")"
+
+          if $current; then
+            echo "Up to date."
+            exit 0
+          fi
+          if [ -n "$existing" ]; then
+            echo "Issue #$existing is already open for $latest."
+            exit 0
+          fi
+
+          series="${latest%.*}"
+          note="A bug-fix release in the same series: usually just the two values."
+          if [ "$series" != "${pinned%.*}" ]; then
+            note="**A new stable series** ($series, pinned ${pinned%.*}): read its release notes for changed or removed
+          plugins, check the list in \`packaging/windows/gather-gstreamer.py\`, and try the MSIs by hand as well."
+          fi
+          cat > body.md <<EOF
+          GStreamer **$latest** is out; the Windows installers carry **$pinned**.
+
+          $note
+
+          To move the pin, change in \`.github/workflows/packages.yml\` (windows job):
+
+              GSTREAMER_VERSION: $latest
+              GSTREAMER_SHA256: $sha
+
+          (the SHA-256 is the one GStreamer publishes beside the installer:
+          https://gstreamer.freedesktop.org/data/pkg/windows/$latest/msvc/gstreamer-1.0-msvc-x86_64-$latest.exe.sha256sum).
+          Then run drafts: its windows job checks the download against that value, builds the MSIs and tries them.
+
+          Release notes: https://gstreamer.freedesktop.org/releases/$series/
+
+          _Opened by gstreamer-watch.yml; closed by hand once the pin is moved, or by the workflow when a newer
+          version appears._
+          EOF
+          gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
