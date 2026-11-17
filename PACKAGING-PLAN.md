@@ -4,8 +4,8 @@ Status: **under way** (2026-11-17): steps 1–4 done (versioning, CI, code chang
 step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers; step 6 (Windows MSIs) built and
 tested in CI and by hand; step 7 done: **v0.2.0 released** (2026-11-17); step 8: **public** since 2026-11-17
 (settings done), and the signed apt/dnf repositories are live on GitHub Pages. The plan is complete; left are
-extras: openSUSE, the optional GitHub Support purge, and checks on real Fedora (SELinux, dnf from the
-repository) and arm64 hardware.
+extras: openSUSE ([#15](https://github.com/JakDaniels/SpatialAudioServer/issues/15)), the optional GitHub Support purge, and checks on real Fedora (SELinux, dnf from the
+repository) and arm64 hardware ([#16](https://github.com/JakDaniels/SpatialAudioServer/issues/16)).
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -174,7 +174,7 @@ release of ours). On Linux the distribution updates GStreamer, so Linux packages
 
 - **Windows:** unsigned, as decided. Expect SmartScreen's "Windows protected your PC" until the download builds
   reputation; the release notes and the README say how to get past it, and give the SHA-256 checksum to compare.
-  Free option to look at later: [SignPath Foundation](https://signpath.org/) signs open-source projects' releases at
+  Free option to look at later ([#17](https://github.com/JakDaniels/SpatialAudioServer/issues/17)): [SignPath Foundation](https://signpath.org/) signs open-source projects' releases at
   no cost (it needs the project to meet their criteria and the build to run in CI, which this plan has).
 - **Linux:** packages can be GPG-signed for free. Needed only once there is an apt/yum repository (below); for files
   attached to a release, the checksums are enough.
@@ -274,7 +274,7 @@ Each of these is small, and each needs its own change and tests when the work st
 
 - **Running (2026-11-16):** `ci.yml` with `test-1.28` and `test-1.24` (GStreamer and .NET already installed
   in the prepared images). `develop` was the repository's default branch while private (`main` once public), so "Run workflow" ran it
-  by hand on `develop`. Still to come: `windows`, `load-22.04`.
+  by hand on `develop`. Still to come: `load-22.04`, and a decision on `windows` ([#14](https://github.com/JakDaniels/SpatialAudioServer/issues/14)).
   - **Both pass the full suite** (183 tests) on the private repository's 2-core runners, about 12 minutes per job.
   - **GStreamer 1.24 is supported** (Ubuntu 24.04's 1.24.2). Getting there needed three changes, listed in PLAN.md
     "GStreamer version differences".

@@ -349,8 +349,8 @@ tested without GStreamer.
      audio for `Media:InactiveConnectionTimeout` (30 s) is reported failed, and connected again if audio returns.
      Clients send RTP all the time, also when muted (silence or DTX frames); confirmed with Firestorm 7.2
      (2026-11-16: mic off for over a minute, both region connections stayed connected).
-   - Still to do: TURN tested for real; Firefox + Chrome manual tests on the LAN.
-   - **Parked (pairchains only):** the user expects pairchains won't be efficient enough, so its issues are parked;
+   - Still to do: TURN tested for real ([#11](https://github.com/JakDaniels/SpatialAudioServer/issues/11)). Browsers on the LAN: done (Firefox, Edge, headless Chrome).
+   - **Parked (pairchains only; [#13](https://github.com/JakDaniels/SpatialAudioServer/issues/13)):** the user expects pairchains won't be efficient enough, so its issues are parked;
      it stays in the engine suites for comparison. A second intermittent case (2026-11-13, 1 in ~5 full runs):
      `PairChainsSpatial.Sources_are_panned_…`, a source moved into range is never heard (4/4 reruns pass). Intermittent issue: 1 failure in ~6 full runs: in `Deleting_a_room_with_connected_participants` (pairchains), in
      the fresh second room one direction (fake2 → fake3) never came up within 20 s while the other worked; 12/12
@@ -434,7 +434,7 @@ tested without GStreamer.
      re-loaded as PKCS#12 for Windows), `Server:TrustedProxies` (forwarded headers only from those), and network
      allow-lists `Admin:AllowedNetworks` (admin UI + `/api/admin`) and `Auth:AllowedNetworks` (control API), others
      404, signalling and the web client unaffected. Guide: `docs/internet.md` (TLS directly or behind a proxy,
-     firewall, NAT, coturn, hardening, checklist). Still to do: a run on a real public host; TURN tested for real.
+     firewall, NAT, coturn, hardening, checklist). Still to do: a run on a real public host; TURN tested for real ([#11](https://github.com/JakDaniels/SpatialAudioServer/issues/11)).
    - **Before public deployment (2026-11-15):** API keys may expire (`apikey create <label> --expires 90d|date`,
      migration 9; `apikey list` shows expiry and flags keys unused for 90 days; last-use tracking already existed).
      TURN credentials per client from a shared `Secret` (coturn `use-auth-secret`: `{expiry}:{participant id}`,
@@ -484,7 +484,7 @@ tested without GStreamer.
    - **Encoder experiments:** complexity 2 saves a little and stays clean; 60 ms frames save more but add
      latency and an audible intermodulation product. Keep 40 ms; complexity 2 for spatial rooms stays a
      candidate (`Media:SpatialOpusComplexity`) ([docs/benchmarks.md](docs/benchmarks.md)).
-   - **Decided 2026-11-13: engine tuning is parked.** Complexity 2 with the speaking bots sounds worse but stays
+   - **Decided 2026-11-13: engine tuning is parked** ([#12](https://github.com/JakDaniels/SpatialAudioServer/issues/12)). Complexity 2 with the speaking bots sounds worse but stays
      intelligible; not adopted. The test VM (4 vCPUs on shared low-spec hardware) limits what benchmarks can say, so
      defaults stay (complexity 5, 40 ms; spatial rooms on `matrix`) while the other phases are developed. Revisit on
      production-like hardware: `Media:SpatialOpusComplexity`, grouping listeners by position. Engines stay as they
@@ -504,7 +504,7 @@ tested without GStreamer.
      `inverse`, `exponential` (rolloff 1 = physical 1/r, about −6 dB per doubling from a reference of ~1.5–2 m, with
      a near-field clamp ~0.5 m), `linear`, plus `table` (interpolated gain at given distances) to match SL by ear.
      Each with a maximum range for culling. To decide: which profiles ship, the default, the physical reference.
-   - **Richer per-listener acoustics: a custom GStreamer element** (`acousticspace`, see
+   - **Richer per-listener acoustics: a custom GStreamer element** ([#8](https://github.com/JakDaniels/SpatialAudioServer/issues/8); `acousticspace`, see
      `docs/gstreamer_acousticspace_design.md`): per pair distance, ILD/ITD, early-reflection taps and a shared late
      reverb, with environment presets and later geometry; expensive work only when geometry changes. Today each
      listener's mix only has a left/right gain per participant, so it would come in as a new mix engine (engines
@@ -701,7 +701,7 @@ tested without GStreamer.
        with Speak). Groups on this SQLite standalone: groups V2 alone on MariaDB (`opensim_groups`;
        `MessageOnlineUsersOnly = true`, or V2 messaging switches itself off; `[GridUserService] StorageProvider` named
        in `SQLiteStandalone.ini`, or the groups service pairs SQLite's connection string with the MySQL driver and
-       stops the simulator), written up in the add-on README. **Parked (2026-11-15):** ringing
+       stops the simulator), written up in the add-on README. **Parked (2026-11-15; [os-webrtc-sas#1](https://github.com/JakDaniels/os-webrtc-sas/issues/1)):** ringing
        callees (and telling callers of a decline) on another simulator: it needs a grid to test (a local Robust grid
        with two simulators is the plan when it comes up); meanwhile the other side can call back. Call rooms keep the
        non-spatial default `matrix-shared`: re-tested after the PulseAudio fix, speech both ways is clean. One
@@ -747,7 +747,7 @@ tested without GStreamer.
      (saved with `osAgentSaveAppearance`, which stores the baked textures as assets, so they keep working; a stored
      appearance's bakes may have expired, and a server cannot bake wearables itself, so stock items alone are not
      enough: a viewer must have worn and baked them).
-     **Planned: an appearance pack (2026-11-15, not started).** A known set of looks for test bots (8, 16 or 32),
+     **Planned: an appearance pack (2026-11-15, not started; [os-webrtc-sas#4](https://github.com/JakDaniels/os-webrtc-sas/issues/4)).** A known set of looks for test bots (8, 16 or 32),
      shipped with the module and available in every region it runs in, with no inventory or Library items: an NPC's
      look needs only assets. A classic system avatar is its visual parameters (the shape sliders, numbers) plus about
      six baked textures (head, upper, lower, eyes, skirt, hair) a viewer rendered once. (1) **Export once:** a console
@@ -770,13 +770,13 @@ tested without GStreamer.
      (`POST /api/rooms/{id}/viewers-gone`), which covers leaves the restarted server never saw. The load tool's room
      mode notices a server restart (`/api/status` `startedAt` changes while its bots have lost their connection) and
      joins again with the same names, places and audio.
-   - **(b) Voice agents.** An agent needs what any participant has: a listener mix rendered at the NPC's position
+   - **(b) Voice agents** ([#5](https://github.com/JakDaniels/SpatialAudioServer/issues/5)). An agent needs what any participant has: a listener mix rendered at the NPC's position
      (distance, direction, mix-minus) and an input placed there. So the agent is a **separate process, an "agent
      bridge"**, that connects over WebRTC like the load tool's bots (reusing `FakeClient`) and chains speech to
      text → an AI agent → text to speech. The server stays a plain MCU, with no AI inside it. Who said what: the
      bridge opens the SLData channel like a viewer and uses the `v` speaking flags (separate per-speaker streams for
      an agent could be a later server option). Expect about 1–3 s per spoken turn: fine for commands.
-   - **(c) Set-up from OSSL scripts.** A region module can expose functions to scripts
+   - **(c) Set-up from OSSL scripts** ([os-webrtc-sas#2](https://github.com/JakDaniels/os-webrtc-sas/issues/2), [#6](https://github.com/JakDaniels/SpatialAudioServer/issues/6)). A region module can expose functions to scripts
      (`IScriptModuleComms.RegisterScriptInvocation`, as `modInvoke` uses), so a script can do
      `key npc = osNpcCreate(...); sasNpcVoice(npc, "assistant");`. `"assistant"` names an **audio profile in the
      module's ini** (which bridge, speech engines, AI endpoint, credentials), so scripts never hold keys and the
@@ -828,7 +828,7 @@ tested without GStreamer.
   not restored (clients must rejoin), but a restored room is recreated empty and ready.
 - **Admin auth:** separate admin password (hashed, set via config/first-run CLI) -> session cookie. Distinct from API keys,
   which are only for the control API.
-- **Deferred:** recording and listen-only participant types.
+- **Deferred:** recording ([#9](https://github.com/JakDaniels/SpatialAudioServer/issues/9)) and listen-only ([#10](https://github.com/JakDaniels/SpatialAudioServer/issues/10)) participant types.
 - **Network:** LAN only during development (STUN/TURN optional, plain HTTP on localhost/LAN with a dev certificate for
   getUserMedia); designed for public deployment later (TLS, TURN, rate limiting in Phase 5).
 - **Licence:** keep Apache-2.0 (permissive, compatible with OpenSim's BSD and with dynamically linking LGPL GStreamer).
