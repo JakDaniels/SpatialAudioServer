@@ -71,6 +71,11 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   `needs-decision`). Work spanning both has an issue in each, linked. PLAN.md keeps the design, decisions and their
   reasons; status lives in the issues (PLAN.md links to them), not in both. Close issues from commits or pull
   requests (`Fixes #n`; across repositories `Fixes JakDaniels/os-webrtc-sas#n`).
+  **Project board** (public): https://github.com/users/JakDaniels/projects/1, holding both repositories' issues, with
+  Status Parked / ToDo / In Progress / In Testing / Ready for Release / Done. Move cards as work goes (`gh project
+  item-edit`; needs the `project` scope): In Progress when starting, In Testing while waiting on the user's hands-on
+  test, Ready for Release once tested on develop; closing (at the release merge) moves it to Done. New
+  os-webrtc-sas issues may need adding by hand (`gh project item-add 1 --owner JakDaniels --url …`).
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.
