@@ -35,7 +35,7 @@ find "$stage" -type f -exec chmod 0644 {} +
 chmod 0755 "$stage/server/SpatialAudioServer" "$stage/server/createdump" "$stage/loadtest/SpatialAudioServer.LoadTest"
 
 # The SemVer version (e.g. 0.2.1-alpha.0.5) from MinVer, as the build used.
-version="$(dotnet msbuild src/SpatialAudioServer -t:MinVer -getProperty:MinVerVersion -nologo | tail -n 1)"
+version="$(dotnet msbuild src/SpatialAudioServer -restore -t:MinVer -getProperty:MinVerVersion -nologo | tail -n 1)"
 if [ -z "$version" ]; then
   echo "Could not determine the version." >&2
   exit 1
