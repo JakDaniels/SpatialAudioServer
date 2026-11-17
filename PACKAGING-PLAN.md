@@ -310,6 +310,29 @@ Each of these is small, and each needs its own change and tests when the work st
 
 ## Package repositories (GitHub Pages)
 
+**Built (2026-11-17), changing the plan below:** the repositories live on **this repository's own Pages**,
+`https://jakdaniels.github.io/SpatialAudioServer/` (`deb/`, `rpm/`, `key.asc`, an `index.html` with the set-up
+commands), not in a separate `sas-packages` repository. A release's packages are 374 MB, so committing them to a
+repository would grow its history by that much every release; instead `pages.yml` rebuilds the whole site from the
+latest two published releases' files (not drafts or pre-releases; about 750 MB, under Pages' 1 GB) and deploys it
+with GitHub's Pages deployment. No deploy key either.
+- `scripts/build-repos.sh`: apt (`apt-ftparchive`; suite `stable`, component `main`, amd64 and arm64; `Release`
+  signed as `InRelease` and `Release.gpg`) and dnf (`createrepo_c` per architecture; each rpm signed with
+  `rpmsign`, `repomd.xml` signed; a `.repo` file with `gpgcheck` and `repo_gpgcheck`). It signs only with the key
+  whose public half is `packaging/signing-key.asc`.
+- `pages.yml` runs on main only (the github-pages environment deploys from main): a release published by hand
+  relays to it, `release.yml`'s publish job starts it (a release published with a workflow's token starts no
+  workflow), and "Run workflow" on main rebuilds by hand.
+- **The key:** RSA 4096, no passphrase of its own, 5 years, made by the owner in a throwaway keyring; the private
+  key is the Actions secret `SAS_SIGNING_KEY` and kept offline as a backup; the public key is committed.
+- **Tested locally** (v0.2.0 packages, a throwaway key): `apt-get update` from the built repository accepts it and
+  offers 0.2.0 for both packages and architectures, and refuses a tampered `InRelease` (BADSIG); every rpm
+  verifies with the key imported and fails without it; both `repomd.xml` and `Release.gpg` signatures are good; the
+  builder refuses a key other than the published one.
+- **Owner's settings:** Settings → Pages → Source "GitHub Actions"; the secret `SAS_SIGNING_KEY`.
+
+The original plan, for reference:
+
 **Decided:** apt and yum repositories on GitHub Pages, so users add the repository once and get updates through
 `apt upgrade` / `dnf upgrade`. Releases stay on GitHub Releases too.
 
