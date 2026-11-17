@@ -1,7 +1,8 @@
 # Packaging and releases: plan
 
 Status: **under way** (2026-11-16): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
-step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers.
+step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers; step 6 (Windows MSIs) built and
+tested in CI.
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -403,7 +404,7 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      would change if RHEL or EPEL ships webrtcbin, or with a GStreamer bundled into a RHEL package, as the Windows
      MSI will do (a larger job with its own security-update duty); not planned for now.
 6. **Windows:** code change 4, the GStreamer selection and the server and load tool MSIs, tested on Windows.
-   *Built (2026-11-16), not yet run:*
+   *Built and tested in CI (2026-11-17); to test by hand on Windows:*
    - **Code change 4** (`Media/EmbeddedGStreamer.cs`): with `gstreamer\bin` beside the program, the process uses
      only that GStreamer (plugin path, scanner, its own registry cache in the account's local app data, `PATH`,
      GstSharp's `NativeLoader.Configure`). Plus an optional `environment` file beside the program
@@ -426,6 +427,10 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      - MSI versions: `0.2.1-alpha.0.5` becomes `0.2.1.5` (MSI compares three parts; same-version upgrades allowed).
    - **Test** (`scripts/test-windows.ps1`, on the runner): install with the firewall rules, the service's account,
      an API key from the command, `/api/status` with every element, the load tool's run, uninstall (data kept).
+     **Passed** on `windows-latest` (second run; the first stopped at MinVer's version before a restore): 26 plugins
+     and 65 DLLs, 37 MB of GStreamer; MSIs 53 MB (server) and 58 MB (load tool); the service as its virtual account,
+     both firewall rules, GStreamer 1.28.8 with no missing elements (the build's GStreamer removed first), the load
+     run 100 % heard; about 6 minutes. WiX warns ICE61 (same-version upgrades, intended) and ICE60 (cosmetic).
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
 8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,
    and the GitHub Pages apt/yum repository.
