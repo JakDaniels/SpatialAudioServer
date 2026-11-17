@@ -52,7 +52,29 @@ https://github.com/dotnet/aspnetcore.
 foreach ($docs in @("$stage\docs", "$stage\loadtest-docs")) { New-Item -ItemType Directory -Force -Path $docs | Out-Null }
 Copy-Item README.md, docs\running.md, docs\internet.md "$stage\docs"
 Copy-Item scripts\loadtest-linux-x64\README.md "$stage\loadtest-docs"
+# The release notes so far, from the tags' messages, as scripts/changelog.sh writes them (bash is not dependable here).
+$changelog = @('# Changelog', '', 'What changed in each release: the same text as its release notes.', '')
+& git describe --exact-match --tags --match 'v[0-9]*' HEAD 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    # The "## Unreleased" entries of CHANGELOG.md.
+    $inside = $false
+    $unreleased = foreach ($line in (Get-Content -ErrorAction SilentlyContinue CHANGELOG.md)) {
+        if ($line -match '^## ') { $inside = $line -match '^## Unreleased'; continue }
+        if ($inside) { $line }
+    }
+    $text = ($unreleased -join "`n").Trim()
+    if (-not $text) { $text = 'Nothing noted since the last release.' }
+    $changelog += @("## Unreleased ($version)", '', $text, '')
+}
+foreach ($tag in (& git for-each-ref --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v[0-9]*')) {
+    $date = (& git tag -l --format='%(taggerdate:short)' $tag) -join ''
+    if (-not $date) { $date = (& git log -1 --format=%cs $tag) -join '' }
+    $message = ((& git tag -l --format='%(contents)' $tag) -join "`n") -replace '(?s)-----BEGIN PGP SIGNATURE-----.*$', ''
+    $changelog += @("## $($tag.Substring(1)) ($date)", '', $message.Trim(), '')
+}
+$global:LASTEXITCODE = 0
 foreach ($docs in @("$stage\docs", "$stage\loadtest-docs")) {
+    [IO.File]::WriteAllText("$docs\CHANGELOG.md", ($changelog -join "`n") + "`n")
     Copy-Item LICENSE "$docs\LICENSE.txt"
     Set-Content -Path "$docs\THIRD-PARTY-NOTICES.txt" -Value $notices -Encoding utf8
 }

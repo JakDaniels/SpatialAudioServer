@@ -450,6 +450,16 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
        unpublished draft; a published release is never touched.
    - **Release notes (open point 7, decided):** the annotated tag's message, under a line naming the version and
      commit, then the install instructions; edited on the draft if needed, then published by hand.
+   - **Changelog (2026-11-17):** `CHANGELOG.md` has an `## Unreleased` section that gains a line with each commit
+     changing the server or the load tool (what and why; nothing for CI, packaging, tests or docs: CLAUDE.md). At
+     release the script offers that section as the tag message (just save), and afterwards, on develop, makes it
+     the version's section and starts `Unreleased` again. The packages carry a changelog made at build time from
+     the tags' messages (`scripts/changelog.sh`, the same in `build-windows.ps1`), so a release's packages hold its
+     own notes: `/usr/share/doc/<package>/CHANGELOG.md` and each MSI's `docs` folder; drafts show the Unreleased
+     entries on top.
+   - **The first attempt at v0.2.0 (2026-11-17)** stopped at "Make the release": the `~` to `-` rename tried to
+     rename release files (no `~`) to themselves. Fixed; the tag was deleted (nothing had been published) and is
+     made again after the fix reaches main.
    - **One CI run per release (2026-11-17):** `ci.yml` no longer runs on pushes to main. A merge from develop,
      when main has nothing of its own, has exactly the files of the pull request's head, which the pull request's
      run tested; `release.yml` and the script accept that run (checked with `git diff` between the two commits).
@@ -457,8 +467,9 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
    - **Making a release:** open a pull request from `develop` into `main` and merge it once green (by hand, as
      decided). Then `scripts/make-release.sh 0.2.0` (`--dry-run` first) from the repository root: it takes main's
      latest commit on GitHub, finds the passed `ci.yml` run for it (the pull request's; it starts one on main and
-     waits when there is none), asks for the tag message in an editor, pushes only the tag, and waits for the
-     draft release. Then check the draft and publish it. (By hand: `git tag -a v0.2.0 <main commit>` and
+     waits when there is none), asks for the tag message in an editor, pushes only the tag (printing the
+     release run's address; `--wait` waits for it), and adds the notes to CHANGELOG.md on develop (push develop
+     afterwards). When the run is done, check the draft and publish it. (By hand: `git tag -a v0.2.0 <main commit>` and
      `git push origin v0.2.0`.)
    - **README badges for releases:** a row of static "download" badges per platform (Ubuntu/Debian, Fedora,
      Windows), each linking to the latest release's files, plus the release workflow's status badge. GitHub's own

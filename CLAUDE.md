@@ -75,4 +75,9 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 
 ## Working preferences
 - Commits end with: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commit only when asked.
+- **CHANGELOG.md:** every commit that changes the server or the load tool themselves (`src/SpatialAudioServer`,
+  including `wwwroot`, and `src/SpatialAudioServer.LoadTest`) adds one brief line under `## Unreleased`, in the same
+  commit: `- Server: what changed, and why.` or `- Load tool: …`, written for people who run them. No entries for
+  CI, workflows, packaging, build or release scripts, tests, docs or plans. `scripts/make-release.sh` turns the
+  section into the release notes, so the user does not write them.
 - The user wants questions asked when the spec is unclear.
