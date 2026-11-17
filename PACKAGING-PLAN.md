@@ -431,7 +431,16 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      and 65 DLLs, 37 MB of GStreamer; MSIs 53 MB (server) and 58 MB (load tool); the service as its virtual account,
      both firewall rules, GStreamer 1.28.8 with no missing elements (the build's GStreamer removed first), the load
      run 100 % heard; about 6 minutes. WiX warns ICE61 (same-version upgrades, intended) and ICE60 (cosmetic).
+     **Tested by hand** on Windows (2026-11-17): alpha.0.91 installed (feature tree, service account, embedded
+     GStreamer used although another is installed, ProgramData ACLs, browser client, admin UI, firewall feature
+     added later, load tool, uninstall keeping the data), then alpha.0.94 upgraded over it. Firewall rules named
+     just `SpatialAudioServer` / `SpatialAudioServer.LoadTest` are Windows's own, made by "Allow access" on its
+     prompt for a program run by hand; they are not the MSI's and an uninstall leaves them.
 7. **The release workflow**, putting it all together, with draft GitHub releases while private.
+   - **README badges for releases:** a row of static "download" badges per platform (Ubuntu/Debian, Fedora,
+     Windows), each linking to the latest release's files, plus the release workflow's status badge. GitHub's own
+     badges are per workflow, not per job, so status per platform would need the workflow to write its own SVGs
+     (e.g. to a `badges` branch); not wanted for drafts, whose run page already shows each platform.
 8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,
    and the GitHub Pages apt/yum repository.
 
