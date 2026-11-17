@@ -42,7 +42,39 @@ viewer support through the OpenSim region add-on (https://github.com/JakDaniels/
 voice, neighbouring regions, group and P2P calls, web users and bots shown in-world as NPCs. Parked: ringing callees
 on other simulators, voice agents. See the phases in [PLAN.md](PLAN.md).
 
-## Quick start
+## Installing
+
+Packages for each release are on the [Releases page](https://github.com/JakDaniels/SpatialAudioServer/releases)
+(what changed: [CHANGELOG.md](CHANGELOG.md)). The server needs GStreamer 1.24 or newer, which the Linux packages
+pull in from the distribution; the Windows installers carry their own.
+
+**Ubuntu 24.04 or later, Debian 13 or later** (x64 or arm64; the load tool also on Ubuntu 22.04):
+
+```bash
+sudo apt install ./spatialaudioserver_<version>_amd64.deb
+sudo spatialaudioserver admin set-password          # the admin UI's password
+sudo spatialaudioserver apikey create <label>       # a control-API key, e.g. for the OpenSim add-on
+sudo systemctl start spatialaudioserver             # installed and enabled, not started until now
+```
+
+**Fedora** (x64 or arm64): the same with `sudo dnf install ./spatialaudioserver-<version>-1.x86_64.rpm`.
+
+On Linux the server runs as the `spatialaudioserver` systemd service under its own user; site settings go in
+`/etc/spatialaudioserver/appsettings.json`, data in `/var/lib/spatialaudioserver`, logs in
+`journalctl -u spatialaudioserver`.
+
+**Windows 10 or later, Windows Server 2019 or later** (x64): run `SpatialAudioServer-<version>-x64.msi` (not
+signed yet: "More info", then "Run anyway"). It installs and starts the `SpatialAudioServer` service; firewall rules
+are an optional feature. Then, from a command prompt opened with "Run as administrator":
+`SpatialAudioServer admin set-password` and `SpatialAudioServer apikey create <label>`. Site settings go in
+`C:\ProgramData\SpatialAudioServer\appsettings.json`.
+
+Then open `https://<host>:5001/admin/`, or the test web client at `https://<host>:5001/client/`. The load tool has
+its own packages (`spatialaudioserver-loadtest`, command `sas-loadtest`). Configuration, networking and internet
+hosting: [docs/running.md](docs/running.md) and [docs/internet.md](docs/internet.md). For Second Life / OpenSim
+viewers, add the region module [os-webrtc-sas](https://github.com/JakDaniels/os-webrtc-sas) to OpenSim.
+
+## Building from source
 
 Needs the .NET 10 SDK and GStreamer 1.24 or newer with the base, good and bad plugins and libnice
 (on Ubuntu: `scripts/setup-ubuntu.sh`; on Windows: the official installer, full install).
@@ -63,7 +95,10 @@ Tests: `dotnet test src`.
 | [PLAN.md](PLAN.md) | The specification: architecture, API, decisions and their reasons, phases and progress |
 | [docs/running.md](docs/running.md) | Installing, configuring and running on Linux and Windows, as a service, firewall, load tool |
 | [docs/internet.md](docs/internet.md) | On an internet-facing host: TLS, the media port range, NAT, TURN, hardening |
-| [PACKAGING-PLAN.md](PACKAGING-PLAN.md) | Plan for .deb/.rpm/Windows installers, versioning and a release workflow (not built yet) |
+| [CHANGELOG.md](CHANGELOG.md) | What changed in each release |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, building and testing, and how changes are released |
+| [SECURITY.md](SECURITY.md) | How to report a vulnerability |
+| [PACKAGING-PLAN.md](PACKAGING-PLAN.md) | The packages (.deb, .rpm, Windows MSIs), versioning, CI and the release workflow |
 | [docs/benchmarks.md](docs/benchmarks.md) | Load-test results: CPU per engine, room counts, test machines |
 | [scripts/loadtest-linux-x64/README.md](scripts/loadtest-linux-x64/README.md) | The self-contained load tool for a separate Linux machine |
 | [docs/gstreamer_acousticspace_design.md](docs/gstreamer_acousticspace_design.md) | Design notes for a possible acoustic-space DSP element |

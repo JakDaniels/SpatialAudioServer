@@ -271,7 +271,7 @@ Each of these is small, and each needs its own change and tests when the work st
   pin is current. Linux packages use the distributions' GStreamer, so only the Windows pin is watched.
 
 - **Running (2026-11-16):** `ci.yml` with `test-1.28` and `test-1.24` (GStreamer and .NET already installed
-  in the prepared images). `develop` is the repository's default branch while private, so "Run workflow" runs it
+  in the prepared images). `develop` was the repository's default branch while private (`main` once public), so "Run workflow" ran it
   by hand on `develop`. Still to come: `windows`, `load-22.04`.
   - **Both pass the full suite** (183 tests) on the private repository's 2-core runners, about 12 minutes per job.
   - **GStreamer 1.24 is supported** (Ubuntu 24.04's 1.24.2). Getting there needed three changes, listed in PLAN.md
@@ -489,6 +489,26 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      (e.g. to a `badges` branch); not wanted for drafts, whose run page already shows each platform.
 8. **Going public:** make the repository public, require the `ci.yml` checks on `main`, the first public release,
    and the GitHub Pages apt/yum repository.
+   - **Prepared (2026-11-17):** the history of both repositories checked (no keys, tokens or passwords in any
+     version; only private LAN addresses in examples; the commit emails stay, decided); `SECURITY.md`,
+     `CONTRIBUTING.md` and an Installing section in the README added; `ci.yml` also runs on pull requests into
+     `develop` (contributors' pull requests). Decided: `main` becomes the default branch, and os-webrtc-sas goes
+     public at the same time. The GitHub Pages repositories come afterwards, as their own piece of work.
+   - **The settings (repository owner, in the web UI), in this order:**
+     1. Merge `develop` into `main` by pull request (no release: nothing under Unreleased), so `main` has these
+        files and `gstreamer-watch.yml` (scheduled workflows run from the default branch).
+     2. Optional, before going public: ask GitHub Support to purge the commits from before the history rewrite
+        (still reachable through the merged pull requests).
+     3. Both repositories: Settings → General → Danger Zone → Change visibility → Public.
+     4. SpatialAudioServer: Settings → General → Default branch → `main`.
+     5. Settings → Code security → Private vulnerability reporting → Enable (SECURITY.md relies on it).
+     6. Settings → Rules → Rulesets → New branch ruleset for `main`: require a pull request, require the status
+        checks `test-1.28` and `test-1.24`, block force pushes. Not for `develop` beyond blocking force pushes:
+        release.yml pushes the CHANGELOG commit there.
+     7. The CI images: the package `sas-ci` (owner's Packages tab) → Package settings → Change visibility →
+        Public, or pull requests from forks cannot pull them.
+     8. Settings → Actions → General → "Fork pull request workflows from outside collaborators": require approval
+        for all outside collaborators.
    - **History rewritten (done 2026-11-17):** the self-contained load tool binary
      (`scripts/loadtest-linux-x64/SpatialAudioServer.LoadTest`, about 950 MB over 19 versions, committed until
      CI built it) was removed from every commit with `git filter-repo`, then `develop`, `main`, `v0.2.0` and
