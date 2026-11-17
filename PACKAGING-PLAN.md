@@ -240,7 +240,7 @@ Each of these is small, and each needs its own change and tests when the work st
 - **No self-hosted runner.**
 
 ```
-.github/workflows/ci.yml        pull requests into main, and pushes to main (skipped for docs-only changes)
+.github/workflows/ci.yml        pull requests into main (skipped for docs-only changes), and by hand
   test-1.28   ubuntu:26.04 container (GStreamer 1.28): build, full test suite (≈ 8 min)
   test-1.24   ubuntu:24.04 container (GStreamer 1.24, the floor): the same
   windows     windows-latest: fetch the pinned GStreamer (hash checked), embed it, full test suite against it
@@ -348,7 +348,7 @@ Each of these is small, and each needs its own change and tests when the work st
 
 | Run | Minutes (Windows counted ×2) | How often |
 |---|---|---|
-| `ci.yml`: a pull request into main (1.28 and 1.24 suites ≈ 20, Windows suite ≈ 25 ×2, 22.04 check ≈ 3) | ≈ 75 | per merge; another ≈ 75 if the push to main runs it again (it can be skipped when the pull request's run was for the same commit) |
+| `ci.yml`: a pull request into main (1.28 and 1.24 suites ≈ 20, Windows suite ≈ 25 ×2, 22.04 check ≈ 3) | ≈ 75 | per merge; not again on main (2026-11-17: the merge has the pull request's files, already tested) |
 | `drafts.yml`, Linux only | ≈ 5 | when you want something to test |
 | `drafts.yml`, Linux and Windows | ≈ 25 | likewise |
 | `release.yml` | ≈ 25 | per release |
@@ -450,9 +450,16 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
        unpublished draft; a published release is never touched.
    - **Release notes (open point 7, decided):** the annotated tag's message, under a line naming the version and
      commit, then the install instructions; edited on the draft if needed, then published by hand.
-   - **Making a release:** merge `develop` into `main` by pull request (green), then
-     `git tag -a v0.2.0 -m "What changed" <the merge commit> && git push origin v0.2.0`; check the draft
-     release, publish it.
+   - **One CI run per release (2026-11-17):** `ci.yml` no longer runs on pushes to main. A merge from develop,
+     when main has nothing of its own, has exactly the files of the pull request's head, which the pull request's
+     run tested; `release.yml` and the script accept that run (checked with `git diff` between the two commits).
+     If the files differ (a commit made on main) or nothing was tested (a docs-only pull request), CI runs on main.
+   - **Making a release:** open a pull request from `develop` into `main` and merge it once green (by hand, as
+     decided). Then `scripts/make-release.sh 0.2.0` (`--dry-run` first) from the repository root: it takes main's
+     latest commit on GitHub, finds the passed `ci.yml` run for it (the pull request's; it starts one on main and
+     waits when there is none), asks for the tag message in an editor, pushes only the tag, and waits for the
+     draft release. Then check the draft and publish it. (By hand: `git tag -a v0.2.0 <main commit>` and
+     `git push origin v0.2.0`.)
    - **README badges for releases:** a row of static "download" badges per platform (Ubuntu/Debian, Fedora,
      Windows), each linking to the latest release's files, plus the release workflow's status badge. GitHub's own
      badges are per workflow, not per job, so status per platform would need the workflow to write its own SVGs
