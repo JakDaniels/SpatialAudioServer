@@ -48,16 +48,28 @@ Packages for each release are on the [Releases page](https://github.com/JakDanie
 (what changed: [CHANGELOG.md](CHANGELOG.md)). The server needs GStreamer 1.24 or newer, which the Linux packages
 pull in from the distribution; the Windows installers carry their own.
 
-**Ubuntu 24.04 or later, Debian 13 or later** (x64 or arm64; the load tool also on Ubuntu 22.04):
+**Ubuntu 24.04 or later, Debian 13 or later** (x64 or arm64; the load tool also on Ubuntu 22.04), from the
+signed package repository, so updates come with `apt upgrade`:
 
 ```bash
-sudo apt install ./spatialaudioserver_<version>_amd64.deb
+curl -fsSL https://jakdaniels.github.io/SpatialAudioServer/key.asc | sudo gpg --dearmor -o /usr/share/keyrings/spatialaudioserver.gpg
+echo "deb [signed-by=/usr/share/keyrings/spatialaudioserver.gpg] https://jakdaniels.github.io/SpatialAudioServer/deb stable main" |
+  sudo tee /etc/apt/sources.list.d/spatialaudioserver.list
+sudo apt update && sudo apt install spatialaudioserver       # or a downloaded file: sudo apt install ./spatialaudioserver_<version>_amd64.deb
 sudo spatialaudioserver admin set-password          # the admin UI's password
 sudo spatialaudioserver apikey create <label>       # a control-API key, e.g. for the OpenSim add-on
 sudo systemctl start spatialaudioserver             # installed and enabled, not started until now
 ```
 
-**Fedora** (x64 or arm64): the same with `sudo dnf install ./spatialaudioserver-<version>-1.x86_64.rpm`.
+**Fedora** (x64 or arm64): add the repository and install, then the same set-up commands as above:
+
+```bash
+sudo curl -fsSL -o /etc/yum.repos.d/spatialaudioserver.repo https://jakdaniels.github.io/SpatialAudioServer/rpm/spatialaudioserver.repo
+sudo dnf install spatialaudioserver        # or a downloaded file: sudo dnf install ./spatialaudioserver-<version>-1.x86_64.rpm
+```
+
+The repositories, with the key's fingerprint: https://jakdaniels.github.io/SpatialAudioServer/. They hold the latest
+two releases; every release stays on the Releases page.
 
 On Linux the server runs as the `spatialaudioserver` systemd service under its own user; site settings go in
 `/etc/spatialaudioserver/appsettings.json`, data in `/var/lib/spatialaudioserver`, logs in

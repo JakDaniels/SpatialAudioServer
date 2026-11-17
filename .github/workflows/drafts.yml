@@ -25,6 +25,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # "Run workflow" offers the default branch (main) first: a run started anywhere but develop fails here, visibly,
+  # instead of building nothing.
+  branch:
+    if: github.ref != 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Drafts are built from develop
+        run: |
+          echo "::error::Run drafts on develop: choose it under \"Use workflow from\" (this run was started on ${GITHUB_REF_NAME})."
+          exit 1
+
   packages:
     if: github.ref == 'refs/heads/develop'
     uses: ./.github/workflows/packages.yml

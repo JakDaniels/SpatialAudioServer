@@ -127,12 +127,21 @@ jobs:
     if: needs.prepare.outputs.release == 'true' && contains(github.event.pull_request.labels.*.name, 'publish')
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: write # starting pages.yml
     steps:
       - name: Publish the release (label "publish")
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --draft=false
+
+      # A release published with this token starts no workflow, so the package repositories are rebuilt from here.
+      - name: Update the package repositories
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run pages.yml -R "$GITHUB_REPOSITORY" --ref main
 
   # After a merge: CHANGELOG.md on develop gets the version's section, and Unreleased keeps only what develop gained
   # since (scripts/changelog.sh --rollover). A tag pushed by hand leaves this to scripts/make-release.sh.

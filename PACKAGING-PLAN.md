@@ -2,8 +2,8 @@
 
 Status: **under way** (2026-11-17): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
 step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers; step 6 (Windows MSIs) built and
-tested in CI and by hand; step 7 done: **v0.2.0 released** (2026-11-17, published as a private release). Next:
-step 8 (going public).
+tested in CI and by hand; step 7 done: **v0.2.0 released** (2026-11-17); step 8: **public** since 2026-11-17
+(settings done). Next: the GitHub Pages apt/yum repositories.
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -310,6 +310,29 @@ Each of these is small, and each needs its own change and tests when the work st
 
 ## Package repositories (GitHub Pages)
 
+**Built (2026-11-17), changing the plan below:** the repositories live on **this repository's own Pages**,
+`https://jakdaniels.github.io/SpatialAudioServer/` (`deb/`, `rpm/`, `key.asc`, an `index.html` with the set-up
+commands), not in a separate `sas-packages` repository. A release's packages are 374 MB, so committing them to a
+repository would grow its history by that much every release; instead `pages.yml` rebuilds the whole site from the
+latest two published releases' files (not drafts or pre-releases; about 750 MB, under Pages' 1 GB) and deploys it
+with GitHub's Pages deployment. No deploy key either.
+- `scripts/build-repos.sh`: apt (`apt-ftparchive`; suite `stable`, component `main`, amd64 and arm64; `Release`
+  signed as `InRelease` and `Release.gpg`) and dnf (`createrepo_c` per architecture; each rpm signed with
+  `rpmsign`, `repomd.xml` signed; a `.repo` file with `gpgcheck` and `repo_gpgcheck`). It signs only with the key
+  whose public half is `packaging/signing-key.asc`.
+- `pages.yml` runs on main only (the github-pages environment deploys from main): a release published by hand
+  relays to it, `release.yml`'s publish job starts it (a release published with a workflow's token starts no
+  workflow), and "Run workflow" on main rebuilds by hand.
+- **The key:** RSA 4096, no passphrase of its own, 5 years, made by the owner in a throwaway keyring; the private
+  key is the Actions secret `SAS_SIGNING_KEY` and kept offline as a backup; the public key is committed.
+- **Tested locally** (v0.2.0 packages, a throwaway key): `apt-get update` from the built repository accepts it and
+  offers 0.2.0 for both packages and architectures, and refuses a tampered `InRelease` (BADSIG); every rpm
+  verifies with the key imported and fails without it; both `repomd.xml` and `Release.gpg` signatures are good; the
+  builder refuses a key other than the published one.
+- **Owner's settings:** Settings → Pages → Source "GitHub Actions"; the secret `SAS_SIGNING_KEY`.
+
+The original plan, for reference:
+
 **Decided:** apt and yum repositories on GitHub Pages, so users add the repository once and get updates through
 `apt upgrade` / `dnf upgrade`. Releases stay on GitHub Releases too.
 
@@ -509,6 +532,14 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
         Public, or pull requests from forks cannot pull them.
      8. Settings → Actions → General → "Fork pull request workflows from outside collaborators": require approval
         for all outside collaborators.
+   - **Done (2026-11-17):** both repositories are public, `main` is the default branch, private vulnerability
+     reporting is on, the `sas-ci` images pull without a login. Rulesets: `main` (no deletion or force push, a
+     pull request with no approvals needed, merge commits only, checks `test-1.28` and `test-1.24` from GitHub
+     Actions, no bypass) and `develop` (no deletion or force push only). Merge commits only, because the release
+     check matches the pull request's CI run through the merge's second parent. Outside contributors' workflows
+     need approval (set by the owner; not visible to a collaborator's API). `drafts.yml` fails visibly when
+     started from a branch other than develop. Left: the optional GitHub Support purge, and the GitHub Pages
+     apt/yum repositories as their own piece of work.
    - **History rewritten (done 2026-11-17):** the self-contained load tool binary
      (`scripts/loadtest-linux-x64/SpatialAudioServer.LoadTest`, about 950 MB over 19 versions, committed until
      CI built it) was removed from every commit with `git filter-repo`, then `develop`, `main`, `v0.2.0` and
