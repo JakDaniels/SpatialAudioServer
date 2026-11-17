@@ -5,7 +5,7 @@
 #
 #   sudo spatialaudioserver apikey create <label> [--expires 90d|date] | list | revoke <id>
 #   sudo spatialaudioserver admin set-password | clear-password | hash-password
-#   spatialaudioserver --version
+#   spatialaudioserver --version | --help
 #
 # The server itself runs as the systemd service (systemctl start spatialaudioserver), not from here.
 set -eu
@@ -17,6 +17,11 @@ environment=/etc/spatialaudioserver/environment
 case "${1:-}" in
   apikey|admin) ;;
   --version) exec "$program" --version ;;
+  --help|-h)
+    sed -n '6,8s/^#   /usage: /p' "$0"
+    echo "The server runs as a service: systemctl start spatialaudioserver"
+    exit 0
+    ;;
   *)
     sed -n '6,8s/^#   /usage: /p' "$0" >&2
     echo "The server runs as a service: systemctl start spatialaudioserver" >&2
