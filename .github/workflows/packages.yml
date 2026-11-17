@@ -22,6 +22,10 @@ on:
         description: When set, the version the build must have (MinVer, from the tag)
         type: string
         default: ''
+      ref:
+        description: What to build (default the commit that started the run; release.yml after a merge passes the tag)
+        type: string
+        default: ''
       intro:
         description: The release notes' first part; {version} and {sha} are filled in
         type: string
@@ -49,6 +53,7 @@ jobs:
       # Full history: MinVer needs the tags and the commit count for the version.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
 
       # The tags as on GitHub, with their messages (the release notes in the packages' changelog): a checkout for a
@@ -114,7 +119,7 @@ jobs:
           if [ "$KIND" = develop-draft ]; then
             # One rolling pre-release: deleted with its tag and made again at the commit built.
             gh release delete "$TAG" --yes --cleanup-tag || true
-            gh release create "$TAG" --target "$GITHUB_SHA" --prerelease --latest=false \
+            gh release create "$TAG" --target "$(git rev-parse HEAD)" --prerelease --latest=false \
               --title "develop (draft)" --notes-file notes.md *.deb *.rpm SHA256SUMS
           else
             # A draft for the existing version tag (a re-run replaces an earlier draft; a published release stays).
@@ -152,6 +157,8 @@ jobs:
     steps:
       # For scripts/test-packages.sh (without git in the container this downloads the files, which is enough).
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Download the packages
         env:
@@ -190,6 +197,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
 
       # The tags as on GitHub, with their messages (the release notes in the packages' changelog): a checkout for a

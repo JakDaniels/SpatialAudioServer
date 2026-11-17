@@ -467,13 +467,14 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
      when main has nothing of its own, has exactly the files of the pull request's head, which the pull request's
      run tested; `release.yml` and the script accept that run (checked with `git diff` between the two commits).
      If the files differ (a commit made on main) or nothing was tested (a docs-only pull request), CI runs on main.
-   - **Making a release:** open a pull request from `develop` into `main` and merge it once green (by hand, as
-     decided). Then `scripts/make-release.sh 0.2.0` (`--dry-run` first) from the repository root: it takes main's
-     latest commit on GitHub, finds the passed `ci.yml` run for it (the pull request's; it starts one on main and
-     waits when there is none), asks for the tag message in an editor, pushes only the tag (printing the
-     release run's address; `--wait` waits for it), and adds the notes to CHANGELOG.md on develop (push develop
-     afterwards). When the run is done, check the draft and publish it. (By hand: `git tag -a v0.2.0 <main commit>` and
-     `git push origin v0.2.0`.)
+   - **Making a release (automatic since 2026-11-17, after v0.2.0):** merging a pull request from `develop` into
+     `main` makes the release. `release.yml` (event: pull request closed and merged) checks the pull request's
+     `ci.yml` run as above, takes the next version (`scripts/next-version.sh`: patch, or minor / major by the
+     pull request's label `minor` / `major`), tags the merge commit with the `## Unreleased` entries of CHANGELOG.md
+     as the message, builds and tests everything into a draft release, publishes it when the pull request has the
+     label `publish`, and commits the version's section to CHANGELOG.md on develop (pull develop afterwards). No
+     Unreleased entries (only CI, packaging or docs changes merged): no release. By hand still works: push a tag
+     (`scripts/make-release.sh`), e.g. for a pre-release `v0.3.0-rc.1` or after a docs-only merge.
    - **README badges for releases:** a row of static "download" badges per platform (Ubuntu/Debian, Fedora,
      Windows), each linking to the latest release's files, plus the release workflow's status badge. GitHub's own
      badges are per workflow, not per job, so status per platform would need the workflow to write its own SVGs

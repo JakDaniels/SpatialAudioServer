@@ -66,7 +66,7 @@ if ($LASTEXITCODE -ne 0) {
     if (-not $text) { $text = 'Nothing noted since the last release.' }
     $changelog += @("## Unreleased ($version)", '', $text, '')
 }
-foreach ($tag in (& git for-each-ref --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v[0-9]*')) {
+foreach ($tag in (& git -c versionsort.suffix=- for-each-ref --sort=-v:refname --format='%(refname:strip=2)' 'refs/tags/v[0-9]*')) {
     $date = (& git tag -l --format='%(taggerdate:short)' $tag) -join ''
     if (-not $date) { $date = (& git log -1 --format=%cs $tag) -join '' }
     $message = ((& git tag -l --format='%(contents)' $tag) -join "`n") -replace '(?s)-----BEGIN PGP SIGNATURE-----.*$', ''

@@ -39,56 +39,26 @@ remote=origin
 die() { echo "make-release: $*" >&2; exit 1; }
 step() { echo; echo "== $*"; }
 
-# CHANGELOG.md's parts: the file's own heading and introduction (head), the "## Unreleased" section's lines
-# (unreleased), and the released sections (released).
-changelog_part() {
-  awk -v part="$1" '
-    /^## / { seen = 1; inside = ($0 ~ /^## Unreleased/); if (inside) next }
-    part == "head" && !seen { print }
-    part == "unreleased" && inside { print }
-    part == "released" && seen && !inside { print }'
-}
 trim_blank() { sed -e '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}'; }
 
 # After the tag: on the local develop (not pushed), CHANGELOG.md's released entries become the section "## VERSION
-# (date)" (the tag's message), and "## Unreleased" keeps only what develop gained after the merge. Made with a
-# scratch index, so the working tree and whatever is checked out are left alone.
+# (date)" (the tag's message), and "## Unreleased" keeps only what develop gained after the merge
+# (scripts/changelog.sh --rollover). Made with a scratch index, so the working tree and whatever is checked out are
+# left alone.
 add_changelog() {
-  local tag="$1" version="${1#v}" base date work commit
+  local tag="$1" version="${1#v}" base work commit status=0
   base="$(git rev-parse refs/heads/develop)"
   if ! git merge-base --is-ancestor "$remote/develop" "$base"; then
     echo "CHANGELOG.md: local develop is behind $remote/develop; pull it, then: scripts/make-release.sh --changelog $version"
     return 0
   fi
   work="$(mktemp -d)"
-  git show "$base:CHANGELOG.md" > "$work/old" 2>/dev/null || : > "$work/old"
-  if grep -q "^## $version " "$work/old"; then
+  git show "$base:CHANGELOG.md" 2>/dev/null | scripts/changelog.sh --rollover "$tag" > "$work/new" || status=$?
+  if [ "$status" = 3 ]; then
     echo "CHANGELOG.md on develop already has $version"
     rm -rf "$work"; return 0
   fi
-  date="$(git tag -l --format='%(taggerdate:short)' "$tag")"
-  [ -n "$date" ] || date="$(git log -1 --format=%cs "$tag")"
-  # Unreleased entries on develop that the release (the tag's CHANGELOG.md) did not have.
-  git show "$tag:CHANGELOG.md" 2>/dev/null | changelog_part unreleased | grep -v '^$' > "$work/released" || true
-  changelog_part unreleased < "$work/old" | grep -vxF -f "$work/released" | trim_blank > "$work/left" || true
-  {
-    if [ -n "$(changelog_part head < "$work/old" | tr -d '[:space:]')" ]; then
-      changelog_part head < "$work/old" | trim_blank
-    else
-      echo "# Changelog"; echo; echo "What changed in each release: the same text as its release notes."
-    fi
-    echo
-    echo "## Unreleased"
-    echo
-    if [ -s "$work/left" ]; then cat "$work/left"; echo; fi
-    echo "## $version ($date)"
-    echo
-    git tag -l --format='%(contents)' "$tag" | sed '/-----BEGIN PGP SIGNATURE-----/,$d' | trim_blank
-    if [ -n "$(changelog_part released < "$work/old" | tr -d '[:space:]')" ]; then
-      echo
-      changelog_part released < "$work/old" | trim_blank
-    fi
-  } > "$work/new"
+  [ "$status" = 0 ] || die "CHANGELOG.md: scripts/changelog.sh --rollover failed"
   GIT_INDEX_FILE="$work/index" git read-tree "$base"
   GIT_INDEX_FILE="$work/index" git update-index --add --cacheinfo "100644,$(git hash-object -w "$work/new"),CHANGELOG.md"
   commit="$(git commit-tree "$(GIT_INDEX_FILE="$work/index" git write-tree)" -p "$base" -m "CHANGELOG: $version")"
@@ -123,7 +93,7 @@ sha="$(git rev-parse "$remote/main")"
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null || git ls-remote --exit-code --tags "$remote" "$tag" >/dev/null; then
   die "$tag already exists"
 fi
-previous="$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n 1)"
+previous="$(git -c versionsort.suffix=- tag -l 'v[0-9]*' --sort=-v:refname | head -n 1)"
 if [ -n "$previous" ]; then
   newest="$(printf '%s\n%s\n' "${previous#v}" "$version" | sort -V | tail -n 1)"
   [ "$newest" = "$version" ] && [ "${previous#v}" != "$version" ] || die "$tag is not newer than $previous"
@@ -186,7 +156,7 @@ written="$(git show refs/heads/develop:CHANGELOG.md 2>/dev/null \
   | awk -v head="## $version " 'index($0, head) == 1 { f = 1; next } f && /^## / { exit } f { print }' | trim_blank)"
 from="$version's section of CHANGELOG.md on develop"
 if [ -z "$written" ]; then
-  written="$(git show "$sha:CHANGELOG.md" 2>/dev/null | changelog_part unreleased | trim_blank)"
+  written="$(git show "$sha:CHANGELOG.md" 2>/dev/null | scripts/changelog.sh --unreleased)" || true
   from="the Unreleased section of CHANGELOG.md on main"
 fi
 {
