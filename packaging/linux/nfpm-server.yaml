@@ -76,6 +76,9 @@ contents:
   - src: docs/internet.md
     dst: /usr/share/doc/spatialaudioserver/internet.md
     file_info: { mode: 0644 }
+  - src: dist/stage/CHANGELOG.md
+    dst: /usr/share/doc/spatialaudioserver/CHANGELOG.md
+    file_info: { mode: 0644 }
   - src: LICENSE
     dst: /usr/share/doc/spatialaudioserver/copyright
     file_info: { mode: 0644 }

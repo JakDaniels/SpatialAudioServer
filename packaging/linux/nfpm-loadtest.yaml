@@ -56,6 +56,9 @@ contents:
   - src: scripts/loadtest-linux-x64/README.md
     dst: /usr/share/doc/spatialaudioserver-loadtest/README.md
     file_info: { mode: 0644 }
+  - src: dist/stage/CHANGELOG.md
+    dst: /usr/share/doc/spatialaudioserver-loadtest/CHANGELOG.md
+    file_info: { mode: 0644 }
   - src: LICENSE
     dst: /usr/share/doc/spatialaudioserver-loadtest/copyright
     file_info: { mode: 0644 }

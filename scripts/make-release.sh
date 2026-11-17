@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Tags a release of main (PACKAGING-PLAN.md step 7), from the repository root, after the pull request from develop
 # into main has passed and been merged:
-#   scripts/make-release.sh 0.2.0 [--dry-run]       (or 0.2.0-rc.1 for a pre-release)
-#   scripts/make-release.sh --changelog 0.2.0       only step 5, for a tag that exists already
+#   scripts/make-release.sh 0.2.0 [--dry-run | --wait]   (or 0.2.0-rc.1 for a pre-release)
+#   scripts/make-release.sh --changelog 0.2.0            only step 5, for a tag that exists already
 #  1. fetches, and takes main's latest commit on GitHub (whatever branch is checked out here); checks the tag is new
 #     and newer than the last release;
 #  2. ci.yml must have passed for that commit, or for the pull request's head it merged with the same files (the
@@ -11,8 +11,9 @@
 #     stops if it failed;
 #  3. opens an editor for the tag's message (the release notes' top part), prefilled with the commits since the last
 #     release: edit it into what changed; an empty message stops;
-#  4. pushes the tag, which starts release.yml (a draft release with every package), waits for it and prints the
-#     draft's address. Publish it by hand after a look (the command is printed);
+#  4. pushes the tag, which starts release.yml (a draft release with every package, about 20 minutes), and prints
+#     the run's address and the command that publishes the draft once it is ready (publish it by hand after a look);
+#     with --wait, waits for the run and prints the draft's address;
 #  5. right after the tag is pushed: the tag's message becomes a section "## 0.2.0 (date)" at the top of
 #     CHANGELOG.md, committed on the local develop (made without touching the working tree, whatever is checked
 #     out): push develop to keep it; it reaches main with the next merge.
@@ -24,8 +25,13 @@ mode=release
 if [ "${1:-}" = --changelog ]; then mode=changelog; shift; fi
 [ $# -ge 1 ] || usage
 version="${1#v}"
-dry_run=false
-[ "${2:-}" = --dry-run ] && dry_run=true
+dry_run=false wait=false
+case "${2:-}" in
+  --dry-run) dry_run=true ;;
+  --wait) wait=true ;;
+  '') ;;
+  *) usage ;;
+esac
 tag="v$version"
 remote=origin
 
@@ -157,11 +163,21 @@ esac
 step "Tag message"
 message_file="$(mktemp)"
 trap 'rm -f "$message_file" "$message_file.clean"' EXIT
+# Notes already in CHANGELOG.md on develop for this version (a release tagged again) are offered as they are.
+written="$(git show refs/heads/develop:CHANGELOG.md 2>/dev/null \
+  | awk -v head="## $version " 'index($0, head) == 1 { f = 1; next } f && /^## / { exit } f { print }' \
+  | sed -e '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}')"
 {
-  echo "What changed in $version (replace this with the release's notes: the first line is the summary)."
-  echo
-  git log --no-merges -n 60 --format='- %s' ${previous:+"$previous.."}"$sha"
-  echo
+  if [ -n "$written" ]; then
+    echo "$written"
+    echo
+    echo "# These notes are $version's section of CHANGELOG.md on develop."
+  else
+    echo "What changed in $version (replace this with the release's notes: the first line is the summary)."
+    echo
+    git log --no-merges -n 60 --format='- %s' ${previous:+"$previous.."}"$sha"
+    echo
+  fi
   echo "# Lines starting with # are dropped. An empty message stops the release; nothing has been pushed yet."
 } > "$message_file"
 if $dry_run; then
@@ -193,7 +209,15 @@ for _ in $(seq 30); do
   [ -n "$run" ] && break
 done
 [ -n "$run" ] || die "release.yml did not start for $tag: see the Actions page"
-echo "Waiting for release.yml (run $run, about 20 minutes)…"
+run_url="https://github.com/$repo/actions/runs/$run"
+if ! $wait; then
+  echo "release.yml is running (about 20 minutes): $run_url"
+  echo "    (gh run watch $run -R $repo  to follow it)"
+  echo "Then check the draft release (Releases, \"SpatialAudioServer $version\") and publish it there or with:"
+  echo "    gh release edit $tag -R $repo --draft=false"
+  exit 0
+fi
+echo "Waiting for release.yml ($run_url, about 20 minutes)…"
 if gh run watch -R "$repo" "$run" --exit-status --interval 30 >/dev/null; then
   echo
   echo "Draft release ready: $(gh release view "$tag" -R "$repo" --json url -q .url)"
