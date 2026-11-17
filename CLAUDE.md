@@ -59,8 +59,11 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   results in `docs/benchmarks.md`, which holds all benchmark numbers: keep PLAN.md to conclusions).
   Parked: the intermittent pairchains test failure; one unexplained test-host crash (PLAN.md Phase 5).
 
-- **Packaging (PACKAGING-PLAN.md) started:** day-to-day work is on the `develop` branch (no CI tests there; `main`
-  gets the full tests on pull requests). Versions from git tags via MinVer (`--version` on both programs); no tag yet.
+- **Packaging and releases (PACKAGING-PLAN.md) done:** .deb/.rpm (Fedora) for x64 and arm64, Windows MSIs with
+  their own GStreamer; `drafts.yml` (by hand, on develop) for test builds; merging a pull request develop → main
+  releases (CI runs on the pull request). v0.2.0 released 2026-11-17. **Both repositories are public** (default
+  branch `main`, rulesets on main: pull request, merge commits only, checks `test-1.28`/`test-1.24`). Day-to-day
+  work stays on `develop`. Next there: the GitHub Pages apt/yum repositories.
 
 ## Key decisions (summary; PLAN.md is authoritative)
 - Server is the SDP answerer; Opus 48 kHz; mono in, stereo out; per-(source,listener) chain queue->audioamplify->audiopanorama->listener audiomixer.

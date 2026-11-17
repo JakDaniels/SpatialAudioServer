@@ -2,8 +2,8 @@
 
 Status: **under way** (2026-11-17): steps 1–4 done (versioning, CI, code changes, the x64 `.deb` packages, tested);
 step 5 built (`.rpm` for Fedora, arm64), x64 packages tested in CI containers; step 6 (Windows MSIs) built and
-tested in CI and by hand; step 7 done: **v0.2.0 released** (2026-11-17, published as a private release). Next:
-step 8 (going public).
+tested in CI and by hand; step 7 done: **v0.2.0 released** (2026-11-17); step 8: **public** since 2026-11-17
+(settings done). Next: the GitHub Pages apt/yum repositories.
 Decisions so far are marked **Decided**; open points are listed at the end. [PLAN.md](PLAN.md) stays the
 specification of the server itself.
 
@@ -509,6 +509,14 @@ can run on GitHub's arm64 runners. The limits above stop mattering.
         Public, or pull requests from forks cannot pull them.
      8. Settings → Actions → General → "Fork pull request workflows from outside collaborators": require approval
         for all outside collaborators.
+   - **Done (2026-11-17):** both repositories are public, `main` is the default branch, private vulnerability
+     reporting is on, the `sas-ci` images pull without a login. Rulesets: `main` (no deletion or force push, a
+     pull request with no approvals needed, merge commits only, checks `test-1.28` and `test-1.24` from GitHub
+     Actions, no bypass) and `develop` (no deletion or force push only). Merge commits only, because the release
+     check matches the pull request's CI run through the merge's second parent. Outside contributors' workflows
+     need approval (set by the owner; not visible to a collaborator's API). `drafts.yml` fails visibly when
+     started from a branch other than develop. Left: the optional GitHub Support purge, and the GitHub Pages
+     apt/yum repositories as their own piece of work.
    - **History rewritten (done 2026-11-17):** the self-contained load tool binary
      (`scripts/loadtest-linux-x64/SpatialAudioServer.LoadTest`, about 950 MB over 19 versions, committed until
      CI built it) was removed from every commit with `git filter-repo`, then `develop`, `main`, `v0.2.0` and
