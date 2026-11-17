@@ -41,6 +41,8 @@ if [ -z "$version" ]; then
   exit 1
 fi
 echo "Version $version ($goarch)"
+# The release notes so far, from the tags' messages (a release's own included).
+scripts/changelog.sh "$version" > "$stage/CHANGELOG.md"
 
 for package in server loadtest; do
   for format in deb rpm; do
