@@ -538,6 +538,10 @@ tested without GStreamer.
      custom taps later. Ideas recorded for later: console commands to set a region's or parcel's acoustics;
      the script taking chat commands from the owner (its own `llListen`, no module chat listener needed); a getter
      function, so the script can read the current setting and save it to its notecard (`osMakeNotecard`).
+     Open: the plugin's packages in the apt/dnf repositories and the MSI
+     ([#23](https://github.com/JakDaniels/SpatialAudioServer/issues/23)), CI running the acoustic suites
+     ([#22](https://github.com/JakDaniels/SpatialAudioServer/issues/22)), and whether `acoustic` becomes the spatial
+     default ([#24](https://github.com/JakDaniels/SpatialAudioServer/issues/24)).
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
    **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
    `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**
@@ -611,6 +615,9 @@ tested without GStreamer.
        the authority. Mixing hears the avatar from the viewer's `sp` while that is within `Media:Spatial:SpeakerTether`
        (10 m) of the simulator's position, else from the simulator's; the listener is the viewer's camera (`lp/lh`)
        pulled back to within `Media:Spatial:ListenerTether` (50 m); no simulator position → the report is ignored.
+       With the outdoor curve, the camera (about 3 m behind the avatar) makes turning on the spot change the level
+       by up to 12 dB; distance from the avatar and direction from the camera is an open option
+       ([#21](https://github.com/JakDaniels/SpatialAudioServer/issues/21)).
        Messages closer than 20 ms are dropped (viewers send ≤ 10/s). A room made before this keeps its old
        `clientPose` (the module warns: delete the room to have it made again). `free` was not needed.
      - **Distance model, to check against a real SL viewer (2026-11-14):** the defaults (full volume within 10 m,
