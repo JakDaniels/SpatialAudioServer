@@ -6,6 +6,8 @@ What changed in each release: the same text as its release notes.
 
 - Server: a new `acoustic` mix engine, which mixes the whole room in one acousticmultimixer element (a separate
   GStreamer plugin): offered, and listed in `GET /api/status`, only where that plugin is installed.
+- Load tool: `--audio white-noise` and `pink-noise` send steady noise, to hear treble loss with distance and
+  direction, which speech hides.
 
 ## 0.2.2 (2026-11-18)
 
