@@ -526,6 +526,18 @@ tested without GStreamer.
      skipped where it is not (CI, for now). Spatial rooms still default to `matrix` (`Media:SpatialEngine`). Since the element's step 3
      (2026-11-18), `acoustic` rooms hear direction through its head model (the far ear later, about 6 dB quieter and
      duller, not silent) and air absorption; the spatial suite's "on one side" check is therefore 3 dB, not 14.
+
+     **Room acoustics (decided 2026-11-18):** the element's step 4 adds early reflections by preset (`room`:
+     `outdoor`, `small-room`, `hall`, `cave`). Rooms choose one with **`acoustics`** (create, get-or-create, and
+     `PATCH` while running: the acoustic engine sets the element's `room` at once; other engines ignore it; stored,
+     NULL = outdoor; the admin UI has a selector). Acoustics are per voice room, so an interior needs a parcel with
+     its own voice (a parcel sharing the region's voice sounds like the region). In OpenSim (to do, os-webrtc-sas):
+     a per-region default in the module's ini, as `spatialProfile`; a script function that sets the acoustics of
+     the voice room of the parcel the prim is on, allowed for the parcel owner and estate managers/owners (re-set by
+     the script at region start); then a ready-made script reading an "Acoustics" notecard, preset names first,
+     custom taps later. Ideas recorded for later: console commands to set a region's or parcel's acoustics;
+     the script taking chat commands from the owner (its own `llListen`, no module chat listener needed); a getter
+     function, so the script can read the current setting and save it to its notecard (`osMakeNotecard`).
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
    **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
    `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**

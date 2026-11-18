@@ -109,6 +109,8 @@ async function loadStatus() {
     if (first) {
       $("newEngine").innerHTML = s.engines.map(e =>
         `<option value="${escapeHtml(e.name)}" title="${escapeHtml(e.description)}"${e.name === s.defaultEngine ? " selected" : ""}>${escapeHtml(e.name)}</option>`).join("");
+      $("roomAcoustics").innerHTML = (s.acoustics ?? ["outdoor"]).map(a =>
+        `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join("");
     }
   } catch { /* shown by the next successful poll */ }
 }
@@ -159,6 +161,14 @@ async function deleteRoom(id) {
     await loadRooms();
   } catch (e) { alert(e.message); }
 }
+
+$("roomAcoustics").onchange = async () => {
+  try {
+    await request("PATCH", `/api/rooms/${state.selected}`, { acoustics: $("roomAcoustics").value });
+    $("roomAcoustics").blur();
+    refreshRoom();
+  } catch (e) { alert(e.message); }
+};
 
 $("newSpatial").onchange = () => {
   const s = state.status;
@@ -212,6 +222,7 @@ function renderRoom() {
   $("roomName").textContent = d.name;
   $("roomMeta").textContent = `${d.id} · ${d.engine}${d.spatial ? ", spatial" : ""} · ${d.participantCount} of ${d.maxParticipants}` +
     (d.externalId ? ` · external id ${d.externalId}` : "");
+  if (document.activeElement !== $("roomAcoustics")) $("roomAcoustics").value = d.acoustics ?? "outdoor";
   $("counters").textContent = !live ? "No media statistics (media disabled)."
     : !live.media.running ? "Media idle: the pipeline starts when someone joins."
     : `Mixing ${live.media.mixedPairs} source→listener pairs · ` +

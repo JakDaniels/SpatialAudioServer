@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using SpatialAudioServer.Configuration;
 using SpatialAudioServer.Media;
 using SpatialAudioServer.Media.Engines;
+using SpatialAudioServer.Media.Spatial;
 using SpatialAudioServer.Storage;
 
 namespace SpatialAudioServer.Rooms;
@@ -136,7 +137,7 @@ public sealed class RoomManager(
     {
         var normalized = ExternalIds.Normalize(externalId);
         var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine,
-            command?.Spatial, command?.ClientPose, command?.InWorldAvatars, command?.SpatialProfile);
+            command?.Spatial, command?.ClientPose, command?.InWorldAvatars, command?.SpatialProfile, command?.Acoustics);
         ValidateCreate(create);
 
         RoomSnapshot snapshot;
@@ -152,9 +153,15 @@ public sealed class RoomManager(
         return (snapshot, true);
     }
 
-    /// <summary>Changes what may change about a room after creation (today: <see cref="InWorldAvatars"/>).</summary>
+    /// <summary>
+    /// Changes what may change about a room after creation: <see cref="InWorldAvatars"/> and its acoustics (which a
+    /// running room's media takes at once).
+    /// </summary>
     public RoomSnapshot UpdateRoom(Guid roomId, UpdateRoomCommand command)
     {
+        new Validation().OneOf("acoustics", command.Acoustics, RoomAcoustics.IsKnown, RoomAcoustics.Names).ThrowIfInvalid();
+        RoomSnapshot snapshot;
+        var acousticsChanged = false;
         lock (_lock)
         {
             var room = FindRoom(roomId);
@@ -165,8 +172,21 @@ public sealed class RoomManager(
                 activity.Event("room.updated", roomId, detail: $"inWorldAvatars {avatars}");
                 log.LogInformation("Room {RoomId}: in-world avatars {InWorldAvatars}", roomId, avatars);
             }
-            return room.Snapshot();
+            if (command.Acoustics is not null && RoomAcoustics.Normalize(command.Acoustics) is var acoustics && acoustics != room.Acoustics)
+            {
+                rooms.UpdateAcoustics(roomId, acoustics);
+                room.Acoustics = acoustics;
+                acousticsChanged = true;
+                activity.Event("room.updated", roomId, detail: $"acoustics {acoustics ?? RoomAcoustics.Outdoor}");
+                log.LogInformation("Room {RoomId}: acoustics {Acoustics}", roomId, acoustics ?? RoomAcoustics.Outdoor);
+            }
+            snapshot = room.Snapshot();
         }
+        if (acousticsChanged)
+        {
+            media.RoomUpdated(snapshot);
+        }
+        return snapshot;
     }
 
     /// <summary>
@@ -736,6 +756,7 @@ public sealed class RoomManager(
             .OneOf("engine", command.Engine, MixEngines.Exists, MixEngines.All.Select(e => e.Name))
             .OneOf("spatialProfile", command.SpatialProfile, mediaOptions.Value.Spatial.Profiles.ContainsKey,
                 mediaOptions.Value.Spatial.Profiles.Keys)
+            .OneOf("acoustics", command.Acoustics, RoomAcoustics.IsKnown, RoomAcoustics.Names)
             .ThrowIfInvalid();
 
     private RoomSnapshot CreateRoomLocked(CreateRoomCommand command)
@@ -750,7 +771,7 @@ public sealed class RoomManager(
             command.Metadata?.ToJsonString(), time.GetUtcNow(),
             command.Engine ?? (command.Spatial == true ? mediaOptions.Value.SpatialEngine : DefaultEngine),
             command.Spatial ?? false, command.ClientPose?.ToString(), command.InWorldAvatars?.ToString(),
-            command.SpatialProfile?.Trim().ToLowerInvariant());
+            command.SpatialProfile?.Trim().ToLowerInvariant(), RoomAcoustics.Normalize(command.Acoustics));
         rooms.Insert(record);
         var room = new Room(record, DefaultEngine);
         _rooms[room.Id] = room;
@@ -806,11 +827,12 @@ public sealed class RoomManager(
         public InWorldAvatars InWorldAvatars { get; set; } =
             Enum.TryParse<InWorldAvatars>(record.InWorldAvatars, ignoreCase: true, out var avatars) ? avatars : InWorldAvatars.Off;
         public string? SpatialProfile { get; } = record.SpatialProfile;
+        public string? Acoustics { get; set; } = record.Acoustics;
         public Dictionary<Guid, Participant> Participants { get; } = [];
 
         public RoomSnapshot Snapshot() =>
             new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine, Spatial, ClientPose,
-                InWorldAvatars, SpatialProfile);
+                InWorldAvatars, SpatialProfile, Acoustics);
 
         public IReadOnlyList<ParticipantSnapshot> ParticipantSnapshots() =>
             Participants.Values.OrderBy(p => p.JoinedAt).Select(p => p.Snapshot()).ToList();

@@ -22,6 +22,9 @@ public interface IRoomMedia
 
     void RoomDeleted(Guid roomId);
 
+    /// <summary>A setting the media uses changed (the acoustics): a running room takes it at once.</summary>
+    void RoomUpdated(RoomSnapshot room);
+
     void ParticipantAdded(ParticipantSnapshot participant);
 
     void ParticipantRemoved(Guid roomId, Guid participantId);
@@ -89,6 +92,10 @@ public sealed class NullRoomMedia : IRoomMedia
     }
 
     public void RoomDeleted(Guid roomId)
+    {
+    }
+
+    public void RoomUpdated(RoomSnapshot room)
     {
     }
 

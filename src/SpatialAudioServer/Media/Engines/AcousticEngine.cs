@@ -62,6 +62,8 @@ internal sealed class AcousticEngine : IMixEngine
             _mixer.SetProperty("max-range", spatial.MaxRange);
         }
 
+        SetRoom(context.Acoustics);
+
         _silence = Silence($"silence-{id}");
         _silenceCaps = Make("capsfilter", $"silencecaps-{id}");
         using (var caps = Caps.FromString(MonoCaps))
@@ -108,6 +110,25 @@ internal sealed class AcousticEngine : IMixEngine
     }
 
     public IReadOnlyDictionary<Guid, double> InputLevels => _levels.ToDictionary(l => l.Key, l => l.Value.Level);
+
+    public void RoomUpdated(RoomSnapshot room) => SetRoom(room.Acoustics);
+
+    /// <summary>
+    /// The element's <c>room</c> (its early reflections) from the room's acoustics; null is outdoor. A plugin from
+    /// before rooms existed has no such property, and every room sounds outdoor.
+    /// </summary>
+    private void SetRoom(string? acoustics)
+    {
+        if (NativeGObject.HasProperty(_mixer.Handle, "room"))
+        {
+            Global.UtilSetObjectArg(_mixer, "room", acoustics ?? Spatial.RoomAcoustics.Outdoor);
+        }
+        else if (acoustics is not null)
+        {
+            _context.Log.LogWarning("Room {RoomId}: acoustics {Acoustics} needs a newer acousticmultimixer plugin; it sounds outdoor",
+                _context.RoomId, acoustics);
+        }
+    }
 
     public void ParticipantAdded(ParticipantSnapshot participant) => _members.TryAdd(participant.Id, new Member(participant));
 
