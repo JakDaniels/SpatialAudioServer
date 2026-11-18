@@ -523,7 +523,9 @@ tested without GStreamer.
      mutes and volumes (`Peers`) become the element's per-listener `trims`. Quaternions become yaw/pitch/roll
      (`AcousticEngine.Euler`). Offered only where the plugin is installed (`MixEngines` checks for the element once
      GStreamer is loaded; a stored room using it falls back to the default engine otherwise); its engine suites are
-     skipped where it is not (CI, for now). Spatial rooms still default to `matrix` (`Media:SpatialEngine`).
+     skipped where it is not (CI, for now). Spatial rooms still default to `matrix` (`Media:SpatialEngine`). Since the element's step 3
+     (2026-11-18), `acoustic` rooms hear direction through its head model (the far ear later, about 6 dB quieter and
+     duller, not silent) and air absorption; the spatial suite's "on one side" check is therefore 3 dB, not 14.
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
    **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
    `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**
