@@ -4,6 +4,8 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+## 0.2.2 (2026-11-18)
+
 - Server: `--help` points to the new settings guide, docs/configuration.md (running.md is now split into guides for
   the packages and for building from source).
 
