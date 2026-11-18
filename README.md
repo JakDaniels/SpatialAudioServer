@@ -116,6 +116,12 @@ Tests: `dotnet test src`.
 | [docs/gstreamer_acousticspace_design.md](docs/gstreamer_acousticspace_design.md) | Design notes for a possible acoustic-space DSP element |
 | [CLAUDE.md](CLAUDE.md) | Short handoff notes on the current state for AI-assisted sessions |
 
+## Supporting the project
+
+If SpatialAudioServer is useful to you, you can support its development through
+[GitHub Sponsors](https://github.com/sponsors/JakDaniels) (also the **Sponsor** button at the top of this page).
+Thank you.
+
 ## Licence
 
 Copyright 2026 Simon Annetts/Jak Daniels. Apache-2.0, see [LICENSE](LICENSE); attribution and third-party notices
