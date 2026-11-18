@@ -46,7 +46,7 @@ jobs:
           echo "::error::Run pages on main (the github-pages environment deploys from main only)."
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Tools
         run: |
@@ -85,9 +85,10 @@ jobs:
           # GitHub Pages sites may be about 1 GB.
           [ "$size" -lt 1000000000 ] || { echo "::error::The site is $((size / 1048576)) MB, over Pages' 1 GB."; exit 1; }
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+          include-hidden-files: true   # .nojekyll (v4 and later leave hidden files out by default)
 
   deploy:
     needs: build
@@ -101,4 +102,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

@@ -39,11 +39,11 @@ jobs:
         run: gst-inspect-1.0 --version && dotnet --version
 
       # Full history: MinVer needs the tags and the commit count for the version.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ matrix.gstreamer }}-${{ hashFiles('src/**/*.csproj', 'src/Directory.Build.props') }}

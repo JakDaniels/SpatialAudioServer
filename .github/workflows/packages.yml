@@ -51,7 +51,7 @@ jobs:
       release: ${{ steps.release.outputs.api }}
     steps:
       # Full history: MinVer needs the tags and the commit count for the version.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
@@ -61,7 +61,7 @@ jobs:
       - name: Tags
         run: git fetch --force --tags origin
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -156,7 +156,7 @@ jobs:
     container: ${{ matrix.image }}
     steps:
       # For scripts/test-packages.sh (without git in the container this downloads the files, which is enough).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
 
@@ -195,7 +195,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
@@ -205,12 +205,12 @@ jobs:
       - name: Tags
         run: git fetch --force --tags origin
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
       - name: Cache the GStreamer installer
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: gstreamer-installer
           key: gstreamer-msvc-x86_64-${{ env.GSTREAMER_VERSION }}
