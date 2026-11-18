@@ -206,7 +206,7 @@ src/SpatialAudioServer.LoadTest/ load tool: GStreamer fake clients (FakeClient, 
 spikes/WebRtcEcho/               Phase 0 spike (not part of the solution)
 scripts/                         setup-ubuntu.sh, build-loadtest.sh, render-voices.py,
                                  loadtest-linux-x64/ (voices, README; the self-contained load tool is built here, not committed)
-docs/                            running.md (Linux/Windows run docs), benchmarks.md (load-test results), design notes;
+docs/                            running-from-*.md, configuration.md (run docs), benchmarks.md (load-test results), design notes;
                                  reference/ (git-ignored sources)
 ```
 Domain/API code talks to the media layer via an interface (`IRoomMedia`) so the API and storage can be
@@ -421,8 +421,9 @@ tested without GStreamer.
      carry the token in the query), `frame-ancestors 'none'`.
    - **Token expiry, as built:** join tokens 5 min, one use; session tokens live as long as the participant; admin
      sessions sliding 8 h. API keys do not expire unless given an expiry (see below).
-   - **Run docs:** `docs/running.md` (Linux + Windows: prerequisites, first-time setup, configuration table,
-     firewall, systemd unit, Windows service, load tool). A published build uses its own folder as content root when
+   - **Run docs:** `docs/running-from-prebuilt-binaries.md` (the packages and MSIs: install, first-time setup,
+     service, firewall, upgrades, load tool), `docs/running-from-source.md` (prerequisites, build, systemd unit,
+     Windows service, load tool) and `docs/configuration.md` (every setting, where they come from, ports). A published build uses its own folder as content root when
      started elsewhere (Windows services start in System32). `dotnet publish -r win-x64` checked from Linux (SQLite
      native DLL included); **the Windows run itself is for the user** (GStreamer 1.28 installers are now Inno Setup
      `.exe`, not MSI: choose the full install).

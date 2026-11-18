@@ -73,17 +73,19 @@ two releases; every release stays on the Releases page.
 
 On Linux the server runs as the `spatialaudioserver` systemd service under its own user; site settings go in
 `/etc/spatialaudioserver/appsettings.json`, data in `/var/lib/spatialaudioserver`, logs in
-`journalctl -u spatialaudioserver`.
+`journalctl -u spatialaudioserver`. Open TCP 5000-5001 and UDP 40000-40999 (WebRTC media) in the firewall.
 
 **Windows 10 or later, Windows Server 2019 or later** (x64): run `SpatialAudioServer-<version>-x64.msi` (not
-signed yet: "More info", then "Run anyway"). It installs and starts the `SpatialAudioServer` service; firewall rules
-are an optional feature. Then, from a command prompt opened with "Run as administrator":
-`SpatialAudioServer admin set-password` and `SpatialAudioServer apikey create <label>`. Site settings go in
-`C:\ProgramData\SpatialAudioServer\appsettings.json`.
+signed yet: "More info", then "Run anyway"). It carries its own GStreamer, so nothing else is needed, and it
+installs and starts the `SpatialAudioServer` service. To have it open the firewall (TCP 5000-5001, UDP
+40000-40999), select the **Windows Firewall rules** feature on the Custom Setup page: it is off by default. Then,
+from a command prompt opened with "Run as administrator": `SpatialAudioServer admin set-password` and
+`SpatialAudioServer apikey create <label>`. Site settings go in `C:\ProgramData\SpatialAudioServer\appsettings.json`.
 
 Then open `https://<host>:5001/admin/`, or the test web client at `https://<host>:5001/client/`. The load tool has
-its own packages (`spatialaudioserver-loadtest`, command `sas-loadtest`). Configuration, networking and internet
-hosting: [docs/running.md](docs/running.md) and [docs/internet.md](docs/internet.md). For Second Life / OpenSim
+its own packages (`spatialaudioserver-loadtest`, command `sas-loadtest`). The full guide to the packages (firewall,
+upgrades, removal, unattended installs): [docs/running-from-prebuilt-binaries.md](docs/running-from-prebuilt-binaries.md).
+Settings: [docs/configuration.md](docs/configuration.md); internet hosting: [docs/internet.md](docs/internet.md). For Second Life / OpenSim
 viewers, add the region module [os-webrtc-sas](https://github.com/JakDaniels/os-webrtc-sas) to OpenSim.
 
 ## Building from source
@@ -98,14 +100,16 @@ dotnet run --project src/SpatialAudioServer                          # HTTP 5000
 ```
 
 Then open `https://<host>:5001/client/` (test mode, with the key) or `https://<host>:5001/admin/`.
-Tests: `dotnet test src`.
+Tests: `dotnet test src`. The full guide: [docs/running-from-source.md](docs/running-from-source.md).
 
 ## Documents
 
 | document | what it holds |
 |---|---|
 | [PLAN.md](PLAN.md) | The specification: architecture, API, decisions and their reasons, phases and progress |
-| [docs/running.md](docs/running.md) | Installing, configuring and running on Linux and Windows, as a service, firewall, load tool |
+| [docs/running-from-prebuilt-binaries.md](docs/running-from-prebuilt-binaries.md) | Installing and running the packages and the Windows installer: service, firewall, upgrades, load tool |
+| [docs/running-from-source.md](docs/running-from-source.md) | Building and running from the repository on Linux and Windows, as a service, load tool |
+| [docs/configuration.md](docs/configuration.md) | Every setting, where settings come from, the ports to open |
 | [docs/internet.md](docs/internet.md) | On an internet-facing host: TLS, the media port range, NAT, TURN, hardening |
 | [CHANGELOG.md](CHANGELOG.md) | What changed in each release |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, building and testing, and how changes are released |

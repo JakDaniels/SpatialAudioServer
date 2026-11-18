@@ -53,7 +53,7 @@ by compatible builds.
 https://github.com/dotnet/aspnetcore.
 "@
 foreach ($docs in @("$stage\docs", "$stage\loadtest-docs")) { New-Item -ItemType Directory -Force -Path $docs | Out-Null }
-Copy-Item README.md, docs\running.md, docs\internet.md "$stage\docs"
+Copy-Item README.md, docs\running-from-prebuilt-binaries.md, docs\configuration.md, docs\internet.md "$stage\docs"
 Copy-Item scripts\loadtest-linux-x64\README.md "$stage\loadtest-docs"
 # The release notes so far, from the tags' messages, as scripts/changelog.sh writes them (bash is not dependable here).
 $changelog = @('# Changelog', '', 'What changed in each release: the same text as its release notes.', '')

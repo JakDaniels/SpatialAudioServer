@@ -2,7 +2,7 @@
 # Local changes: sudo systemctl edit spatialaudioserver (e.g. AmbientCapabilities=CAP_NET_BIND_SERVICE to bind 443).
 [Unit]
 Description=SpatialAudioServer (WebRTC audio conferencing)
-Documentation=file:///usr/share/doc/spatialaudioserver/running.md
+Documentation=file:///usr/share/doc/spatialaudioserver/running-from-prebuilt-binaries.md
 After=network-online.target
 Wants=network-online.target
 

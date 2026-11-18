@@ -21,7 +21,7 @@ internal static class CommandLine
           {program} --version | --help
 
         Settings come from appsettings.json beside the program, then the site configuration folder (SAS_CONFIG_DIR),
-        then environment variables (Section__Key=value) and switches (--Section:Key=value). See docs/running.md.
+        then environment variables (Section__Key=value) and switches (--Section:Key=value). See docs/configuration.md.
         """;
 
     /// <summary>A message for an exception (or one inside it) that means a file or folder could not be opened for lack

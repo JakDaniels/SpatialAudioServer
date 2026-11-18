@@ -1,7 +1,7 @@
 # Benchmarks and load-test results
 
 Measured results for SpatialAudioServer, oldest first. The decisions taken from them are recorded in
-[PLAN.md](../PLAN.md); how to run the server is in [running.md](running.md).
+[PLAN.md](../PLAN.md); how to run the server is in [running-from-source.md](running-from-source.md).
 
 ## How the numbers are made
 
