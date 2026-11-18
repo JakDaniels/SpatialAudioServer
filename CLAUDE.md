@@ -55,8 +55,9 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   Test OpenSim standalone runs in `screen -S opensim` from `docs/reference/opensim/bin` (avatars Test One/Test Two).
 - **Phase 5 (hardening) under way** (PLAN.md Phase 5): media on demand (`Media:IdleRoomTimeout`), stale joins removed at
   token expiry, graceful shutdown, signalling rate limits, input limits, security headers, run docs in
-  `docs/running.md` (Linux + Windows). No Dockerfile for now. Windows run done 2026-11-14 (server + load tests pass;
-  results in `docs/benchmarks.md`, which holds all benchmark numbers: keep PLAN.md to conclusions).
+  `docs/running-from-prebuilt-binaries.md`, `running-from-source.md` and `configuration.md` (Linux + Windows).
+  No Dockerfile for now. Windows run done 2026-11-14 (server + load tests pass; results in `docs/benchmarks.md`,
+  which holds all benchmark numbers: keep PLAN.md to conclusions).
   Parked: the intermittent pairchains test failures (#13); one unexplained test-host crash (PLAN.md Phase 5).
 
 - **Packaging and releases (PACKAGING-PLAN.md) done:** .deb/.rpm (Fedora) for x64 and arm64, Windows MSIs with

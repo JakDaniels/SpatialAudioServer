@@ -69,11 +69,11 @@ scripts.
 |---|---|
 | Program (self-contained `linux-x64` / `linux-arm64` publish) | `/usr/lib/spatialaudioserver/` |
 | Command wrapper (`spatialaudioserver apikey …`, `admin …`) | `/usr/bin/spatialaudioserver` |
-| Configuration (a config file: kept and merged on upgrade) | `/etc/spatialaudioserver/appsettings.json` |
+| Configuration (a config file: kept and merged on upgrade; sets the media ports 40000–40999, as on Windows) | `/etc/spatialaudioserver/appsettings.json` |
 | Where things are, for the unit and the wrapper (a config file) | `/etc/spatialaudioserver/environment` |
 | Data: SQLite database, `keys/`, dev certificate | `/var/lib/spatialaudioserver/` (owned by the service user) |
 | Service | `/usr/lib/systemd/system/spatialaudioserver.service` (the hardened unit from `docs/internet.md`) |
-| Docs | `/usr/share/doc/spatialaudioserver/` (README, running.md, internet.md, licences) |
+| Docs | `/usr/share/doc/spatialaudioserver/` (README, running-from-prebuilt-binaries.md, configuration.md, internet.md, licences) |
 
 - **Install script:**
   - creates the system user `spatialaudio` and the data directory;

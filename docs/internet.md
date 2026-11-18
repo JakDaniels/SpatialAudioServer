@@ -1,9 +1,11 @@
 # Running SpatialAudioServer on an internet-facing host
 
-[running.md](running.md) covers installing and running on a LAN. This guide covers what changes when the server is
-reachable from the internet: TLS, the firewall, NAT, TURN for clients behind strict networks, and hardening. Every
-setting here is off by default, which suits a LAN; settings can be given in `appsettings.json` or as environment
-variables (`Media__Network__MinPort=40000`).
+[running-from-prebuilt-binaries.md](running-from-prebuilt-binaries.md) and [running-from-source.md](running-from-source.md)
+cover installing and running on a LAN, and [configuration.md](configuration.md) every setting. This guide covers
+what changes when the server is reachable from the internet: TLS, the firewall, NAT, TURN for clients behind strict
+networks, and hardening. Every setting here is off by default, which suits a LAN (except the media port range,
+which the packages set to 40000–40999); settings can be given in `appsettings.json` or as environment variables
+(`Media__Network__MinPort=40000`).
 
 ## 1. What is exposed
 

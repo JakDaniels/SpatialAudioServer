@@ -4,6 +4,9 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+- Server: `--help` points to the new settings guide, docs/configuration.md (running.md is now split into guides for
+  the packages and for building from source).
+
 ## 0.2.1 (2026-11-17)
 
 - Load tool: GstSharp.Net's libraries are separate files beside the program instead of inside it, as their LGPL
