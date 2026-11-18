@@ -1,7 +1,6 @@
 // Copyright 2026 Simon Annetts/Jak Daniels
 // SPDX-License-Identifier: Apache-2.0
 
-using System.Runtime.InteropServices;
 using Gst;
 using static SpatialAudioServer.Media.Engines.MediaBlocks;
 
@@ -113,17 +112,10 @@ internal sealed class RoomInterleave : IDisposable
         Add(_context.Pipeline, decoder);
         var src = decoder.GetStaticPad("src");
         var meter = _levels[participantId] = new LevelMeter();
-        src?.AddProbe(PadProbeType.Buffer, (_, info) =>
+        AddLevelProbe(src, rms =>
         {
-            using var buffer = info.GetBuffer();
-            if (buffer is not null)
-            {
-                using var map = buffer.Map(MapFlags.Read);
-                var rms = Rms(MemoryMarshal.Cast<byte, float>(map.Span));
-                meter.Add(rms);
-                onLevel?.Invoke(rms);
-            }
-            return PadProbeReturn.Ok;
+            meter.Add(rms);
+            onLevel?.Invoke(rms);
         });
         Link(src, _slotPads[slot], "source → interleave");
         decoder.SyncStateWithParent();
@@ -139,16 +131,6 @@ internal sealed class RoomInterleave : IDisposable
     public IReadOnlyDictionary<Guid, double> Levels => _levels.ToDictionary(l => l.Key, l => l.Value.Level);
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, LevelMeter> _levels = new();
-
-    /// <summary>Peak-hold level: jumps up at once, falls by 10% per buffer (≈ −46 dB per second at 20 ms).</summary>
-    private sealed class LevelMeter
-    {
-        private double _level;
-
-        public double Level => Volatile.Read(ref _level);
-
-        public void Add(double rms) => Volatile.Write(ref _level, Math.Max(rms, Volatile.Read(ref _level) * 0.9));
-    }
 
     public SourceSlot Detach(SourceSlot source)
     {
@@ -186,20 +168,6 @@ internal sealed class RoomInterleave : IDisposable
             }
             return -1;
         }
-    }
-
-    private static float Rms(ReadOnlySpan<float> samples)
-    {
-        if (samples.IsEmpty)
-        {
-            return 0;
-        }
-        double sum = 0;
-        foreach (var s in samples)
-        {
-            sum += s * s;
-        }
-        return (float)Math.Sqrt(sum / samples.Length);
     }
 }
 

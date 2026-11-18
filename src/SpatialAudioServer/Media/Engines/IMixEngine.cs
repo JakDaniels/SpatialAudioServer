@@ -78,6 +78,10 @@ internal sealed class MixEngineContext(
     public Spatial.ISpatialPolicy? Spatial { get; } =
         spatial ? new Spatial.DistancePolicy(options.Spatial.WithProfile(spatialProfile)) : null;
 
+    /// <summary>A spatial room's settings with its profile's distance curve applied (what <see cref="Spatial"/>
+    /// uses), for engines that compute the rendering elsewhere; null for a non-spatial room.</summary>
+    public Spatial.SpatialOptions? SpatialSettings { get; } = spatial ? options.Spatial.WithProfile(spatialProfile) : null;
+
     /// <summary>
     /// How <paramref name="source"/> sounds to <paramref name="listener"/>, including the source's gain/mute. Sources are
     /// heard from their position; listeners hear from their listener pose if they have one, else their own. A viewer's

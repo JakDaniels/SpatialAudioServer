@@ -6,6 +6,7 @@ using SpatialAudioServer.Api;
 using Microsoft.Extensions.DependencyInjection;
 using SpatialAudioServer.LoadTest;
 using SpatialAudioServer.Media;
+using SpatialAudioServer.Media.Engines;
 using SpatialAudioServer.Rooms;
 
 namespace SpatialAudioServer.Tests;
@@ -56,8 +57,12 @@ public abstract class MediaTestBase : IDisposable
 
     protected HttpClient Signal { get; }
 
-    protected async Task<RoomSnapshot> CreateRoomAsync(bool spatial = false) =>
-        await (await Api.PostAsJsonAsync("/api/rooms", new { name = "media test", engine = Engine, spatial })).Read<RoomSnapshot>();
+    protected async Task<RoomSnapshot> CreateRoomAsync(bool spatial = false)
+    {
+        // Engines from optional plugins (acoustic) are skipped where the plugin is not installed, such as in CI.
+        Skip.IfNot(MixEngines.Exists(Engine), MixEngines.Unavailable(Engine));
+        return await (await Api.PostAsJsonAsync("/api/rooms", new { name = "media test", engine = Engine, spatial })).Read<RoomSnapshot>();
+    }
 
     /// <summary>Adds a participant via the control API and connects a fake client sending <c>Tones[index]</c>.</summary>
     protected async Task<FakeClient> JoinAsync(

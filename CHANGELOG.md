@@ -4,6 +4,9 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+- Server: a new `acoustic` mix engine, which mixes the whole room in one acousticmultimixer element (a separate
+  GStreamer plugin): offered, and listed in `GET /api/status`, only where that plugin is installed.
+
 ## 0.2.2 (2026-11-18)
 
 - Server: `--help` points to the new settings guide, docs/configuration.md (running.md is now split into guides for

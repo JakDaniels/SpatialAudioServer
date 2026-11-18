@@ -513,6 +513,17 @@ tested without GStreamer.
      would grow into per-path coefficients (L/R gain, ITD, reflection taps). The control API will need more
      parameters from the region module (environment preset per room, geometry, per-participant voice level, …)
      carried on the same JSON update path to the engines.
+
+     **Under way (2026-11-18):** the element is `acousticmultimixer`, in its own repository
+     (github.com/JakDaniels/acousticmultimixer, Rust, MPL-2.0; its PLAN.md has the steps). Its step 2 matches the
+     `matrix` engine's sound (the same distance models, pan and constant-power stereo, computed in the element from
+     pad properties), and the **`acoustic` engine** (`Media/Engines/AcousticEngine.cs`) uses it: one element per
+     room, a slot per participant (`sink_N` in, `mix_N` out, the same N), slot 0 a muted silence source to keep the
+     live mixer running; the effective poses (after the tethers) and gains go onto the slot's pad, and a viewer's own
+     mutes and volumes (`Peers`) become the element's per-listener `trims`. Quaternions become yaw/pitch/roll
+     (`AcousticEngine.Euler`). Offered only where the plugin is installed (`MixEngines` checks for the element once
+     GStreamer is loaded; a stored room using it falls back to the default engine otherwise); its engine suites are
+     skipped where it is not (CI, for now). Spatial rooms still default to `matrix` (`Media:SpatialEngine`).
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
    **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
    `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**

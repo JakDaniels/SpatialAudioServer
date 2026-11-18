@@ -34,18 +34,6 @@ internal sealed class StartupService(
     public Task StartAsync(CancellationToken cancellationToken)
     {
         log.LogInformation("Database {Path}, schema version {Version}", database.Path, database.SchemaVersion);
-        if (!Media.Engines.MixEngines.Exists(media.Value.Engine))
-        {
-            throw new InvalidOperationException(
-                $"Media:Engine '{media.Value.Engine}' is not a mix engine. Available: " +
-                string.Join(", ", Media.Engines.MixEngines.All.Select(e => e.Name)) + ".");
-        }
-        if (!Media.Engines.MixEngines.Exists(media.Value.SpatialEngine))
-        {
-            throw new InvalidOperationException(
-                $"Media:SpatialEngine '{media.Value.SpatialEngine}' is not a mix engine. Available: " +
-                string.Join(", ", Media.Engines.MixEngines.All.Select(e => e.Name)) + ".");
-        }
         if (!MediaOptions.OpusFrameSizes.Contains(media.Value.OpusFrameMs))
         {
             throw new InvalidOperationException(
@@ -120,6 +108,18 @@ internal sealed class StartupService(
         {
             log.LogWarning("Media is disabled (Media:Enabled=false); GStreamer is not loaded");
         }
+
+        // After GStreamer is loaded: engines from optional plugins are only available once it has looked for them.
+        if (!Media.Engines.MixEngines.Exists(media.Value.Engine))
+        {
+            throw new InvalidOperationException($"Media:Engine: {Media.Engines.MixEngines.Unavailable(media.Value.Engine)}");
+        }
+        if (!Media.Engines.MixEngines.Exists(media.Value.SpatialEngine))
+        {
+            throw new InvalidOperationException(
+                $"Media:SpatialEngine: {Media.Engines.MixEngines.Unavailable(media.Value.SpatialEngine)}");
+        }
+        log.LogInformation("Mix engines: {Engines}", string.Join(", ", Media.Engines.MixEngines.All.Select(e => e.Name)));
 
         if (flags.DeleteExistingRooms)
         {

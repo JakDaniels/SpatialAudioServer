@@ -52,6 +52,7 @@ public sealed class GstRuntime(ILogger<GstRuntime> log)
                 ExceptionTrap.UnhandledException += ex => log.LogError(ex, "Unhandled exception in a GStreamer callback");
 
                 var missing = RequiredElements.Where(e => ElementFactory.Find(e) is null).ToList();
+                Engines.MixEngines.CheckElements(e => ElementFactory.Find(e) is not null);
                 Status = new GstStatus(true, true, GstSharp.NativeVersion.Description, missing, null);
                 log.LogInformation("{Version} loaded", Status.Version);
                 if (missing.Count > 0)

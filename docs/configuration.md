@@ -50,7 +50,7 @@ The JSON files may contain `//` comments. Restart the server after changing them
 | `Media:IdleRoomTimeout` | 30 s | a room's pipeline starts with its first participant and stops this long after the last leaves |
 | `Media:DeadConnectionTimeout` | 10 s | a connection failed/disconnected this long is removed (`connection-lost`) |
 | `Media:InactiveConnectionTimeout` | 30 s | a connection that has delivered no audio this long counts as failed (GStreamer 1.24's only way to notice a vanished client) |
-| `Media:Engine`, `Media:SpatialEngine` | `matrix-shared`, `matrix` | default mix engine for new rooms |
+| `Media:Engine`, `Media:SpatialEngine` | `matrix-shared`, `matrix` | default mix engine for new rooms (`pairchains`, `matrix`, `matrix-shared`, and `acoustic` where the acousticmultimixer GStreamer plugin is installed; `GET /api/status` lists what this server has) |
 | `Media:IceServers` | `[]` | STUN/TURN (not needed on a LAN); a TURN entry takes `Username`/`Credential`, or a `Secret` (coturn `static-auth-secret`) for per-client credentials valid `CredentialLifetime` (12 h) |
 | `Media:Network:MinPort`, `MaxPort` | any (the packages: 40000, 40999) | the media port range (UDP and ICE-TCP), for firewalls |
 | `Media:Network:PublicAddress` | unset | the public address behind 1:1 NAT: host candidates are also given with it |

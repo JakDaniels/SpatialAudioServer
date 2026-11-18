@@ -31,6 +31,12 @@ public sealed class MatrixShared : IEngineUnderTest
     public static string Name => "matrix-shared";
 }
 
+/// <summary>Needs the acousticmultimixer plugin; its suites are skipped where it is not installed.</summary>
+public sealed class Acoustic : IEngineUnderTest
+{
+    public static string Name => "acoustic";
+}
+
 [Collection("media")]
 public sealed class PairChainsMix : MixSuite<PairChains>;
 
@@ -67,6 +73,18 @@ public sealed class MatrixGraph : GraphSuite<Matrix>;
 [Collection("media")]
 public sealed class MatrixSharedGraph : GraphSuite<MatrixShared>;
 
+[Collection("media")]
+public sealed class AcousticMix : MixSuite<Acoustic>;
+
+[Collection("media")]
+public sealed class AcousticMixChanges : MixChangeSuite<Acoustic>;
+
+[Collection("media")]
+public sealed class AcousticSpatial : SpatialSuite<Acoustic>;
+
+[Collection("media")]
+public sealed class AcousticGraph : GraphSuite<Acoustic>;
+
 public sealed class EngineCoverageTests
 {
     [Theory]
@@ -81,8 +99,9 @@ public sealed class EngineCoverageTests
             .Select(t => (string)t.BaseType!.GetGenericArguments()[0].GetProperty(nameof(IEngineUnderTest.Name))!.GetValue(null)!)
             .ToHashSet();
 
-        var missing = MixEngines.All.Select(e => e.Name).Where(name => !covered.Contains(name)).ToList();
-        var unknown = covered.Where(name => !MixEngines.Exists(name)).ToList();
+        // Every engine this build knows, whether or not its plugin is installed here.
+        var missing = MixEngines.Known.Where(name => !covered.Contains(name)).ToList();
+        var unknown = covered.Where(name => !MixEngines.Known.Contains(name)).ToList();
         Assert.True(missing.Count == 0, $"Engines without a {suite.Name} subclass: {string.Join(", ", missing)}");
         Assert.True(unknown.Count == 0, $"{suite.Name} subclasses for unregistered engines: {string.Join(", ", unknown)}");
     }

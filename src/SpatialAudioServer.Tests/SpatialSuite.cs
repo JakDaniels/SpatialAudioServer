@@ -17,7 +17,7 @@ public abstract class SpatialSuite<TEngine>() : MediaTestBase(TEngine.Name) wher
     protected static readonly Quat FacingEast = new(0, 0, 0, 1);
     protected static readonly Quat FacingWest = new(0, 0, 1, 0);
 
-    [Fact]
+    [SkippableFact]
     public async Task Sources_are_panned_and_faded_by_position_and_follow_changes()
     {
         var room = await CreateRoomAsync(spatial: true);
@@ -47,7 +47,7 @@ public abstract class SpatialSuite<TEngine>() : MediaTestBase(TEngine.Name) wher
         AssertRatio(levels[far.ToneHz].Left, levels[left.ToneHz].Right, 1, "both within the reference distance");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task A_listener_can_turn_itself_through_signalling()
     {
         var room = await CreateRoomAsync(spatial: true); // clientPose defaults to orientation
@@ -62,7 +62,7 @@ public abstract class SpatialSuite<TEngine>() : MediaTestBase(TEngine.Name) wher
         AssertSide(listener.Meter.Levels()[north.ToneHz], leftSide: false, "north source after turning to face west");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Participants_without_a_position_are_heard_centred_at_full_volume()
     {
         var room = await CreateRoomAsync(spatial: true);

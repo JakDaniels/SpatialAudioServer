@@ -110,7 +110,7 @@ internal static partial class PipelineGraphReader
                 return Of("webrtc", rest);
             case "ingress" or "tee" or "noslot":
                 return Of("decode", rest);
-            case "interleave" or "roomtee" or "silencecaps":
+            case "interleave" or "roomtee" or "silencecaps" or "acoustic":
                 return Room();
             case "silence":
                 return rest == roomShort ? Room() : Of("listener", rest);

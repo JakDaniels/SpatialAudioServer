@@ -19,7 +19,7 @@ namespace SpatialAudioServer.Tests;
 /// </summary>
 public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) where TEngine : IEngineUnderTest
 {
-    [Fact]
+    [SkippableFact]
     public async Task A_late_joiner_hears_everyone_and_is_heard()
     {
         var room = await CreateRoomAsync();
@@ -32,7 +32,7 @@ public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) wh
         Assert.Equal(6, await Media.MixedPairsAsync(room.Id));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Removing_a_participant_via_the_api_takes_them_out_of_every_mix()
     {
         var room = await CreateRoomAsync();
@@ -52,7 +52,7 @@ public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) wh
         Assert.Equal(2, await Media.MixedPairsAsync(room.Id));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Leaving_via_signalling_removes_the_participant()
     {
         var room = await CreateRoomAsync();
@@ -67,7 +67,7 @@ public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) wh
         Assert.Equal(2, details!.Participants.Count);
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task A_muted_participant_is_not_heard_until_unmuted()
     {
         var room = await CreateRoomAsync();
@@ -83,7 +83,7 @@ public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) wh
         AssertHears(await SettleAndMeasureAsync(clients, Others(clients)), Others(clients));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task A_viewer_mutes_and_turns_down_one_person_for_itself_only()
     {
         var room = await CreateRoomAsync();
@@ -109,7 +109,7 @@ public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) wh
         AssertHears(await SettleAndMeasureAsync(clients, Others(clients)), Others(clients));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Deleting_a_room_with_connected_participants_tears_it_down()
     {
         var room = await CreateRoomAsync();
@@ -128,7 +128,7 @@ public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) wh
         AssertHears(await SettleAndMeasureAsync(fresh, Others(fresh)), Others(fresh));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Churn_leaves_the_room_consistent_and_does_not_leak_threads()
     {
         var room = await CreateRoomAsync();
@@ -184,7 +184,7 @@ public abstract class MixChangeSuite<TEngine>() : MediaTestBase(TEngine.Name) wh
             .GroupBy(n => System.Text.RegularExpressions.Regex.Replace(n, @"[0-9a-f]{4,}|\d+", "#"))
             .ToDictionary(g => g.Key, g => g.Count());
 
-    [Fact]
+    [SkippableFact]
     public async Task Re_adding_the_same_avatar_while_connected_replaces_the_old_connection()
     {
         var room = await CreateRoomAsync();

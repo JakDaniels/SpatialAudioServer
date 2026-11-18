@@ -67,6 +67,13 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   work stays on `develop`. Signed apt/dnf repositories at https://jakdaniels.github.io/SpatialAudioServer/
   (`pages.yml`, rebuilt from the latest two releases whenever one is published; key in `packaging/signing-key.asc`).
 
+- **acousticmultimixer** (issue #8): the GStreamer element for richer acoustics, in its own repo
+  (`JakDaniels/acousticmultimixer`, Rust, MPL-2.0, cloned and git-ignored at `docs/reference/acousticmultimixer`; its
+  PLAN.md has the steps; work on its `develop`, CI by hand: `gh workflow run ci.yml --ref develop`). Step 2 done
+  (stereo, distance, pan = `matrix`'s sound). The **`acoustic` engine** uses it, offered only where the plugin is
+  installed (here: `cargo build --release` there, then copy `target/release/libgstacousticmultimixer.so` to
+  `~/.local/share/gstreamer-1.0/plugins/`); its engine suites skip without it (CI).
+
 - **Open work is in GitHub issues** (since 2026-11-17), in both repositories: `gh issue list -R JakDaniels/SpatialAudioServer`
   and `gh issue list -R JakDaniels/os-webrtc-sas` (labels `server`, `web-client`, `ci-packaging`, `testing`, `parked`,
   `needs-decision`). Work spanning both has an issue in each, linked. PLAN.md keeps the design, decisions and their

@@ -13,7 +13,7 @@ namespace SpatialAudioServer.Tests;
 /// </summary>
 public abstract class GraphSuite<TEngine>() : MediaTestBase(TEngine.Name) where TEngine : IEngineUnderTest
 {
-    [Fact]
+    [SkippableFact]
     public async Task Every_element_is_in_a_block_and_links_join_listed_pads()
     {
         var room = await CreateRoomAsync();
