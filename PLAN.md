@@ -454,7 +454,10 @@ tested without GStreamer.
    - `ISpatialPolicy` → `DistancePolicy` (`Media/Spatial/`): full volume within `Media:Spatial:ReferenceDistance`,
      then `DistanceModel` (`Inverse`, `Linear`, `Exponential`; OpenAL formulas) with `Rolloff`, silent beyond
      `MaxRange` (60 m). Default since 2026-11-15: exponential from 2 m, rolloff 1 (physical, −6 dB per doubling);
-     rooms may name a profile instead (`spatialProfile`, below). Pan = sine of the horizontal angle from the
+     rooms may name a profile instead (`spatialProfile`, below). Since 2026-11-19 every curve fades out (raised
+     cosine) from `Media:Spatial:Taper` × `MaxRange` (0.75: 45 m) to silence at the range: at the cut-off a voice
+     was still at −29 dB, plus the acoustic engine's room sound, clearly heard until it stopped. The element has the
+     same `taper`. Pan = sine of the horizontal angle from the
      listener's facing (SL axes: x east, y north, z up; identity faces +x), so front and back are both centred.
      Elevation only counts towards distance. No position on either side = centred, full volume. The participant's
      gain/mute multiplies in (`MixEngineContext.Render`).

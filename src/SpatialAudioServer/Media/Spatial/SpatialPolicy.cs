@@ -79,6 +79,12 @@ public sealed class SpatialOptions
     public double MaxRange { get; set; } = 60;
 
     /// <summary>
+    /// Where volume starts fading smoothly to silence at <see cref="MaxRange"/>, as a fraction of it (every profile):
+    /// without a fade a voice still clearly heard just inside the range cuts off at it. 1 = no fade.
+    /// </summary>
+    public double Taper { get; set; } = 0.75;
+
+    /// <summary>
     /// Tethered rooms: a viewer's own avatar position is used while it is within this many metres of the simulator's
     /// (which lags: it is pushed a few times a second); further away, the simulator's position is used.
     /// </summary>
@@ -158,8 +164,8 @@ public interface ISpatialPolicy
 
 /// <summary>
 /// The default policy. Distance: full volume up to <see cref="SpatialOptions.ReferenceDistance"/>, then the
-/// <see cref="SpatialOptions.DistanceModel"/> (by default reference/distance, −6 dB per doubling), silent beyond
-/// <see cref="SpatialOptions.MaxRange"/>. Direction: pan is
+/// <see cref="SpatialOptions.DistanceModel"/> (by default reference/distance, −6 dB per doubling), fading out from
+/// <see cref="SpatialOptions.Taper"/> × <see cref="SpatialOptions.MaxRange"/> to silence at the range. Direction: pan is
 /// the sine of the source's horizontal angle from the listener's facing, so straight ahead or behind is centred and
 /// directly left or right is hard left or right (stereo cannot tell front from back). Elevation only affects distance.
 /// Either side without a position hears or is heard centred at full volume.
@@ -194,8 +200,25 @@ public sealed class DistancePolicy(SpatialOptions options) : ISpatialPolicy
         return new Rendering(gain, pan);
     }
 
-    /// <summary>The distance model's gain, 0 … 1.</summary>
-    public double Attenuation(double distance)
+    /// <summary>The distance model's gain, 0 … 1, with the fade towards the end of the range.</summary>
+    public double Attenuation(double distance) => Curve(distance) * Fade(distance);
+
+    /// <summary>1, then a raised cosine from Taper × MaxRange down to 0 at MaxRange (the acousticmultimixer element's too).</summary>
+    private double Fade(double distance)
+    {
+        var start = options.Taper * options.MaxRange;
+        if (options.Taper >= 1 || distance <= start)
+        {
+            return 1;
+        }
+        if (distance >= options.MaxRange)
+        {
+            return 0;
+        }
+        return 0.5 * (1 + Math.Cos(Math.PI * (distance - start) / (options.MaxRange - start)));
+    }
+
+    private double Curve(double distance)
     {
         double reference = options.ReferenceDistance, rolloff = options.Rolloff;
         if (distance <= reference)

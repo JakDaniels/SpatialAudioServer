@@ -60,6 +60,10 @@ internal sealed class AcousticEngine : IMixEngine
             _mixer.SetProperty("reference-distance", spatial.ReferenceDistance);
             _mixer.SetProperty("rolloff", spatial.Rolloff);
             _mixer.SetProperty("max-range", spatial.MaxRange);
+            if (NativeGObject.HasProperty(_mixer.Handle, "taper"))
+            {
+                _mixer.SetProperty("taper", spatial.Taper);
+            }
         }
 
         SetRoom(context.Acoustics);

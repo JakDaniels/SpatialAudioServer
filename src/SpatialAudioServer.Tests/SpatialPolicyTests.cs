@@ -12,8 +12,9 @@ namespace SpatialAudioServer.Tests;
 /// <summary>The default distance/direction model, the stereo pan law and the cluster grid (no media).</summary>
 public sealed class SpatialPolicyTests
 {
-    // The inverse curve from 10 m (the server default before 2026-11-15): simple numbers for direction and range tests.
-    private static readonly SpatialOptions Options = new() { DistanceModel = DistanceModel.Inverse, ReferenceDistance = 10, MaxRange = 60 };
+    // The inverse curve from 10 m (the server default before 2026-11-15), without the fade: simple numbers for
+    // direction and range tests.
+    private static readonly SpatialOptions Options = new() { DistanceModel = DistanceModel.Inverse, ReferenceDistance = 10, MaxRange = 60, Taper = 1 };
     private static readonly DistancePolicy Policy = new(Options);
     private static readonly Vec3 Origin = new(0, 0, 0);
     private static readonly Quat FacingEast = new(0, 0, 0, 1); // SL: identity rotation faces +x
@@ -50,12 +51,24 @@ public sealed class SpatialPolicyTests
     [InlineData(2, 1.0)]
     [InlineData(4, 0.5)]   // −6 dB per doubling from 2 m
     [InlineData(20, 0.1)]
-    [InlineData(50, 0.04)]
+    [InlineData(40, 0.05)]
     public void The_default_curve_is_physical_from_two_metres(double distance, double gain)
     {
         var policy = new DistancePolicy(new SpatialOptions());
         Assert.Equal(gain, policy.Render(new Vec3(distance, 0, 0), Origin, FacingEast).Gain, 6);
         Assert.True(policy.Render(new Vec3(61, 0, 0), Origin, FacingEast).IsSilent);
+    }
+
+    [Theory]
+    [InlineData(45, 1.0)]  // the last quarter of the 60 m range fades out
+    [InlineData(52.5, 0.5)]
+    [InlineData(60, 0.0)]
+    public void Voices_fade_out_before_the_maximum_range(double distance, double fade)
+    {
+        var policy = new DistancePolicy(new SpatialOptions());
+        Assert.Equal(2 / distance * fade, policy.Render(new Vec3(distance, 0, 0), Origin, FacingEast).Gain, 6);
+        var noFade = new DistancePolicy(new SpatialOptions { Taper = 1 });
+        Assert.Equal(2 / distance, noFade.Render(new Vec3(distance, 0, 0), Origin, FacingEast).Gain, 6);
     }
 
     [Fact]

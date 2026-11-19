@@ -69,8 +69,8 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
 
 - **acousticmultimixer** (issue #8): the GStreamer element for richer acoustics, in its own repo
   (`JakDaniels/acousticmultimixer`, Rust, MPL-2.0, cloned and git-ignored at `docs/reference/acousticmultimixer`; its
-  PLAN.md has the steps; work on its `develop`, CI by hand: `gh workflow run ci.yml --ref develop`). Step 2 done
-  (stereo, distance, pan = `matrix`'s sound). The **`acoustic` engine** uses it, offered only where the plugin is
+  PLAN.md has the steps; work on its `develop`, CI by hand: `gh workflow run ci.yml --ref develop`). Steps 2–5 done
+  (stereo, distance and pan; head model; early reflections; late reverb per voice; room presets and `taper`). The **`acoustic` engine** uses it, offered only where the plugin is
   installed (here: `cargo build --release` there, then copy `target/release/libgstacousticmultimixer.so` to
   `~/.local/share/gstreamer-1.0/plugins/`); its engine suites skip without it (CI).
 
