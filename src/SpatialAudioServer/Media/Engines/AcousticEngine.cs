@@ -64,6 +64,10 @@ internal sealed class AcousticEngine : IMixEngine
             {
                 _mixer.SetProperty("taper", spatial.Taper);
             }
+            if (NativeGObject.HasProperty(_mixer.Handle, "near-distance"))
+            {
+                _mixer.SetProperty("near-distance", spatial.NearDistance);
+            }
         }
 
         SetRoom(context.Acoustics);

@@ -41,10 +41,10 @@ internal sealed class StartupService(
         }
         var spatial = media.Value.Spatial;
         if (spatial.ReferenceDistance <= 0 || spatial.MaxRange < spatial.ReferenceDistance || spatial.Rolloff <= 0
-            || spatial.Taper is < 0 or > 1 || spatial.ClusterGainStepDb <= 0 || spatial.ClusterPanSteps < 1 || !Enum.IsDefined(spatial.DistanceModel))
+            || spatial.Taper is < 0 or > 1 || spatial.NearDistance < 0 || spatial.ClusterGainStepDb <= 0 || spatial.ClusterPanSteps < 1 || !Enum.IsDefined(spatial.DistanceModel))
         {
             throw new InvalidOperationException(
-                "Media:Spatial needs ReferenceDistance > 0, MaxRange ≥ ReferenceDistance, Rolloff > 0, Taper 0 … 1, DistanceModel " +
+                "Media:Spatial needs ReferenceDistance > 0, MaxRange ≥ ReferenceDistance, Rolloff > 0, Taper 0 … 1, NearDistance ≥ 0, DistanceModel " +
                 "Inverse, Linear or Exponential, ClusterGainStepDb > 0 and ClusterPanSteps ≥ 1.");
         }
         foreach (var (name, profile) in spatial.Profiles)

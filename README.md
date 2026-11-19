@@ -23,7 +23,7 @@ OpenSim region module, here: https://github.com/JakDaniels/os-webrtc-sas) and fo
   installed).
 - **Spatial audio:** gain by distance and left/right pan from positions and facing; clients can turn their own
   listener with their session token. With the `acoustic` engine, rooms can also choose their acoustics (`outdoor`,
-  `small-room`, `hall`, `cave`: early reflections).
+  `tiny-room`, `small-room`, `big-room`, `hall`, `long-hall`, `cave`, `cathedral`: reflections and reverb).
 - **Admin UI** (`/admin/`, own password): rooms, live participant levels and WebRTC stats, mute, gain and kick, an
   event log and session history, and a live view of each room's GStreamer pipeline as blocks and wires.
 - **Test web client** (`/client/`): join from a browser with a join link, or create rooms in test mode with an API key.

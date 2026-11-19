@@ -55,6 +55,7 @@ The JSON files may contain `//` comments. Restart the server after changing them
 | `Media:Network:MinPort`, `MaxPort` | any (the packages: 40000, 40999) | the media port range (UDP and ICE-TCP), for firewalls |
 | `Media:Network:PublicAddress` | unset | the public address behind 1:1 NAT: host candidates are also given with it |
 | `Media:Spatial:DistanceModel`, `ReferenceDistance`, `Rolloff`, `MaxRange`, `Profiles` | exponential, 2 m, 1, 60 m | distance curve; rooms may name a profile (`outdoor`, `meeting`) |
+| `Media:Spatial:NearDistance` | 2 m | `acoustic` rooms: closer than this a voice's reflections and reverb are turned down (to −12 dB at 0.5 m), so it stands out from the room; 0 = never |
 | `Media:Spatial:Taper` | 0.75 | voices fade smoothly to silence from this fraction of `MaxRange` (by default 45 m to 60 m) instead of cutting off at it; 1 = no fade |
 | `Media:OpusComplexity`, `OpusFrameMs`, `OpusBitrate` | 5, 40, 64000 | per listener's mix |
 

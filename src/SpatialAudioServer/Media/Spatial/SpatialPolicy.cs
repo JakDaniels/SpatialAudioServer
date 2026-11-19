@@ -85,6 +85,13 @@ public sealed class SpatialOptions
     public double Taper { get; set; } = 0.75;
 
     /// <summary>
+    /// The <c>acoustic</c> engine: closer than this a voice's reflections and reverb are turned down (6 dB per
+    /// halving, to 0.5 m), so it stands out from the room as in real life; 0 = never. Its own setting, as the
+    /// reference distance also shapes the direct sound (and the meeting profile's is 10 m).
+    /// </summary>
+    public double NearDistance { get; set; } = 2;
+
+    /// <summary>
     /// Tethered rooms: a viewer's own avatar position is used while it is within this many metres of the simulator's
     /// (which lags: it is pushed a few times a second); further away, the simulator's position is used.
     /// </summary>

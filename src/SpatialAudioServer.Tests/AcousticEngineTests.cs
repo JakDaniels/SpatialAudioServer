@@ -50,7 +50,7 @@ public sealed class RoomAcousticsTests : IDisposable
         {
             var api = server.CreateAuthedClient();
             var status = await api.GetFromJsonAsync<JsonObject>("/api/status");
-            Assert.Equal(["outdoor", "small-room", "hall", "cave"], status!["acoustics"]!.AsArray().Select(n => (string?)n));
+            Assert.Equal(["outdoor", "tiny-room", "small-room", "big-room", "hall", "long-hall", "cave", "cathedral"], status!["acoustics"]!.AsArray().Select(n => (string?)n));
 
             var plain = await (await api.PostAsJsonAsync("/api/rooms", new { name = "plain", spatial = true })).Read<RoomSnapshot>();
             Assert.Null(plain.Acoustics);
@@ -65,8 +65,8 @@ public sealed class RoomAcousticsTests : IDisposable
             var still = await (await api.PatchAsJsonAsync($"/api/rooms/{id}", new { inWorldAvatars = "Optional" })).Read<RoomSnapshot>();
             Assert.Equal("cave", still.Acoustics);
 
-            Assert.Equal(HttpStatusCode.BadRequest, (await api.PostAsJsonAsync("/api/rooms", new { name = "bad", acoustics = "cathedral" })).StatusCode);
-            Assert.Equal(HttpStatusCode.BadRequest, (await api.PatchAsJsonAsync($"/api/rooms/{id}", new { acoustics = "cathedral" })).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await api.PostAsJsonAsync("/api/rooms", new { name = "bad", acoustics = "swimming-pool" })).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await api.PatchAsJsonAsync($"/api/rooms/{id}", new { acoustics = "swimming-pool" })).StatusCode);
         }
         using (var server = new ServerFactory(path))
         {

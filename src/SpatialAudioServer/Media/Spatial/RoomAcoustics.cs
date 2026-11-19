@@ -13,7 +13,7 @@ public static class RoomAcoustics
     /// <summary>Open air, no reflections: what a room without a setting sounds like.</summary>
     public const string Outdoor = "outdoor";
 
-    public static IReadOnlyList<string> Names { get; } = [Outdoor, "small-room", "hall", "cave"];
+    public static IReadOnlyList<string> Names { get; } = [Outdoor, "tiny-room", "small-room", "big-room", "hall", "long-hall", "cave", "cathedral"];
 
     public static bool IsKnown(string name) => Names.Contains(name.Trim().ToLowerInvariant());
 

@@ -457,7 +457,8 @@ tested without GStreamer.
      rooms may name a profile instead (`spatialProfile`, below). Since 2026-11-19 every curve fades out (raised
      cosine) from `Media:Spatial:Taper` × `MaxRange` (0.75: 45 m) to silence at the range: at the cut-off a voice
      was still at −29 dB, plus the acoustic engine's room sound, clearly heard until it stopped. The element has the
-     same `taper`. Pan = sine of the horizontal angle from the
+     same `taper`; the acoustic engine also passes `Media:Spatial:NearDistance` (2 m) as its `near-distance` (closer
+     than that the room sound is turned down, so a voice right next to you stands out). Pan = sine of the horizontal angle from the
      listener's facing (SL axes: x east, y north, z up; identity faces +x), so front and back are both centred.
      Elevation only counts towards distance. No position on either side = centred, full volume. The participant's
      gain/mute multiplies in (`MixEngineContext.Render`).
@@ -530,8 +531,9 @@ tested without GStreamer.
      (2026-11-18), `acoustic` rooms hear direction through its head model (the far ear later, about 6 dB quieter and
      duller, not silent) and air absorption; the spatial suite's "on one side" check is therefore 3 dB, not 14.
 
-     **Room acoustics (decided 2026-11-18):** the element's step 4 adds early reflections by preset (`room`:
-     `outdoor`, `small-room`, `hall`, `cave`). Rooms choose one with **`acoustics`** (create, get-or-create, and
+     **Room acoustics (decided 2026-11-18):** the element's steps 4 and 5 add early reflections and reverb by
+     preset (`room`: `outdoor`, `tiny-room`, `small-room`, `big-room`, `hall`, `long-hall`, `cave`,
+     `cathedral`). Rooms choose one with **`acoustics`** (create, get-or-create, and
      `PATCH` while running: the acoustic engine sets the element's `room` at once; other engines ignore it; stored,
      NULL = outdoor; the admin UI has a selector). Acoustics are per voice room, so an interior needs a parcel with
      its own voice (a parcel sharing the region's voice sounds like the region). In OpenSim (to do, os-webrtc-sas):

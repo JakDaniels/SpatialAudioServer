@@ -123,7 +123,7 @@ public sealed record ParticipantSnapshot(
 /// <param name="SpatialProfile">Spatial rooms: the named distance curve (<c>Media:Spatial:Profiles</c>, e.g. "outdoor",
 /// "meeting"); null = the server's default curve. Fixed for the room's life.</param>
 /// <param name="Acoustics">The kind of space, for its early reflections (<c>outdoor</c>, the default: none;
-/// <c>small-room</c>, <c>hall</c>, <c>cave</c>); only the <c>acoustic</c> engine renders it. May change later.</param>
+/// <c>tiny-room</c>, <c>small-room</c>, <c>big-room</c>, <c>hall</c>, <c>long-hall</c>, <c>cave</c>, <c>cathedral</c>); only the <c>acoustic</c> engine renders it. May change later.</param>
 public sealed record CreateRoomCommand(
     string? Name, string? ExternalId, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null,
     ClientPose? ClientPose = null, InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null, string? Acoustics = null);

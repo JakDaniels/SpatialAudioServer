@@ -6,8 +6,11 @@ What changed in each release: the same text as its release notes.
 
 - Server: a new `acoustic` mix engine, which mixes the whole room in one acousticmultimixer element (a separate
   GStreamer plugin): offered, and listed in `GET /api/status`, only where that plugin is installed.
-- Server: rooms have `acoustics` (`outdoor`, the default, `small-room`, `hall` or `cave`), set when created or
-  changed later with `PATCH` and in the admin UI; `acoustic` rooms hear that space's reflections and reverb.
+- Server: rooms have `acoustics` (`outdoor`, the default, `tiny-room`, `small-room`, `big-room`, `hall`,
+  `long-hall`, `cave` or `cathedral`), set when created or changed later with `PATCH` and in the admin UI;
+  `acoustic` rooms hear that space's reflections and reverb.
+- Server: in `acoustic` rooms a voice closer than `Media:Spatial:NearDistance` (2 m) stands out from the room,
+  whose sound is turned down instead (to −12 dB at 0.5 m), as in real life.
 - Server: voices fade out smoothly over the last quarter of the range (`Media:Spatial:Taper`, 0.75) instead of
   cutting off at `MaxRange`, where they could still be clearly heard.
 - Load tool: `--audio white-noise` and `pink-noise` send steady noise, to hear treble loss with distance and
