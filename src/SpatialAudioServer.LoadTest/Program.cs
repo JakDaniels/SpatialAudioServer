@@ -186,6 +186,13 @@ public static class LoadTestProgram
                     $"a {voices[0].Length.TotalSeconds:F1} s cycle, e.g. {voices[^1].Path}");
                 continue;
             }
+            if (keyword is "white-noise" or "pink-noise")
+            {
+                // Broadband, for hearing filters (air absorption, head shadow) that speech hides.
+                clips.Add(AudioClip.Noise(pink: keyword == "pink-noise"));
+                Console.WriteLine($"Audio: {clips[^1].Path}, continuous");
+                continue;
+            }
             var clip = AudioClip.Load(file);
             clips.Add(clip);
             Console.WriteLine($"Audio {clip.Path}: {clip.Length.TotalSeconds:F1} s");
@@ -561,7 +568,8 @@ public static class LoadTestProgram
             "  --audio voices: natural pre-rendered voices (scripts/loadtest-linux-x64/voices; --voices DIR elsewhere).\n" +
             "  Each bot says its name (\"Bot, 1\", …; --name changes \"Bot\"), and with --spatial where it stands, taking\n" +
             "  turns; voices-together: all at once. flite / flite-together: the same words synthesised by libflite\n" +
-            "  (Linux only, robotic). Or loop audio files (any format GStreamer decodes; shared round-robin).\n" +
+            "  (Linux only, robotic). white-noise / pink-noise: steady noise across the whole spectrum, to hear\n" +
+            "  filtering by distance and direction. Or loop audio files (any format GStreamer decodes; shared round-robin).\n" +
             "  --volume scales what they send (default 1.0 for audio, 0.1 for tones).\n" +
             "  --spatial (spatial rooms): bots stand on the 8 compass points of rings round the centre, where the browser\n" +
             "  client puts you facing east: bots 1-8 on the first ring (--radius, default 5 m), 9-16 10 m further out, ….\n" +

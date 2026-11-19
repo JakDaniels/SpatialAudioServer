@@ -6,6 +6,7 @@ using SpatialAudioServer.Configuration;
 using SpatialAudioServer.Hosting;
 using SpatialAudioServer.Media;
 using SpatialAudioServer.Media.Engines;
+using SpatialAudioServer.Media.Spatial;
 using SpatialAudioServer.Rooms;
 
 namespace SpatialAudioServer.Api;
@@ -13,7 +14,8 @@ namespace SpatialAudioServer.Api;
 public sealed record RoomDetails(
     Guid Id, string Name, string? ExternalId, int MaxParticipants, System.Text.Json.Nodes.JsonObject? Metadata,
     DateTimeOffset CreatedAt, int ParticipantCount, string Engine, bool Spatial, ClientPose ClientPose,
-    IReadOnlyList<ParticipantSnapshot> Participants, InWorldAvatars InWorldAvatars = InWorldAvatars.Off, string? SpatialProfile = null);
+    IReadOnlyList<ParticipantSnapshot> Participants, InWorldAvatars InWorldAvatars = InWorldAvatars.Off, string? SpatialProfile = null,
+    string? Acoustics = null);
 
 public sealed record JoinResponse(
     Guid ParticipantId, Guid RoomId, string JoinToken, string SignalUrl, DateTimeOffset ExpiresAt, Guid? ReplacedParticipantId);
@@ -21,7 +23,7 @@ public sealed record JoinResponse(
 public sealed record StatusResponse(
     string Version, DateTimeOffset StartedAt, double UptimeSeconds, GstStatusDto Gstreamer, int Rooms, int Participants,
     LimitOptions Limits, ProcessStatus Process, string DefaultEngine, IReadOnlyList<MixEngineInfo> Engines,
-    string DefaultSpatialEngine);
+    string DefaultSpatialEngine, IReadOnlyList<string>? Acoustics = null);
 
 /// <summary>Server process resources; the load tool samples CpuSeconds twice to get CPU use over a window.</summary>
 public sealed record ProcessStatus(double CpuSeconds, int ProcessorCount, long WorkingSetBytes, int Threads);
@@ -45,7 +47,7 @@ public static class ControlApi
                 Version, clock.StartedAt, Math.Round(clock.Uptime.TotalSeconds, 1),
                 new GstStatusDto(g.Enabled, g.Ok, g.Version, g.MissingElements, g.Error),
                 rooms.RoomCount, rooms.ParticipantCount, limits.Value, CurrentProcess(),
-                media.Value.Engine, MixEngines.All, media.Value.SpatialEngine);
+                media.Value.Engine, MixEngines.All, media.Value.SpatialEngine, RoomAcoustics.Names);
         });
 
         var roomsApi = api.MapGroup("/rooms");
@@ -89,14 +91,15 @@ public static class ControlApi
         {
             var (r, participants) = rooms.GetRoom(ResolveRoom(http, rooms));
             return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, r.Engine, r.Spatial,
-                r.ClientPose, participants, r.InWorldAvatars, r.SpatialProfile);
+                r.ClientPose, participants, r.InWorldAvatars, r.SpatialProfile, r.Acoustics);
         });
 
         // Viewer keys the integration has removed (its NPCs, guests): SL viewers drop them from their lists.
         room.MapPost("/viewers-gone", (HttpContext http, ViewerKeysGoneCommand body, RoomManager rooms) =>
             Results.Ok(new { reported = rooms.ViewerKeysGone(ResolveRoom(http, rooms), body) }));
 
-        // What may change after creation: whether the integration shows web and bot participants in-world.
+        // What may change after creation: whether the integration shows web and bot participants in-world, and the
+        // room's acoustics.
         room.MapPatch("/", (HttpContext http, UpdateRoomCommand body, RoomManager rooms) =>
             rooms.UpdateRoom(ResolveRoom(http, rooms), body));
 

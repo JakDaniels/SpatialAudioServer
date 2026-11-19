@@ -17,7 +17,7 @@ public abstract class SpatialSuite<TEngine>() : MediaTestBase(TEngine.Name) wher
     protected static readonly Quat FacingEast = new(0, 0, 0, 1);
     protected static readonly Quat FacingWest = new(0, 0, 1, 0);
 
-    [Fact]
+    [SkippableFact]
     public async Task Sources_are_panned_and_faded_by_position_and_follow_changes()
     {
         var room = await CreateRoomAsync(spatial: true);
@@ -47,7 +47,7 @@ public abstract class SpatialSuite<TEngine>() : MediaTestBase(TEngine.Name) wher
         AssertRatio(levels[far.ToneHz].Left, levels[left.ToneHz].Right, 1, "both within the reference distance");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task A_listener_can_turn_itself_through_signalling()
     {
         var room = await CreateRoomAsync(spatial: true); // clientPose defaults to orientation
@@ -62,7 +62,7 @@ public abstract class SpatialSuite<TEngine>() : MediaTestBase(TEngine.Name) wher
         AssertSide(listener.Meter.Levels()[north.ToneHz], leftSide: false, "north source after turning to face west");
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Participants_without_a_position_are_heard_centred_at_full_volume()
     {
         var room = await CreateRoomAsync(spatial: true);
@@ -80,10 +80,14 @@ public abstract class SpatialSuite<TEngine>() : MediaTestBase(TEngine.Name) wher
         Api.PatchAsJsonAsync($"/api/rooms/{roomId}/participants/{participantId}", body).ContinueWith(t => t.Result.EnsureSuccessStatusCode());
 
     /// <summary>Hard to one side: the far channel well under a fifth of the near one.</summary>
+    /// <summary>
+    /// Clearly on that side: the near ear at least 3 dB louder. A stereo pan leaves the far ear silent, the acoustic
+    /// engine's head model about 6 dB down (later and duller too), so this is what both share.
+    /// </summary>
     protected static void AssertSide((double Left, double Right) level, bool leftSide, string what)
     {
         var (near, other) = leftSide ? (level.Left, level.Right) : (level.Right, level.Left);
-        Assert.True(near > 0.05 && other < near / 5,
+        Assert.True(near > 0.05 && other < near / Math.Sqrt(2),
             $"{what}: expected on the {(leftSide ? "left" : "right")}, got L {level.Left:F3} R {level.Right:F3}");
     }
 

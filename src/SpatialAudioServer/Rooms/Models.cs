@@ -85,7 +85,8 @@ public sealed record RoomSnapshot(
     bool Spatial = false,
     ClientPose ClientPose = ClientPose.None,
     InWorldAvatars InWorldAvatars = InWorldAvatars.Off,
-    string? SpatialProfile = null);
+    string? SpatialProfile = null,
+    string? Acoustics = null);
 
 public sealed record ParticipantSnapshot(
     Guid Id,
@@ -121,20 +122,23 @@ public sealed record ParticipantSnapshot(
 /// <param name="InWorldAvatars">Whether the integration shows web and bot participants in-world; default off.</param>
 /// <param name="SpatialProfile">Spatial rooms: the named distance curve (<c>Media:Spatial:Profiles</c>, e.g. "outdoor",
 /// "meeting"); null = the server's default curve. Fixed for the room's life.</param>
+/// <param name="Acoustics">The kind of space, for its early reflections (<c>outdoor</c>, the default: none;
+/// <c>tiny-room</c>, <c>small-room</c>, <c>big-room</c>, <c>hall</c>, <c>long-hall</c>, <c>cave</c>, <c>cathedral</c>); only the <c>acoustic</c> engine renders it. May change later.</param>
 public sealed record CreateRoomCommand(
     string? Name, string? ExternalId, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null,
-    ClientPose? ClientPose = null, InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null);
+    ClientPose? ClientPose = null, InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null, string? Acoustics = null);
 
 /// <summary>Body of get-or-create by external id. Only used when the room is created; name defaults to the external id.</summary>
 public sealed record EnsureRoomCommand(
     string? Name, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null, ClientPose? ClientPose = null,
-    InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null);
+    InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null, string? Acoustics = null);
 
 /// <summary>Viewer keys (UUIDs) that have gone from a room, e.g. NPCs the integration removed (SL viewers drop them).</summary>
 public sealed record ViewerKeysGoneCommand(IReadOnlyList<string>? Keys);
 
 /// <summary>Partial update of a room: null fields are left unchanged. The rest of a room is fixed for its life.</summary>
-public sealed record UpdateRoomCommand(InWorldAvatars? InWorldAvatars);
+/// <param name="Acoustics">The kind of space (see <see cref="CreateRoomCommand"/>); "outdoor" goes back to none.</param>
+public sealed record UpdateRoomCommand(InWorldAvatars? InWorldAvatars = null, string? Acoustics = null);
 
 /// <param name="ClientNamed">
 /// The participant may choose its own display name when it joins (an invited guest); otherwise the name given here

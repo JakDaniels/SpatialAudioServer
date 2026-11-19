@@ -27,6 +27,8 @@ depends:
   - libstdc++6
 recommends:
   - systemd
+  # The acoustic mix engine's element (its own package, in the same apt repository).
+  - gstreamer1.0-acousticmultimixer
 
 # The .rpm (Fedora; not RHEL 10, whose GStreamer has no webrtcbin): the same contents and scripts, Fedora's package
 # names. openSUSE names
@@ -46,6 +48,7 @@ overrides:
       - libstdc++
     recommends:
       - systemd
+      - gstreamer1-acousticmultimixer
 
 contents:
   # The program: a self-contained .NET publish (runtime included), read-only.

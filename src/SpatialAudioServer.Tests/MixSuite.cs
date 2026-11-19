@@ -14,7 +14,7 @@ namespace SpatialAudioServer.Tests;
 /// </summary>
 public abstract class MixSuite<TEngine>() : MediaTestBase(TEngine.Name) where TEngine : IEngineUnderTest
 {
-    [Fact]
+    [SkippableFact]
     public async Task Two_participants_hear_each_other_but_not_themselves()
     {
         var room = await CreateRoomAsync();
@@ -29,7 +29,7 @@ public abstract class MixSuite<TEngine>() : MediaTestBase(TEngine.Name) where TE
         Assert.Equal(2, await Media.MixedPairsAsync(room.Id));
     }
 
-    [Fact]
+    [SkippableFact]
     public async Task Four_participants_each_hear_the_other_three()
     {
         var room = await CreateRoomAsync();

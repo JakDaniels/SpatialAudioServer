@@ -50,11 +50,13 @@ The JSON files may contain `//` comments. Restart the server after changing them
 | `Media:IdleRoomTimeout` | 30 s | a room's pipeline starts with its first participant and stops this long after the last leaves |
 | `Media:DeadConnectionTimeout` | 10 s | a connection failed/disconnected this long is removed (`connection-lost`) |
 | `Media:InactiveConnectionTimeout` | 30 s | a connection that has delivered no audio this long counts as failed (GStreamer 1.24's only way to notice a vanished client) |
-| `Media:Engine`, `Media:SpatialEngine` | `matrix-shared`, `matrix` | default mix engine for new rooms |
+| `Media:Engine`, `Media:SpatialEngine` | `matrix-shared`, `matrix` | default mix engine for new rooms (`pairchains`, `matrix`, `matrix-shared`, and `acoustic` where the acousticmultimixer GStreamer plugin is installed; `GET /api/status` lists what this server has) |
 | `Media:IceServers` | `[]` | STUN/TURN (not needed on a LAN); a TURN entry takes `Username`/`Credential`, or a `Secret` (coturn `static-auth-secret`) for per-client credentials valid `CredentialLifetime` (12 h) |
 | `Media:Network:MinPort`, `MaxPort` | any (the packages: 40000, 40999) | the media port range (UDP and ICE-TCP), for firewalls |
 | `Media:Network:PublicAddress` | unset | the public address behind 1:1 NAT: host candidates are also given with it |
 | `Media:Spatial:DistanceModel`, `ReferenceDistance`, `Rolloff`, `MaxRange`, `Profiles` | exponential, 2 m, 1, 60 m | distance curve; rooms may name a profile (`outdoor`, `meeting`) |
+| `Media:Spatial:NearDistance` | 2 m | `acoustic` rooms: closer than this a voice's reflections and reverb are turned down (to −12 dB at 0.5 m), so it stands out from the room; 0 = never |
+| `Media:Spatial:Taper` | 0.75 | voices fade smoothly to silence from this fraction of `MaxRange` (by default 45 m to 60 m) instead of cutting off at it; 1 = no fade |
 | `Media:OpusComplexity`, `OpusFrameMs`, `OpusBitrate` | 5, 40, 64000 | per listener's mix |
 
 ## 3. Network

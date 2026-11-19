@@ -38,6 +38,18 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
         }
     }
 
+    public void RoomUpdated(RoomSnapshot room)
+    {
+        if (_rooms.TryGetValue(room.Id, out var entry))
+        {
+            lock (entry)
+            {
+                entry.Room = room;
+                entry.Pipeline?.UpdateRoom(room);
+            }
+        }
+    }
+
     public void ParticipantAdded(ParticipantSnapshot participant)
     {
         var entry = Entry(participant.RoomId);
@@ -224,7 +236,7 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
     /// <summary>A room's media state; fields are guarded by locking the entry.</summary>
     private sealed class RoomEntry(RoomSnapshot room)
     {
-        public RoomSnapshot Room { get; } = room;
+        public RoomSnapshot Room { get; set; } = room;
         public RoomPipeline? Pipeline { get; set; }
         public HashSet<Guid> Participants { get; } = [];
         /// <summary>Recent leavers, replayed to SL viewers that join; kept while the media is stopped.</summary>

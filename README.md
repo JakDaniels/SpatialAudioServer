@@ -17,10 +17,13 @@ OpenSim region module, here: https://github.com/JakDaniels/os-webrtc-sas) and fo
 - **WebRTC signalling over HTTP:** SDP offer/answer and trickle ICE; the server is always the answerer. Opus 48 kHz,
   mono in, stereo out.
 - **Mix engines, chosen per room:** `matrix-shared` (default: only the current talkers are mixed, and listeners who
-  hear the same mix share one encoder), `matrix` (one encoder per listener, the default for spatial rooms) and
-  `pairchains` (a GStreamer chain per source/listener pair, for comparison).
+  hear the same mix share one encoder), `matrix` (one encoder per listener, the default for spatial rooms),
+  `pairchains` (a GStreamer chain per source/listener pair, for comparison) and `acoustic` (the whole room in one
+  [acousticmultimixer](https://github.com/JakDaniels/acousticmultimixer) element; offered when that plugin is
+  installed: the Windows installers include it, and the Linux packages recommend it).
 - **Spatial audio:** gain by distance and left/right pan from positions and facing; clients can turn their own
-  listener with their session token.
+  listener with their session token. With the `acoustic` engine, rooms can also choose their acoustics (`outdoor`,
+  `tiny-room`, `small-room`, `big-room`, `hall`, `long-hall`, `cave`, `cathedral`: reflections and reverb).
 - **Admin UI** (`/admin/`, own password): rooms, live participant levels and WebRTC stats, mute, gain and kick, an
   event log and session history, and a live view of each room's GStreamer pipeline as blocks and wires.
 - **Test web client** (`/client/`): join from a browser with a join link, or create rooms in test mode with an API key.

@@ -176,8 +176,13 @@ internal static unsafe class NativeGObject
         }
     }
 
-    private static bool HasProperty(nint obj, string name)
+    /// <summary>Whether the object has a property of that name.</summary>
+    public static bool HasProperty(nint obj, string name)
     {
+        if (Functions is null || obj == 0)
+        {
+            return false;
+        }
         var klass = *(nint*)obj; // GTypeInstance.g_class is the first field of every GObject
         fixed (byte* n = Utf8(name))
         {

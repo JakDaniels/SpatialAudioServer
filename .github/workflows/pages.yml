@@ -1,7 +1,9 @@
 # The apt and dnf package repositories on this repository's GitHub Pages (PACKAGING-PLAN.md "Package repositories"):
 # https://jakdaniels.github.io/SpatialAudioServer/ with deb/ and rpm/, signed with the project key. Rebuilt from the
 # files of the latest two published releases (not drafts or pre-releases) whenever a release is published, so no
-# package is ever committed to git, and older releases drop out of the site (they stay on the Releases page).
+# package is ever committed to git, and older releases drop out of the site (they stay on the Releases page). The
+# acousticmultimixer plugin's packages (the acoustic engine; the server package recommends them) come from its own
+# latest published release: after publishing one, run this by hand ("Run workflow" on main) to add it.
 # The build always runs on main (the github-pages environment deploys from main only): a release published by hand
 # relays to it here, and release.yml (label "publish") starts it directly, since a release its token publishes starts
 # no workflow. "Run workflow" on main rebuilds the site by hand.
@@ -46,7 +48,7 @@ jobs:
           echo "::error::Run pages on main (the github-pages environment deploys from main only)."
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Tools
         run: |
@@ -61,9 +63,10 @@ jobs:
           printf '%s\n' "$SAS_SIGNING_KEY" | gpg --batch --import
           gpg --list-secret-keys --keyid-format long
 
-      - name: The latest two releases' packages
+      - name: The latest two releases' packages, and the plugin's
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PLUGIN_REPO: JakDaniels/acousticmultimixer
         run: |
           mkdir -p packages
           tags="$(gh release list -R "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases -L 2 --json tagName -q '.[].tagName')"
@@ -74,6 +77,16 @@ jobs:
             mv "downloads/$tag"/* packages/
           done
           echo "Releases: $(echo $tags)"
+          # The plugin's latest release (public: no token needed for another repository's releases).
+          plugin="$(gh release list -R "$PLUGIN_REPO" --exclude-drafts --exclude-pre-releases -L 1 --json tagName -q '.[0].tagName')"
+          if [ -n "$plugin" ]; then
+            gh release download "$plugin" -R "$PLUGIN_REPO" -D "downloads/plugin" -p '*.deb' -p '*.rpm' -p SHA256SUMS
+            (cd downloads/plugin && sha256sum -c --ignore-missing --quiet SHA256SUMS && rm SHA256SUMS)
+            mv downloads/plugin/* packages/
+            echo "acousticmultimixer: $plugin"
+          else
+            echo "::warning::No published acousticmultimixer release: the site has no plugin packages."
+          fi
           ls -l packages
 
       - name: Build the repositories
@@ -85,9 +98,10 @@ jobs:
           # GitHub Pages sites may be about 1 GB.
           [ "$size" -lt 1000000000 ] || { echo "::error::The site is $((size / 1048576)) MB, over Pages' 1 GB."; exit 1; }
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+          include-hidden-files: true   # .nojekyll (v4 and later leave hidden files out by default)
 
   deploy:
     needs: build
@@ -101,4 +115,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

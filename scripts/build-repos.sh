@@ -83,6 +83,8 @@ gpgkey=$url/key.asc
 EOF
 
 # A page for people who open the address in a browser.
+plugin_versions="$(ls "$site/deb/pool/main" | sed -nE 's/^gstreamer1\.0-acousticmultimixer_([^_]+)_amd64\.deb$/\1/p' | sort -V -r | paste -sd, - | sed 's/,/, /g')"
+[ -z "$plugin_versions" ] || plugin_versions=" (version $plugin_versions)"
 versions="$(ls "$site/deb/pool/main" | sed -nE 's/^spatialaudioserver_([^_]+)_amd64\.deb$/\1/p' | sort -V -r | paste -sd, - | sed 's/,/, /g')"
 cat > "$site/index.html" <<EOF
 <!doctype html>
@@ -94,7 +96,9 @@ pre{background:#f4f4f4;padding:.8rem;overflow-x:auto}@media (prefers-color-schem
 <h1>SpatialAudioServer packages</h1>
 <p>Package repositories for <a href="https://github.com/JakDaniels/SpatialAudioServer">SpatialAudioServer</a>, so
 that updates come with the system's own updates. Versions here: $versions. Every release is also on the
-<a href="https://github.com/JakDaniels/SpatialAudioServer/releases">Releases page</a>, with the Windows installers.</p>
+<a href="https://github.com/JakDaniels/SpatialAudioServer/releases">Releases page</a>, with the Windows installers.
+The server package recommends the <a href="https://github.com/JakDaniels/acousticmultimixer">acousticmultimixer</a>
+GStreamer plugin (the acoustic mix engine), which is here too$plugin_versions.</p>
 <h2>Ubuntu 24.04 or later, Debian 13 or later (load tool: Ubuntu 22.04 or later)</h2>
 <pre>curl -fsSL $url/key.asc | sudo gpg --dearmor -o /usr/share/keyrings/spatialaudioserver.gpg
 echo "deb [signed-by=/usr/share/keyrings/spatialaudioserver.gpg] $url/deb stable main" |

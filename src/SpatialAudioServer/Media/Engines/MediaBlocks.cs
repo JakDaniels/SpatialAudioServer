@@ -127,4 +127,45 @@ internal static class MediaBlocks
     }
 
     public static string ShortId(Guid id) => id.ToString("N")[..8];
+
+    /// <summary>Calls <paramref name="onRms"/> on the streaming thread with each F32 buffer's RMS (0–1) leaving <paramref name="pad"/>.</summary>
+    public static void AddLevelProbe(Pad? pad, Action<float> onRms) =>
+        pad?.AddProbe(PadProbeType.Buffer, (_, info) =>
+        {
+            using var buffer = info.GetBuffer();
+            if (buffer is not null)
+            {
+                using var map = buffer.Map(MapFlags.Read);
+                onRms(Rms(System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(map.Span)));
+            }
+            return PadProbeReturn.Ok;
+        });
+
+    private static float Rms(ReadOnlySpan<float> samples)
+    {
+        if (samples.IsEmpty)
+        {
+            return 0;
+        }
+        double sum = 0;
+        foreach (var s in samples)
+        {
+            sum += s * s;
+        }
+        return (float)Math.Sqrt(sum / samples.Length);
+    }
+}
+
+/// <summary>
+/// An input level for stats (RMS, 0–1 full scale), with a short peak hold so a poll every second or so sees speech
+/// rather than whichever 20 ms buffer came last: jumps up at once, falls by 10% per buffer (≈ −46 dB per second at
+/// 20 ms). Streaming threads write; anyone may read.
+/// </summary>
+internal sealed class LevelMeter
+{
+    private double _level;
+
+    public double Level => Volatile.Read(ref _level);
+
+    public void Add(double rms) => Volatile.Write(ref _level, Math.Max(rms, Volatile.Read(ref _level) * 0.9));
 }

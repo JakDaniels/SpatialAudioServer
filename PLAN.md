@@ -454,7 +454,11 @@ tested without GStreamer.
    - `ISpatialPolicy` → `DistancePolicy` (`Media/Spatial/`): full volume within `Media:Spatial:ReferenceDistance`,
      then `DistanceModel` (`Inverse`, `Linear`, `Exponential`; OpenAL formulas) with `Rolloff`, silent beyond
      `MaxRange` (60 m). Default since 2026-11-15: exponential from 2 m, rolloff 1 (physical, −6 dB per doubling);
-     rooms may name a profile instead (`spatialProfile`, below). Pan = sine of the horizontal angle from the
+     rooms may name a profile instead (`spatialProfile`, below). Since 2026-11-19 every curve fades out (raised
+     cosine) from `Media:Spatial:Taper` × `MaxRange` (0.75: 45 m) to silence at the range: at the cut-off a voice
+     was still at −29 dB, plus the acoustic engine's room sound, clearly heard until it stopped. The element has the
+     same `taper`; the acoustic engine also passes `Media:Spatial:NearDistance` (2 m) as its `near-distance` (closer
+     than that the room sound is turned down, so a voice right next to you stands out). Pan = sine of the horizontal angle from the
      listener's facing (SL axes: x east, y north, z up; identity faces +x), so front and back are both centred.
      Elevation only counts towards distance. No position on either side = centred, full volume. The participant's
      gain/mute multiplies in (`MixEngineContext.Render`).
@@ -513,6 +517,40 @@ tested without GStreamer.
      would grow into per-path coefficients (L/R gain, ITD, reflection taps). The control API will need more
      parameters from the region module (environment preset per room, geometry, per-participant voice level, …)
      carried on the same JSON update path to the engines.
+
+     **Under way (2026-11-18):** the element is `acousticmultimixer`, in its own repository
+     (github.com/JakDaniels/acousticmultimixer, Rust, MPL-2.0; its PLAN.md has the steps). Its step 2 matches the
+     `matrix` engine's sound (the same distance models, pan and constant-power stereo, computed in the element from
+     pad properties), and the **`acoustic` engine** (`Media/Engines/AcousticEngine.cs`) uses it: one element per
+     room, a slot per participant (`sink_N` in, `mix_N` out, the same N), slot 0 a muted silence source to keep the
+     live mixer running; the effective poses (after the tethers) and gains go onto the slot's pad, and a viewer's own
+     mutes and volumes (`Peers`) become the element's per-listener `trims`. Quaternions become yaw/pitch/roll
+     (`AcousticEngine.Euler`). Offered only where the plugin is installed (`MixEngines` checks for the element once
+     GStreamer is loaded; a stored room using it falls back to the default engine otherwise); its engine suites are
+     skipped where it is not (CI, for now). Spatial rooms still default to `matrix` (`Media:SpatialEngine`). Since the element's step 3
+     (2026-11-18), `acoustic` rooms hear direction through its head model (the far ear later, about 6 dB quieter and
+     duller, not silent) and air absorption; the spatial suite's "on one side" check is therefore 3 dB, not 14.
+
+     **Room acoustics (decided 2026-11-18):** the element's steps 4 and 5 add early reflections and reverb by
+     preset (`room`: `outdoor`, `tiny-room`, `small-room`, `big-room`, `hall`, `long-hall`, `cave`,
+     `cathedral`). Rooms choose one with **`acoustics`** (create, get-or-create, and
+     `PATCH` while running: the acoustic engine sets the element's `room` at once; other engines ignore it; stored,
+     NULL = outdoor; the admin UI has a selector). Acoustics are per voice room, so an interior needs a parcel with
+     its own voice (a parcel sharing the region's voice sounds like the region). In OpenSim (to do, os-webrtc-sas):
+     a per-region default in the module's ini, as `spatialProfile`; a script function that sets the acoustics of
+     the voice room of the parcel the prim is on, allowed for the parcel owner and estate managers/owners (re-set by
+     the script at region start); then a ready-made script reading an "Acoustics" notecard, preset names first,
+     custom taps later. Ideas recorded for later: console commands to set a region's or parcel's acoustics;
+     the script taking chat commands from the owner (its own `llListen`, no module chat listener needed); a getter
+     function, so the script can read the current setting and save it to its notecard (`osMakeNotecard`).
+     **Publishing the plugin (2026-11-19, #23, #22):** the plugin repository is public and makes its own releases
+     (0.1.0: `.deb`/`.rpm` for x64 and arm64, a Windows zip). Here: the server package *recommends* it; `pages.yml`
+     adds the plugin's latest published release to the apt/dnf repositories (run it by hand after a plugin release:
+     no token, so no `repository_dispatch` yet); the MSIs bundle its DLL from a pinned release (version and SHA-256
+     in `packages.yml`; `gather-gstreamer.py` walks its imports), and `test-windows.ps1` checks the acoustic engine
+     is offered; `ci.yml` installs the pinned `.deb`, so the acoustic suites run in CI. A new plugin release means
+     updating both pins. Open: whether `acoustic` becomes the spatial default
+     ([#24](https://github.com/JakDaniels/SpatialAudioServer/issues/24)).
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
    **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
    `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**
@@ -586,6 +624,9 @@ tested without GStreamer.
        the authority. Mixing hears the avatar from the viewer's `sp` while that is within `Media:Spatial:SpeakerTether`
        (10 m) of the simulator's position, else from the simulator's; the listener is the viewer's camera (`lp/lh`)
        pulled back to within `Media:Spatial:ListenerTether` (50 m); no simulator position → the report is ignored.
+       With the outdoor curve, the camera (about 3 m behind the avatar) makes turning on the spot change the level
+       by up to 12 dB; distance from the avatar and direction from the camera is an open option
+       ([#21](https://github.com/JakDaniels/SpatialAudioServer/issues/21)).
        Messages closer than 20 ms are dropped (viewers send ≤ 10/s). A room made before this keeps its old
        `clientPose` (the module warns: delete the room to have it made again). `free` was not needed.
      - **Distance model, to check against a real SL viewer (2026-11-14):** the defaults (full volume within 10 m,

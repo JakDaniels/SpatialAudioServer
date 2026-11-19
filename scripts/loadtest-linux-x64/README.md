@@ -96,6 +96,9 @@ R=1806b6ef-...                              # room ID: shown under the room name
   licences are in `voices/CREDITS.md`. Re-render with `scripts/render-voices.py` (needs Piper) only to change them.
 - `--audio flite` (and `flite-together`) says the same words with libflite instead: robotic, Linux only (it comes
   with `gstreamer1.0-plugins-bad`), but needs no voice files.
+- `--audio white-noise` or `pink-noise` sends steady noise, about as loud as a voice. Noise covers the whole spectrum,
+  so you can hear the treble a voice loses with distance, or on the side of your head away from it. Speech hides
+  this. White noise is the brighter of the two; pink is fuller and easier on the ears.
 - Without `--audio`, each client sends a tone (300 Hz, 350 Hz, …).
 - `--talkers K` keeps all but the first K silent: they are in the room, but don't speak.
 - `--volume` scales what they send. The default is 1.0 for files and 0.1 for tones.

@@ -66,17 +66,29 @@ internal interface IMixEngine : IDisposable
 
     /// <summary>Each participant's incoming audio level (RMS, 0–1 full scale, peak-held); empty if the engine has none.</summary>
     IReadOnlyDictionary<Guid, double> InputLevels { get; }
+
+    /// <summary>Worker: a room setting changed (its acoustics). Engines that do not render it ignore it.</summary>
+    void RoomUpdated(RoomSnapshot room)
+    {
+    }
 }
 
 /// <summary>What an engine is given to work with. One per room.</summary>
 internal sealed class MixEngineContext(
     Guid roomId, int maxParticipants, Pipeline pipeline, RoomWorker worker, MediaOptions options, ILogger log, bool spatial = false,
-    string? spatialProfile = null)
+    string? spatialProfile = null, string? acoustics = null)
 {
+    /// <summary>The room's acoustic preset when the media started (<see cref="Spatial.RoomAcoustics"/>; null = outdoor).</summary>
+    public string? Acoustics { get; } = acoustics;
+
     /// <summary>The room's spatial policy (its distance curve: the room's profile, else the server default), or null
     /// for a non-spatial room (everyone centred at their gain).</summary>
     public Spatial.ISpatialPolicy? Spatial { get; } =
         spatial ? new Spatial.DistancePolicy(options.Spatial.WithProfile(spatialProfile)) : null;
+
+    /// <summary>A spatial room's settings with its profile's distance curve applied (what <see cref="Spatial"/>
+    /// uses), for engines that compute the rendering elsewhere; null for a non-spatial room.</summary>
+    public Spatial.SpatialOptions? SpatialSettings { get; } = spatial ? options.Spatial.WithProfile(spatialProfile) : null;
 
     /// <summary>
     /// How <paramref name="source"/> sounds to <paramref name="listener"/>, including the source's gain/mute. Sources are

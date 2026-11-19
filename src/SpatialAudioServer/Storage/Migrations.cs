@@ -109,6 +109,11 @@ internal static class Migrations
         """
         ALTER TABLE api_keys ADD COLUMN expires_at TEXT;
         """,
+
+        // 10: the room's acoustic preset (RoomAcoustics name); NULL = outdoor.
+        """
+        ALTER TABLE rooms ADD COLUMN acoustics TEXT;
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;
