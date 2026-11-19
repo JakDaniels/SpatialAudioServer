@@ -72,7 +72,9 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   PLAN.md has the steps; work on its `develop`, CI by hand: `gh workflow run ci.yml --ref develop`). Steps 2–5 done
   (stereo, distance and pan; head model; early reflections; late reverb per voice; room presets and `taper`). The **`acoustic` engine** uses it, offered only where the plugin is
   installed (here: `cargo build --release` there, then copy `target/release/libgstacousticmultimixer.so` to
-  `~/.local/share/gstreamer-1.0/plugins/`); its engine suites skip without it (CI).
+  `~/.local/share/gstreamer-1.0/plugins/`); its engine suites skip without it. The plugin repository is public and
+  releases itself like this one (0.1.0 released 2026-11-19: .deb/.rpm and a Windows zip); SAS's CI and MSIs pin a
+  plugin release (version + SHA-256 in `ci.yml` and `packages.yml`), and `pages.yml` serves its latest packages.
 
 - **Open work is in GitHub issues** (since 2026-11-17), in both repositories: `gh issue list -R JakDaniels/SpatialAudioServer`
   and `gh issue list -R JakDaniels/os-webrtc-sas` (labels `server`, `web-client`, `ci-packaging`, `testing`, `parked`,

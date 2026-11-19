@@ -5,7 +5,9 @@ What changed in each release: the same text as its release notes.
 ## Unreleased
 
 - Server: a new `acoustic` mix engine, which mixes the whole room in one acousticmultimixer element (a separate
-  GStreamer plugin): offered, and listed in `GET /api/status`, only where that plugin is installed.
+  GStreamer plugin): offered, and listed in `GET /api/status`, only where that plugin is installed. The Windows
+  installers include it (acousticmultimixer 0.1.0), and the Linux packages recommend it (from the same apt and dnf
+  repositories).
 - Server: rooms have `acoustics` (`outdoor`, the default, `tiny-room`, `small-room`, `big-room`, `hall`,
   `long-hall`, `cave` or `cathedral`), set when created or changed later with `PATCH` and in the admin UI;
   `acoustic` rooms hear that space's reflections and reverb.

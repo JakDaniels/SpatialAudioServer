@@ -190,6 +190,9 @@ jobs:
     env:
       GSTREAMER_VERSION: 1.28.8
       GSTREAMER_SHA256: e4c41ee6ee9c6c32a45d198463ec08d79bac3bd5fa58adc93d13fe4a08abc9d9
+      # The acousticmultimixer plugin (the acoustic engine), built against that GStreamer; as ci.yml installs it.
+      ACOUSTICMULTIMIXER_VERSION: '0.1.0'
+      ACOUSTICMULTIMIXER_ZIP_SHA256: ad0bad93b40351c9829a1628b7659784ab1cf35e0a9e5a1706723cb96a4036f8
       PEFILE_VERSION: '2024.8.26'
     defaults:
       run:
@@ -229,10 +232,19 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "GStreamer installer failed ($($p.ExitCode))" }
           Get-ChildItem -Recurse "$env:RUNNER_TEMP\gst" -Filter gstreamer-1.0-0.dll | Select-Object FullName
 
+      - name: The acousticmultimixer plugin (pinned)
+        run: |
+          $zip = "gstacousticmultimixer-$env:ACOUSTICMULTIMIXER_VERSION-windows-x64.zip"
+          Invoke-WebRequest -Uri "https://github.com/JakDaniels/acousticmultimixer/releases/download/v$env:ACOUSTICMULTIMIXER_VERSION/$zip" -OutFile "$env:RUNNER_TEMP\$zip"
+          $hash = (Get-FileHash "$env:RUNNER_TEMP\$zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne $env:ACOUSTICMULTIMIXER_ZIP_SHA256) { throw "acousticmultimixer zip checksum $hash, expected $env:ACOUSTICMULTIMIXER_ZIP_SHA256" }
+          "ACOUSTICMULTIMIXER_ZIP=$env:RUNNER_TEMP\$zip" >> $env:GITHUB_ENV
+
       - name: Build the MSIs
         run: |
           python -m pip install --quiet "pefile==$env:PEFILE_VERSION"
-          scripts\build-windows.ps1 -GStreamerRoot "$env:RUNNER_TEMP\gst" -GStreamerVersion $env:GSTREAMER_VERSION
+          scripts\build-windows.ps1 -GStreamerRoot "$env:RUNNER_TEMP\gst" -GStreamerVersion $env:GSTREAMER_VERSION `
+            -AcousticMixerZip $env:ACOUSTICMULTIMIXER_ZIP -AcousticMixerVersion $env:ACOUSTICMULTIMIXER_VERSION
 
       - name: Remove the build's GStreamer
         run: |

@@ -1,7 +1,8 @@
 # Full tests (PACKAGING-PLAN.md "Branches and the GitHub workflows"): on pull requests into main or develop, and by
 # hand ("Run workflow" on the Actions page, any branch). Not again on main after a merge: the merge commit has the same
 # files as the pull request's head, which this has tested (release.yml accepts that run). Pushes run no CI.
-# The jobs run in the prepared images from ci-images.yml (GStreamer and .NET already installed).
+# The jobs run in the prepared images from ci-images.yml (GStreamer and .NET already installed); the
+# acousticmultimixer plugin is installed from its pinned release, so the acoustic engine's suites run too.
 # Still to come: the windows job (embedded GStreamer) and load-22.04 (needs the load tool .deb).
 name: ci
 
@@ -18,6 +19,11 @@ concurrency:
 permissions:
   contents: read
   packages: read
+
+env:
+  # The acousticmultimixer plugin (the acoustic engine), as the Windows installers carry it (packages.yml).
+  ACOUSTICMULTIMIXER_VERSION: '0.1.0'
+  ACOUSTICMULTIMIXER_DEB_SHA256: 87ed517acb8555617f03f9610201ddcab183f0f88875f5d5faef437f9bb64d08
 
 jobs:
   test:
@@ -37,6 +43,16 @@ jobs:
     steps:
       - name: GStreamer and .NET
         run: gst-inspect-1.0 --version && dotnet --version
+
+      # Built on Ubuntu 24.04, so it suits both images; its dependencies are already there.
+      - name: The acousticmultimixer plugin (pinned)
+        run: |
+          deb="gstreamer1.0-acousticmultimixer_${ACOUSTICMULTIMIXER_VERSION}_amd64.deb"
+          curl -fsSLO "https://github.com/JakDaniels/acousticmultimixer/releases/download/v${ACOUSTICMULTIMIXER_VERSION}/${deb}"
+          echo "${ACOUSTICMULTIMIXER_DEB_SHA256}  ${deb}" | sha256sum -c -
+          dpkg -i "${deb}"
+          rm "${deb}"
+          gst-inspect-1.0 acousticmultimixer | grep -E '^ *Version'
 
       # Full history: MinVer needs the tags and the commit count for the version.
       - uses: actions/checkout@v7

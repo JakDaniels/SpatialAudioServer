@@ -20,7 +20,7 @@ OpenSim region module, here: https://github.com/JakDaniels/os-webrtc-sas) and fo
   hear the same mix share one encoder), `matrix` (one encoder per listener, the default for spatial rooms),
   `pairchains` (a GStreamer chain per source/listener pair, for comparison) and `acoustic` (the whole room in one
   [acousticmultimixer](https://github.com/JakDaniels/acousticmultimixer) element; offered when that plugin is
-  installed).
+  installed: the Windows installers include it, and the Linux packages recommend it).
 - **Spatial audio:** gain by distance and left/right pan from positions and facing; clients can turn their own
   listener with their session token. With the `acoustic` engine, rooms can also choose their acoustics (`outdoor`,
   `tiny-room`, `small-room`, `big-room`, `hall`, `long-hall`, `cave`, `cathedral`: reflections and reverb).

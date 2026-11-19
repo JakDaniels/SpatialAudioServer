@@ -10,7 +10,10 @@ tree for the Windows installers (PACKAGING-PLAN.md "GStreamer on Windows"):
     OUT\\libexec\\gstreamer-1.0\\    gst-plugin-scanner.exe
     OUT\\share\\licenses\\           the licence texts shipped with GStreamer, if any
 
-    python gather-gstreamer.py GSTREAMER_ROOT OUT
+    python gather-gstreamer.py GSTREAMER_ROOT OUT [PLUGIN.dll ...]
+
+Each PLUGIN.dll given (a plugin built separately, such as acousticmultimixer's) goes beside the others, and the
+DLLs it needs are gathered too.
 
 GSTREAMER_ROOT is the folder holding bin\\gstreamer-1.0-0.dll (found below it if the installer added levels). Needs
 pefile (pip install pefile). Fails if a needed DLL is neither in GStreamer's bin nor a Windows system DLL.
@@ -61,10 +64,11 @@ def imports(path):
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3:
         sys.exit(__doc__)
     root = find_root(sys.argv[1])
     out = sys.argv[2]
+    extra_plugins = sys.argv[3:]
     bin_dir = os.path.join(root, "bin")
     system32 = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32")
     in_bin = {f.lower(): f for f in os.listdir(bin_dir)}
@@ -84,6 +88,9 @@ def main():
         if not os.path.exists(src):
             missing_plugins.append(plugin)
             continue
+        shutil.copy2(src, os.path.join(out, "lib", "gstreamer-1.0"))
+        work.append(src)
+    for src in extra_plugins:
         shutil.copy2(src, os.path.join(out, "lib", "gstreamer-1.0"))
         work.append(src)
     scanner = os.path.join(root, "libexec", "gstreamer-1.0", "gst-plugin-scanner.exe")
@@ -118,7 +125,8 @@ def main():
         shutil.copytree(licenses, os.path.join(out, "share", "licenses"), dirs_exist_ok=True)
 
     size = sum(os.path.getsize(os.path.join(d, f)) for d, _, fs in os.walk(out) for f in fs)
-    print(f"GStreamer from {root}: {len(copied)} DLLs in bin, {len(PLUGINS) - len(missing_plugins)} plugins, "
+    print(f"GStreamer from {root}: {len(copied)} DLLs in bin, {len(PLUGINS) - len(missing_plugins)} plugins "
+          f"and {len(extra_plugins)} more, "
           f"{size / 1e6:.0f} MB")
     for plugin in missing_plugins:
         print(f"{'note' if plugin in OPTIONAL_PLUGINS else 'MISSING'}: plugin {plugin}")

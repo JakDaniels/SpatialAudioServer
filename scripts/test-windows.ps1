@@ -39,6 +39,8 @@ if (-not $status) {
 }
 $status | ConvertTo-Json -Depth 4
 if (-not $status.gstreamer.ok -or $status.gstreamer.missingElements.Count -gt 0) { throw 'GStreamer is not complete' }
+# The acousticmultimixer plugin the installer carries: the acoustic engine is offered only when it loads.
+if ($status.engines.name -notcontains 'acoustic') { throw 'The acoustic engine is not offered (acousticmultimixer plugin missing?)' }
 Get-ChildItem "$env:ProgramData\SpatialAudioServer", "$env:ProgramData\SpatialAudioServer\data"
 
 Write-Host '== the load tool'

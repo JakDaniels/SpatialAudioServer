@@ -4,11 +4,16 @@
 # Builds the Windows installers (PACKAGING-PLAN.md "Windows installers"): the server and the load tool as MSIs, each
 # with its own GStreamer, into dist\.
 #   scripts\build-windows.ps1 -GStreamerRoot <folder of an installed GStreamer 1.28 (MSVC, x64)> -GStreamerVersion 1.28.8
+#       [-AcousticMixerZip <the acousticmultimixer release's Windows zip> -AcousticMixerVersion 0.1.0]
 # Needs the .NET SDK, Python with pefile (pip install pefile) and a git clone with its history (MinVer). WiX comes
 # from NuGet through the .wixproj files. Used by .github/workflows/drafts.yml.
 param(
     [Parameter(Mandatory = $true)][string]$GStreamerRoot,
-    [Parameter(Mandatory = $true)][string]$GStreamerVersion
+    [Parameter(Mandatory = $true)][string]$GStreamerVersion,
+    # The acoustic engine's element: its DLL goes beside the embedded GStreamer's plugins (without it, the server
+    # simply does not offer that engine).
+    [string]$AcousticMixerZip = '',
+    [string]$AcousticMixerVersion = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
@@ -35,7 +40,13 @@ Run dotnet (@('publish', 'src/SpatialAudioServer.LoadTest') + $publish + @('-p:P
 Remove-Item -ErrorAction SilentlyContinue "$stage\server\appsettings.Development.json"
 Copy-Item -Recurse scripts\loadtest-linux-x64\voices "$stage\voices"
 
-Run python @('packaging\windows\gather-gstreamer.py', $GStreamerRoot, "$stage\gstreamer")
+$extraPlugins = @()
+if ($AcousticMixerZip) {
+    $unzipped = Join-Path $env:TEMP "acousticmultimixer-$PID"
+    Expand-Archive -Force -Path $AcousticMixerZip -DestinationPath $unzipped
+    $extraPlugins += "$unzipped\gstacousticmultimixer.dll"
+}
+Run python (@('packaging\windows\gather-gstreamer.py', $GStreamerRoot, "$stage\gstreamer") + $extraPlugins)
 
 $notices = @"
 Third-party software in this installer
@@ -52,6 +63,15 @@ by compatible builds.
 .NET runtime and ASP.NET Core (included in the program): MIT licence, https://github.com/dotnet/runtime and
 https://github.com/dotnet/aspnetcore.
 "@
+if ($AcousticMixerZip) {
+    $notices += @"
+
+
+acousticmultimixer $AcousticMixerVersion (gstreamer\lib\gstreamer-1.0\gstacousticmultimixer.dll): the GStreamer
+plugin for the acoustic mix engine, Mozilla Public License 2.0. Source code and licence text:
+https://github.com/JakDaniels/acousticmultimixer/tree/v$AcousticMixerVersion
+"@
+}
 foreach ($docs in @("$stage\docs", "$stage\loadtest-docs")) { New-Item -ItemType Directory -Force -Path $docs | Out-Null }
 Copy-Item README.md, docs\running-from-prebuilt-binaries.md, docs\configuration.md, docs\internet.md "$stage\docs"
 Copy-Item scripts\loadtest-linux-x64\README.md "$stage\loadtest-docs"

@@ -32,7 +32,7 @@ public static class MixEngines
             "The shared mix is not spatial (centred).",
             ctx => new SharedMatrixEngine(ctx)),
         [AcousticEngine.Name] = new(
-            "The whole room in one acousticmultimixer element (its own GStreamer plugin, installed separately): a slot " +
+            "The whole room in one acousticmultimixer element (its own GStreamer plugin: in the Windows installers, a separate package on Linux): a slot " +
             "per participant, voice in, stereo mix-minus out, gains and positions as pad properties → per listener " +
             "queue → opusenc.",
             ctx => new AcousticEngine(ctx),

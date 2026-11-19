@@ -543,10 +543,14 @@ tested without GStreamer.
      custom taps later. Ideas recorded for later: console commands to set a region's or parcel's acoustics;
      the script taking chat commands from the owner (its own `llListen`, no module chat listener needed); a getter
      function, so the script can read the current setting and save it to its notecard (`osMakeNotecard`).
-     Open: the plugin's packages in the apt/dnf repositories and the MSI
-     ([#23](https://github.com/JakDaniels/SpatialAudioServer/issues/23)), CI running the acoustic suites
-     ([#22](https://github.com/JakDaniels/SpatialAudioServer/issues/22)), and whether `acoustic` becomes the spatial
-     default ([#24](https://github.com/JakDaniels/SpatialAudioServer/issues/24)).
+     **Publishing the plugin (2026-11-19, #23, #22):** the plugin repository is public and makes its own releases
+     (0.1.0: `.deb`/`.rpm` for x64 and arm64, a Windows zip). Here: the server package *recommends* it; `pages.yml`
+     adds the plugin's latest published release to the apt/dnf repositories (run it by hand after a plugin release:
+     no token, so no `repository_dispatch` yet); the MSIs bundle its DLL from a pinned release (version and SHA-256
+     in `packages.yml`; `gather-gstreamer.py` walks its imports), and `test-windows.ps1` checks the acoustic engine
+     is offered; `ci.yml` installs the pinned `.deb`, so the acoustic suites run in CI. A new plugin release means
+     updating both pins. Open: whether `acoustic` becomes the spatial default
+     ([#24](https://github.com/JakDaniels/SpatialAudioServer/issues/24)).
 7. **(Later) SL/OpenSim integration.** Viewer protocol compatibility + region module.
    **Viewer WebRTC protocol, from Firestorm's source (2026-11-12; `docs/reference/phoenix-firestorm`, git-ignored;
    `indra/newview/llvoicewebrtc.cpp`, `indra/llwebrtc/llwebrtc.cpp`):**

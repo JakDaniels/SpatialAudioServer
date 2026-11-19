@@ -42,6 +42,11 @@ Or install a downloaded file: `sudo apt install ./spatialaudioserver_<version>_a
 fingerprint, are described at https://jakdaniels.github.io/SpatialAudioServer/; they hold the latest two releases,
 and every release stays on the Releases page.
 
+The package recommends the [acousticmultimixer](https://github.com/JakDaniels/acousticmultimixer) GStreamer
+plugin (`gstreamer1.0-acousticmultimixer`, Fedora `gstreamer1-acousticmultimixer`), which the `acoustic` mix engine
+needs: installing from the repositories brings it in. With a downloaded file, install the plugin's package from its
+Releases page too, or the server simply does not offer that engine.
+
 ### First-time setup
 
 ```bash
@@ -102,8 +107,8 @@ Download `SpatialAudioServer-<version>-x64.msi` from the Releases page and run i
 Windows SmartScreen warns: choose "More info", then "Run anyway".
 
 The installer carries its own copy of GStreamer, with only the libraries and plugins the server needs, in
-`C:\Program Files\SpatialAudioServer\gstreamer\`. Nothing else needs to be installed, and an existing GStreamer
-installation is neither needed nor used.
+`C:\Program Files\SpatialAudioServer\gstreamer\`, including the acousticmultimixer plugin for the `acoustic` mix
+engine. Nothing else needs to be installed, and an existing GStreamer installation is neither needed nor used.
 
 On the **Custom Setup** page, the features are:
 
