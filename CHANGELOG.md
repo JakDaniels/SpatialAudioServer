@@ -4,6 +4,8 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+## 0.3.0 (2026-11-19)
+
 - Server: a new `acoustic` mix engine, which mixes the whole room in one acousticmultimixer element (a separate
   GStreamer plugin): offered, and listed in `GET /api/status`, only where that plugin is installed. The Windows
   installers include it (acousticmultimixer 0.1.0), and the Linux packages recommend it (from the same apt and dnf
