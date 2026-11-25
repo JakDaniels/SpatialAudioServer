@@ -132,7 +132,8 @@ async function loadRooms() {
     : state.rooms.map(r => `
       <tr class="clickable${r.id === state.selected ? " selected" : ""}" data-room="${r.id}">
         <td>${escapeHtml(r.name)}${r.spatial ? `<span class="tag">spatial</span>` : ""}<div class="id">${r.id}</div></td>
-        <td>${escapeHtml(r.engine)}</td>
+        <td>${escapeHtml(r.inUse?.engine ?? r.engine)}${r.inUse && r.inUse.engine !== r.engine
+          ? `<div class="hint">→ ${escapeHtml(r.engine)} when empty</div>` : ""}</td>
         <td class="num">${r.participantCount} / ${r.maxParticipants}</td>
         <td class="id">${escapeHtml(r.externalId ?? "")}</td>
         <td>${dateTime(r.createdAt)}</td>
@@ -220,8 +221,13 @@ function renderRoom() {
   if (state.editing) return;
   const d = state.details, live = state.live;
   $("roomName").textContent = d.name;
-  $("roomMeta").textContent = `${d.id} · ${d.engine}${d.spatial ? ", spatial" : ""} · ${d.participantCount} of ${d.maxParticipants}` +
-    (d.externalId ? ` · external id ${d.externalId}` : "");
+  // What the room's media is running; a change made while people are in it waits until the room is empty.
+  const curve = (p) => p ?? "default curve";
+  const running = d.inUse ?? d;
+  const sound = (r) => `${r.engine}${d.spatial ? `, ${curve(r.spatialProfile)}` : ""}`;
+  const pending = d.inUse ? ` (changes to ${sound(d)} when the room is empty)` : "";
+  $("roomMeta").textContent = `${d.id} · ${sound(running)}${d.spatial ? ", spatial" : ""}${pending}` +
+    ` · ${d.participantCount} of ${d.maxParticipants}` + (d.externalId ? ` · external id ${d.externalId}` : "");
   if (document.activeElement !== $("roomAcoustics")) $("roomAcoustics").value = d.acoustics ?? "outdoor";
   $("counters").textContent = !live ? "No media statistics (media disabled)."
     : !live.media.running ? "Media idle: the pipeline starts when someone joins."

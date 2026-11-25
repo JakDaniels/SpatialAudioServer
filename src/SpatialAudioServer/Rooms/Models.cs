@@ -86,7 +86,14 @@ public sealed record RoomSnapshot(
     ClientPose ClientPose = ClientPose.None,
     InWorldAvatars InWorldAvatars = InWorldAvatars.Off,
     string? SpatialProfile = null,
-    string? Acoustics = null);
+    string? Acoustics = null,
+    RoomInUse? InUse = null);
+
+/// <summary>
+/// The engine and distance curve the room's media is using, when they differ from the room's settings (changed while
+/// people were in it): the settings take over as soon as the room is empty.
+/// </summary>
+public sealed record RoomInUse(string Engine, string? SpatialProfile);
 
 public sealed record ParticipantSnapshot(
     Guid Id,
@@ -138,7 +145,13 @@ public sealed record ViewerKeysGoneCommand(IReadOnlyList<string>? Keys);
 
 /// <summary>Partial update of a room: null fields are left unchanged. The rest of a room is fixed for its life.</summary>
 /// <param name="Acoustics">The kind of space (see <see cref="CreateRoomCommand"/>); "outdoor" goes back to none.</param>
-public sealed record UpdateRoomCommand(InWorldAvatars? InWorldAvatars = null, string? Acoustics = null);
+/// <param name="Metadata">Merged into the room's metadata: each top-level key replaces the one there, and a key set to
+/// null removes it (e.g. the object controlling a room's acoustics in-world).</param>
+/// <param name="Engine">The mix engine. Stored at once; the room's media changes to it when the room is empty (at once
+/// if it is, else when the last participant leaves).</param>
+/// <param name="SpatialProfile">The distance curve ("default": the server's), applied like <paramref name="Engine"/>.</param>
+public sealed record UpdateRoomCommand(InWorldAvatars? InWorldAvatars = null, string? Acoustics = null, JsonObject? Metadata = null,
+    string? Engine = null, string? SpatialProfile = null);
 
 /// <param name="ClientNamed">
 /// The participant may choose its own display name when it joins (an invited guest); otherwise the name given here

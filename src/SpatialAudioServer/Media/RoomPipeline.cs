@@ -37,6 +37,7 @@ internal sealed class RoomPipeline : IDisposable
         var roomId = room.Id;
         RoomId = roomId;
         EngineName = room.Engine;
+        SpatialProfile = room.SpatialProfile;
         _options = options;
         _log = log;
         _pipeline = Pipeline.New($"room-{roomId:N}");
@@ -98,6 +99,9 @@ internal sealed class RoomPipeline : IDisposable
     public Guid RoomId { get; }
 
     public string EngineName { get; }
+
+    /// <summary>The distance curve the engine was made with (null: the server's default).</summary>
+    public string? SpatialProfile { get; }
 
     public bool Spatial { get; }
 
@@ -315,6 +319,11 @@ internal sealed class RoomPipeline : IDisposable
                 endpoint.Connected = state == WebRTCPeerConnectionState.Connected;
                 endpoint.Inactive = false;
                 Volatile.Write(ref endpoint.LastInbound, Environment.TickCount64);
+                if (endpoint.Connected && !endpoint.Removed && !endpoint.TransportWatched)
+                {
+                    endpoint.TransportWatched = WatchTransport(rtc, endpoint);
+                    _log.LogDebug("Room {RoomId}: participant {ParticipantId} transport watched: {Watched}", RoomId, p.Id, endpoint.TransportWatched);
+                }
             });
             StateChanged?.Invoke(p.Id, Map(state));
         };
@@ -326,6 +335,7 @@ internal sealed class RoomPipeline : IDisposable
             {
                 return;
             }
+            Volatile.Write(ref endpoint.LastInbound, Environment.TickCount64);
             if (text.Contains("\"j\"", StringComparison.Ordinal) && SlData.Parse(text) is { Joined: true } join)
             {
                 _worker.Post(() =>
@@ -341,6 +351,31 @@ internal sealed class RoomPipeline : IDisposable
         // Only webrtcbin starts now; the engine starts its send branch once it is linked to the negotiated transceiver.
         rtc.Element.SyncStateWithParent();
         return endpoint;
+    }
+
+    /// <summary>
+    /// Worker: counts everything the client sends as a sign of life, not only its audio: RTCP receiver reports and
+    /// data-channel traffic arrive through webrtcbin's ICE source too. A client that only listens (an SL viewer with no
+    /// microphone, or muted with no input device) sends no RTP at all, but keeps reporting what it receives; one that
+    /// has vanished sends nothing. True once the transport was found.
+    /// </summary>
+    private static bool WatchTransport(WebRtcBin rtc, Endpoint endpoint)
+    {
+        if (rtc.Element is not Bin bin)
+        {
+            return false;
+        }
+        using var iterator = bin.IterateRecurse();
+        var sources = iterator.Items<Element>().Where(e => e.GetFactory()?.Name == "nicesrc").ToList();
+        foreach (var source in sources)
+        {
+            source.GetStaticPad("src")?.AddProbe(PadProbeType.Buffer | PadProbeType.BufferList, (_, _) =>
+            {
+                Volatile.Write(ref endpoint.LastInbound, Environment.TickCount64);
+                return PadProbeReturn.Ok;
+            });
+        }
+        return sources.Count > 0;
     }
 
     /// <summary>Streaming thread: hands the participant's incoming audio to the engine.</summary>
@@ -421,6 +456,7 @@ internal sealed class RoomPipeline : IDisposable
         public bool Removed { get; set; } // under Sync
         public bool Connected { get; set; } // worker
         public bool Inactive { get; set; } // worker: reported failed by CheckInactivity
-        public long LastInbound; // Environment.TickCount64 of the last incoming buffer (or of connecting)
+        public long LastInbound; // Environment.TickCount64 of the last thing received (audio, RTCP, data), or of connecting
+        public bool TransportWatched; // worker: the probe on webrtcbin's ICE source is in place
     }
 }

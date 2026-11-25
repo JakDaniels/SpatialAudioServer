@@ -43,6 +43,22 @@ public sealed class RoomStore(Database database)
         command.ExecuteNonQuery();
     }
 
+    public void UpdateEngine(Guid id, string engine, string? spatialProfile)
+    {
+        using var connection = database.Open();
+        using var command = connection.Command("UPDATE rooms SET engine = $engine, spatial_profile = $profile WHERE id = $id",
+            ("$id", id.ToString()), ("$engine", engine), ("$profile", spatialProfile));
+        command.ExecuteNonQuery();
+    }
+
+    public void UpdateMetadata(Guid id, string? json)
+    {
+        using var connection = database.Open();
+        using var command = connection.Command("UPDATE rooms SET metadata = $metadata WHERE id = $id",
+            ("$id", id.ToString()), ("$metadata", json));
+        command.ExecuteNonQuery();
+    }
+
     public bool Delete(Guid id)
     {
         using var connection = database.Open();

@@ -79,6 +79,78 @@ public sealed class ControlApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Engine_and_distance_curve_can_change_and_say_what_is_in_use_until_the_room_is_empty()
+    {
+        Guid id;
+        using (var server = Server())
+        {
+            var client = server.CreateAuthedClient();
+            var room = await (await client.PostAsJsonAsync("/api/rooms", new { name = "r", spatial = true, engine = "matrix" })).Read<RoomSnapshot>();
+            id = room.Id;
+
+            // Empty: the change is in use at once.
+            var empty = await (await client.PatchAsJsonAsync($"/api/rooms/{id}", new { engine = "pairchains", spatialProfile = "meeting" }))
+                .Read<RoomSnapshot>();
+            Assert.Equal(("pairchains", "meeting"), (empty.Engine, empty.SpatialProfile));
+            Assert.Null(empty.InUse);
+
+            // Someone in it: stored, but the media keeps what it started with until the room is empty.
+            var join = await (await client.PostAsJsonAsync($"/api/rooms/{id}/participants", new { displayName = "A" })).Read<JoinResponse>();
+            var busy = await (await client.PatchAsJsonAsync($"/api/rooms/{id}", new { engine = "matrix", spatialProfile = "default" }))
+                .Read<RoomSnapshot>();
+            Assert.Equal(("matrix", (string?)null), (busy.Engine, busy.SpatialProfile));
+            Assert.Equal(new RoomInUse("pairchains", "meeting"), busy.InUse);
+            var details = await client.GetFromJsonAsync<JsonObject>($"/api/rooms/{id}");
+            Assert.Equal("pairchains", (string?)details!["inUse"]?["engine"]);
+
+            (await client.DeleteAsync($"/api/rooms/{id}/participants/{join.ParticipantId}")).EnsureSuccessStatusCode();
+            Assert.Null((await client.GetFromJsonAsync<RoomSnapshot>($"/api/rooms/{id}", Json.Options))!.InUse);
+
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PatchAsJsonAsync($"/api/rooms/{id}", new { engine = "steam" })).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PatchAsJsonAsync($"/api/rooms/{id}", new { spatialProfile = "lunar" })).StatusCode);
+        }
+        using (var server = Server())
+        {
+            var room = await server.CreateAuthedClient().GetFromJsonAsync<RoomSnapshot>($"/api/rooms/{id}", Json.Options);
+            Assert.Equal(("matrix", (string?)null), (room!.Engine, room.SpatialProfile));
+        }
+    }
+
+    [Fact]
+    public async Task Patching_metadata_merges_keys_removes_nulls_and_is_kept()
+    {
+        Guid id;
+        using (var server = Server())
+        {
+            var client = server.CreateAuthedClient();
+            var room = await (await client.PutAsJsonAsync("/api/rooms/by-external/region:m", new { metadata = new { owner = "x", keep = 1 } }))
+                .Read<RoomSnapshot>();
+            id = room.Id;
+
+            var patch = JsonNode.Parse("""{"metadata": {"owner": null, "controller": {"object": "abc", "name": "Acoustics"}}}""");
+            var patched = await (await client.PatchAsJsonAsync("/api/rooms/by-external/region:m", patch)).Read<RoomSnapshot>();
+            Assert.Null(patched.Metadata?["owner"]);
+            Assert.Equal(1, patched.Metadata?["keep"]?.GetValue<int>());
+            Assert.Equal("abc", (string?)patched.Metadata?["controller"]?["object"]);
+
+            // Too big as a whole: refused, and nothing changes.
+            var big = new JsonObject { ["metadata"] = new JsonObject { ["blob"] = new string('x', Validation.MaxMetadataBytes) } };
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PatchAsJsonAsync($"/api/rooms/{id}", big)).StatusCode);
+
+            // Removing every key leaves no metadata.
+            var none = await (await client.PatchAsJsonAsync($"/api/rooms/{id}",
+                JsonNode.Parse("""{"metadata": {"keep": null, "controller": null}}"""))).Read<RoomSnapshot>();
+            Assert.Null(none.Metadata);
+            await client.PatchAsJsonAsync($"/api/rooms/{id}", JsonNode.Parse("""{"metadata": {"controller": "kept"}}"""));
+        }
+        using (var server = Server())
+        {
+            var room = await server.CreateAuthedClient().GetFromJsonAsync<RoomSnapshot>($"/api/rooms/{id}", Json.Options);
+            Assert.Equal("kept", (string?)room!.Metadata?["controller"]);
+        }
+    }
+
+    [Fact]
     public async Task Invalid_input_returns_validation_problems()
     {
         using var server = Server();

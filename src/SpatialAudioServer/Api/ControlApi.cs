@@ -15,7 +15,7 @@ public sealed record RoomDetails(
     Guid Id, string Name, string? ExternalId, int MaxParticipants, System.Text.Json.Nodes.JsonObject? Metadata,
     DateTimeOffset CreatedAt, int ParticipantCount, string Engine, bool Spatial, ClientPose ClientPose,
     IReadOnlyList<ParticipantSnapshot> Participants, InWorldAvatars InWorldAvatars = InWorldAvatars.Off, string? SpatialProfile = null,
-    string? Acoustics = null);
+    string? Acoustics = null, RoomInUse? InUse = null);
 
 public sealed record JoinResponse(
     Guid ParticipantId, Guid RoomId, string JoinToken, string SignalUrl, DateTimeOffset ExpiresAt, Guid? ReplacedParticipantId);
@@ -91,15 +91,16 @@ public static class ControlApi
         {
             var (r, participants) = rooms.GetRoom(ResolveRoom(http, rooms));
             return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, r.Engine, r.Spatial,
-                r.ClientPose, participants, r.InWorldAvatars, r.SpatialProfile, r.Acoustics);
+                r.ClientPose, participants, r.InWorldAvatars, r.SpatialProfile, r.Acoustics, r.InUse);
         });
 
         // Viewer keys the integration has removed (its NPCs, guests): SL viewers drop them from their lists.
         room.MapPost("/viewers-gone", (HttpContext http, ViewerKeysGoneCommand body, RoomManager rooms) =>
             Results.Ok(new { reported = rooms.ViewerKeysGone(ResolveRoom(http, rooms), body) }));
 
-        // What may change after creation: whether the integration shows web and bot participants in-world, and the
-        // room's acoustics.
+        // What may change after creation: whether the integration shows web and bot participants in-world, the room's
+        // acoustics, its metadata (merged by top-level key; null removes one), and its engine and distance curve (the
+        // media takes them when the room is next empty; until then the room shows what is in use as inUse).
         room.MapPatch("/", (HttpContext http, UpdateRoomCommand body, RoomManager rooms) =>
             rooms.UpdateRoom(ResolveRoom(http, rooms), body));
 

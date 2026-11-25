@@ -101,6 +101,9 @@ POST   /api/rooms                         {name, externalId?, maxParticipants?, 
 GET    /api/rooms[?externalId=]            -> [room]
 GET    /api/rooms/{roomId}                 -> room + participants
 DELETE /api/rooms/{roomId}                 -> disconnects everyone, tears down pipeline
+PATCH  /api/rooms/{roomId}                 {inWorldAvatars?, acoustics?, metadata?, engine?, spatialProfile?} (metadata
+                                            merged by top-level key, null removes one; engine and spatialProfile
+                                            switch when the room is empty, `inUse` shows what runs until then)
 
 POST   /api/rooms/{roomId}/participants    {displayName, externalId?(avatar UUID), position?, orientation?, metadata?}
                                             -> {participantId, roomId, joinToken, signalUrl, expiresAt} (201)
@@ -536,13 +539,32 @@ tested without GStreamer.
      `cathedral`). Rooms choose one with **`acoustics`** (create, get-or-create, and
      `PATCH` while running: the acoustic engine sets the element's `room` at once; other engines ignore it; stored,
      NULL = outdoor; the admin UI has a selector). Acoustics are per voice room, so an interior needs a parcel with
-     its own voice (a parcel sharing the region's voice sounds like the region). In OpenSim (to do, os-webrtc-sas):
-     a per-region default in the module's ini, as `spatialProfile`; a script function that sets the acoustics of
-     the voice room of the parcel the prim is on, allowed for the parcel owner and estate managers/owners (re-set by
-     the script at region start); then a ready-made script reading an "Acoustics" notecard, preset names first,
-     custom taps later. Ideas recorded for later: console commands to set a region's or parcel's acoustics;
-     the script taking chat commands from the owner (its own `llListen`, no module chat listener needed); a getter
-     function, so the script can read the current setting and save it to its notecard (`osMakeNotecard`).
+     its own voice (a parcel sharing the region's voice sounds like the region). In OpenSim (os-webrtc-sas): a per-region default
+     (done 2026-11-23, os-webrtc-sas#9: `Engine`, `Acoustics`, `SpatialProfile` in `[SasWebRtcVoice]`, overridden
+     per region in `Regions.ini` as `SasEngine` …; parcels use their region's). **In-world scripting (decided
+     2026-11-25, os-webrtc-sas#8):** script functions registered by the module (OpenSim's script invocations, so
+     `[OSSL] AllowMODFunctions = true`; `ScriptFunctions = true` in `[SasWebRtcVoice]`):
+     `sasSetRoomParameters(notecard)` / `sasGetRoomParameters(notecard)`, and `sasSetRoomParametersText(text)` /
+     `sasGetRoomParametersText()` taking the same text. They act on the voice room of the parcel the prim is on (its
+     own, else the region's). The notecard is `key = value` lines (`#` or `//` comments): `room = parcel|region`
+     (required: which room it is for, so a parcel switched back to the region's channel cannot change the region's
+     room by accident), `acoustics = …`; later room dimensions, absorption, reverb level (with the element's geometry,
+     acousticmultimixer#3). Unknown keys or bad values refuse the whole set. The getter writes everything, including
+     `engine` and `distance-curve`; it replaces a notecard of that name. **Engine and distance curve (decided
+     2026-11-25, #28):** `PATCH` changes them; the media switches when nobody is in the room (at once if empty, else
+     when the last participant leaves; the room shows `inUse` meanwhile), so scripts and the configuration change
+     existing rooms without deleting them. Switching a busy room live (remove everyone from the engine, rebuild it,
+     add them back; WebRTC stays up) is recorded for later, #29. Set returns "" or the reason; refusals are also logged by the simulator. Who may set: a
+     parcel's own room, the object's owner being the parcel owner (or deeded to its group) or an estate owner or
+     manager; the region's room, estate owners and managers only; anyone may get. **One controlling object per
+     room:** the first object to set a room controls it (stored in the room's `metadata` on this server, #27, which
+     `PATCH` can therefore change: top-level keys merged, null removes); others are refused, naming it, while it
+     still exists in the region; once it is gone, the next object takes over. Precedence: a script, then
+     `Regions.ini`, then `[SasWebRtcVoice]` (the module does not apply the configuration to a room a script
+     controls). A room not made yet is made (with the region's settings) first. Calls are synchronous, like OSSL's
+     notecard functions. A ready-made script applies an `Acoustics` notecard on rez, at region start and when the
+     notecard changes, and saves the room's settings to it when its owner touches it. Later: console commands; the
+     script taking chat commands; per-parcel settings in config (os-webrtc-sas#10).
      **Publishing the plugin (2026-11-19, #23, #22):** the plugin repository is public and makes its own releases
      (0.1.0: `.deb`/`.rpm` for x64 and arm64, a Windows zip). Here: the server package *recommends* it; `pages.yml`
      adds the plugin's latest published release to the apt/dnf repositories (run it by hand after a plugin release:

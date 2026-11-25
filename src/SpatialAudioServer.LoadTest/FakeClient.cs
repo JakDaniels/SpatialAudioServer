@@ -148,6 +148,24 @@ public sealed class FakeClient : IDisposable
     public void StopSending() => _gate.SetProperty("drop", true);
 
     /// <summary>
+    /// Sends nothing at all any more (no audio, RTCP or data: everything webrtcbin's ICE sink would send is dropped),
+    /// as a client that has vanished. The ICE agent itself still answers, so the server cannot tell from ICE alone.
+    /// </summary>
+    public void Vanish()
+    {
+        StopSending();
+        if (_rtc.Element is not Bin bin)
+        {
+            return;
+        }
+        using var iterator = bin.IterateRecurse();
+        foreach (var sink in iterator.Items<Element>().Where(e => e.GetFactory()?.Name == "nicesink"))
+        {
+            sink.GetStaticPad("sink")?.AddProbe(PadProbeType.Buffer | PadProbeType.BufferList, (_, _) => PadProbeReturn.Drop);
+        }
+    }
+
+    /// <summary>
     /// Behaves like a Second Life viewer (Firestorm's llwebrtc): an ordered "SLData" data channel created before
     /// the offer, the viewer's SDP munging, a non-trickle answer, and server candidates never fetched.
     /// </summary>

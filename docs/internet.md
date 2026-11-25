@@ -65,6 +65,19 @@ protections depend on it.
 | `Admin:AllowedNetworks` / `Auth:AllowedNetworks` see only the proxy's address (allow it, and you allow everyone) | the lists see each client's address |
 | `Admin:RequireHttps` sees plain HTTP from the proxy and refuses every admin login (a proxy on the same host included) | the proxy's `X-Forwarded-Proto: https` counts as HTTPS |
 
+**List the address the proxy's connections arrive from**, which is not always the proxy's LAN address. When the
+server runs in a container or VM, or on another subnet, the connections come from the proxy host's address on that
+network: e.g. the bridge address `192.168.21.1` for a container at `192.168.21.209`, or Docker's gateway
+(`172.17.0.1`) for a published port. To find it:
+
+- on the proxy host, `ip route get <server address>`: the `src` it shows; or
+- from the server itself: set `Admin:AllowedNetworks` to `[ "192.0.2.1" ]` for a moment, open `/admin/` through the
+  proxy, and the log says `Refused /admin/ from <address>`. Put your real list back afterwards.
+
+An address logged as `::ffff:192.168.21.1` is IPv4 `192.168.21.1` seen on a dual-stack socket: list it without the
+`::ffff:`. A wrong `TrustedProxies` does not stop `/admin/` loading; it shows at login, as "This request came through
+a proxy that is not in Server:TrustedProxies".
+
 Only list proxies that are yours: a listed proxy's headers are believed, so a client that could reach the server
 through another listed address could claim any address. The proxy must send `X-Forwarded-For` and
 `X-Forwarded-Proto` (Caddy does by default; nginx with the lines below), and should redirect plain HTTP to HTTPS

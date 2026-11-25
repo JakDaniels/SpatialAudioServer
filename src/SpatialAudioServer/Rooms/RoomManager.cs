@@ -154,14 +154,21 @@ public sealed class RoomManager(
     }
 
     /// <summary>
-    /// Changes what may change about a room after creation: <see cref="InWorldAvatars"/> and its acoustics (which a
-    /// running room's media takes at once).
+    /// Changes what may change about a room after creation: <see cref="InWorldAvatars"/>, its acoustics (which a
+    /// running room's media takes at once), its metadata (merged by top-level key; null removes a key), and its engine
+    /// and distance curve (which the media takes when the room is next empty: at once if it is).
     /// </summary>
     public RoomSnapshot UpdateRoom(Guid roomId, UpdateRoomCommand command)
     {
-        new Validation().OneOf("acoustics", command.Acoustics, RoomAcoustics.IsKnown, RoomAcoustics.Names).ThrowIfInvalid();
+        new Validation()
+            .OneOf("acoustics", command.Acoustics, RoomAcoustics.IsKnown, RoomAcoustics.Names)
+            .OneOf("engine", command.Engine, MixEngines.Exists, MixEngines.All.Select(e => e.Name))
+            .OneOf("spatialProfile", command.SpatialProfile,
+                p => p.Equals(DefaultProfile, StringComparison.OrdinalIgnoreCase) || mediaOptions.Value.Spatial.Profiles.ContainsKey(p),
+                [DefaultProfile, .. mediaOptions.Value.Spatial.Profiles.Keys])
+            .ThrowIfInvalid();
         RoomSnapshot snapshot;
-        var acousticsChanged = false;
+        var mediaChanged = false;
         lock (_lock)
         {
             var room = FindRoom(roomId);
@@ -176,13 +183,37 @@ public sealed class RoomManager(
             {
                 rooms.UpdateAcoustics(roomId, acoustics);
                 room.Acoustics = acoustics;
-                acousticsChanged = true;
+                mediaChanged = true;
                 activity.Event("room.updated", roomId, detail: $"acoustics {acoustics ?? RoomAcoustics.Outdoor}");
                 log.LogInformation("Room {RoomId}: acoustics {Acoustics}", roomId, acoustics ?? RoomAcoustics.Outdoor);
             }
+            var engine = command.Engine?.Trim().ToLowerInvariant() ?? room.Engine;
+            var profile = command.SpatialProfile is { } p
+                ? p.Trim().Equals(DefaultProfile, StringComparison.OrdinalIgnoreCase) ? null : p.Trim().ToLowerInvariant()
+                : room.SpatialProfile;
+            if (engine != room.Engine || profile != room.SpatialProfile)
+            {
+                rooms.UpdateEngine(roomId, engine, profile);
+                room.Engine = engine;
+                room.SpatialProfile = profile;
+                if (room.Participants.Count == 0)
+                {
+                    room.MediaUses(engine, profile);
+                }
+                mediaChanged = true; // the media is told
+                var when = room.Participants.Count == 0 ? "" : " (when the room is next empty)";
+                activity.Event("room.updated", roomId, detail: $"engine {engine}, distance curve {profile ?? DefaultProfile}{when}");
+                log.LogInformation("Room {RoomId}: engine {Engine}, distance curve {Profile}{When}", roomId, engine, profile ?? DefaultProfile, when);
+            }
+            if (command.Metadata is { Count: > 0 } changes && MergeMetadata(room.Metadata, changes) is var merged && merged != room.Metadata)
+            {
+                rooms.UpdateMetadata(roomId, merged);
+                room.Metadata = merged;
+                activity.Event("room.updated", roomId, detail: $"metadata {string.Join(", ", changes.Select(c => c.Key))}");
+            }
             snapshot = room.Snapshot();
         }
-        if (acousticsChanged)
+        if (mediaChanged)
         {
             media.RoomUpdated(snapshot);
         }
@@ -358,6 +389,10 @@ public sealed class RoomManager(
             var (token, expires) = joinTokens.Issue(participant.Id, roomId, auth.Value.JoinTokenLifetime);
             activity.SessionStarted(participant.Id, roomId, participant.ExternalId, participant.DisplayName, participant.JoinedAt);
             activity.Event("participant.joined", roomId, participant.Id, participant.DisplayName);
+            if (room.Participants.Count == 0)
+            {
+                room.MediaUses(room.Engine, room.SpatialProfile); // the first one in starts the media with the settings
+            }
             room.Participants[participant.Id] = participant;
             result = new JoinResult(participant.Snapshot(), token, expires, replaced);
         }
@@ -782,6 +817,9 @@ public sealed class RoomManager(
     /// <summary>The configured default engine; an unknown name is a configuration error, caught at start-up.</summary>
     private string DefaultEngine => mediaOptions.Value.Engine;
 
+    /// <summary>In a PATCH, the server's default distance curve (a room's stored curve is then null).</summary>
+    private const string DefaultProfile = "default";
+
     private void RoomCreated(RoomSnapshot snapshot)
     {
         log.LogInformation("Room {RoomId} '{Name}' created (engine {Engine}{Spatial})", snapshot.Id, snapshot.Name, snapshot.Engine,
@@ -817,22 +855,29 @@ public sealed class RoomManager(
         public string Name { get; } = record.Name;
         public string? ExternalId { get; } = record.ExternalId;
         public int MaxParticipants { get; } = record.MaxParticipants;
-        public string? Metadata { get; } = record.MetadataJson;
+        public string? Metadata { get; set; } = record.MetadataJson;
         public DateTimeOffset CreatedAt { get; } = record.CreatedAt;
-        public string Engine { get; } = record.Engine is { } e && MixEngines.Exists(e) ? e : defaultEngine;
+        public string Engine { get; set; } = record.Engine is { } e && MixEngines.Exists(e) ? e : defaultEngine;
         public bool Spatial { get; } = record.Spatial;
         public ClientPose ClientPose { get; } = Enum.TryParse<ClientPose>(record.ClientPose, ignoreCase: true, out var pose)
             ? pose
             : record.Spatial ? ClientPose.Orientation : ClientPose.None;
         public InWorldAvatars InWorldAvatars { get; set; } =
             Enum.TryParse<InWorldAvatars>(record.InWorldAvatars, ignoreCase: true, out var avatars) ? avatars : InWorldAvatars.Off;
-        public string? SpatialProfile { get; } = record.SpatialProfile;
+        public string? SpatialProfile { get; set; } = record.SpatialProfile;
+
+        /// <summary>The engine and curve the room's media was started with (differ from the settings until it is next empty).</summary>
+        private (string Engine, string? SpatialProfile) _inUse = (
+            record.Engine is { } used && MixEngines.Exists(used) ? used : defaultEngine, record.SpatialProfile);
+
+        public void MediaUses(string engine, string? spatialProfile) => _inUse = (engine, spatialProfile);
         public string? Acoustics { get; set; } = record.Acoustics;
         public Dictionary<Guid, Participant> Participants { get; } = [];
 
         public RoomSnapshot Snapshot() =>
             new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine, Spatial, ClientPose,
-                InWorldAvatars, SpatialProfile, Acoustics);
+                InWorldAvatars, SpatialProfile, Acoustics,
+                Participants.Count > 0 && _inUse != (Engine, SpatialProfile) ? new RoomInUse(_inUse.Engine, _inUse.SpatialProfile) : null);
 
         public IReadOnlyList<ParticipantSnapshot> ParticipantSnapshots() =>
             Participants.Values.OrderBy(p => p.JoinedAt).Select(p => p.Snapshot()).ToList();
@@ -876,5 +921,27 @@ public sealed class RoomManager(
     }
 
     // Stored as text and parsed per snapshot, so callers never share a mutable JsonObject with the manager.
+    /// <summary>
+    /// The room's metadata with <paramref name="changes"/> merged in (null removes a key), as stored JSON; null when
+    /// nothing is left. Throws a validation error when the result would be too big.
+    /// </summary>
+    private static string? MergeMetadata(string? current, JsonObject changes)
+    {
+        var merged = ParseMetadata(current) ?? [];
+        foreach (var (key, value) in changes)
+        {
+            if (value is null)
+            {
+                merged.Remove(key);
+            }
+            else
+            {
+                merged[key] = value.DeepClone();
+            }
+        }
+        new Validation().Metadata("metadata", merged).ThrowIfInvalid();
+        return merged.Count == 0 ? null : merged.ToJsonString();
+    }
+
     private static JsonObject? ParseMetadata(string? json) => json is null ? null : JsonNode.Parse(json) as JsonObject;
 }
