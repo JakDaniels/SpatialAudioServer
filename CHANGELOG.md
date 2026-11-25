@@ -4,6 +4,8 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+## 0.4.0 (2026-11-25)
+
 - Server: a room's `metadata` can be changed with `PATCH` (top-level keys merged, `null` removes one), so
   integrations can keep their own notes on a room, such as which in-world object controls its acoustics.
 - Server: a room's engine and distance curve (`spatialProfile`) can be changed with `PATCH`: an empty room
