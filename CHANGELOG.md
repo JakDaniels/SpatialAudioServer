@@ -4,6 +4,13 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+- Server: a room's `metadata` can be changed with `PATCH` (top-level keys merged, `null` removes one), so
+  integrations can keep their own notes on a room, such as which in-world object controls its acoustics.
+- Server: a room's engine and distance curve (`spatialProfile`) can be changed with `PATCH`: an empty room
+  switches at once, a busy one when its last participant leaves (it shows what is in use meanwhile as `inUse`).
+- Server: a connection that sends no audio but still reports what it receives (an SL viewer without a microphone, or
+  muted with no input device) is no longer dropped as dead after `Media:InactiveConnectionTimeout`.
+
 ## 0.3.0 (2026-11-19)
 
 - Server: a new `acoustic` mix engine, which mixes the whole room in one acousticmultimixer element (a separate

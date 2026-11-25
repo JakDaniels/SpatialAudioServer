@@ -55,8 +55,10 @@ public sealed class DeadConnectionTests() : MediaTestBase(
 }
 
 /// <summary>
-/// A client that stays connected but delivers no audio is reported failed after Media:InactiveConnectionTimeout and
-/// removed (GStreamer 1.24 has no ICE consent freshness, so this is how it notices a vanished client).
+/// A client that stays connected but sends nothing (no audio, RTCP or data) is reported failed after
+/// Media:InactiveConnectionTimeout and removed (GStreamer 1.24 has no ICE consent freshness, so this is how it notices a
+/// vanished client); one that only sends no audio (a listener without a microphone) still reports what it receives,
+/// and stays.
 /// </summary>
 [Collection("media")]
 public sealed class InactiveConnectionTests() : MediaTestBase(
@@ -76,7 +78,7 @@ public sealed class InactiveConnectionTests() : MediaTestBase(
         var quiet = clients[1];
 
         var clock = Stopwatch.StartNew();
-        quiet.StopSending();
+        quiet.Vanish();
         var removed = false;
         while (clock.Elapsed < TimeSpan.FromSeconds(20) && !removed)
         {
@@ -92,6 +94,36 @@ public sealed class InactiveConnectionTests() : MediaTestBase(
         var stay = Assert.Single(remaining);
         Assert.Equal(clients[0].ParticipantId, stay.Id);
         Assert.Equal(ParticipantState.Connected, stay.State);
+    }
+}
+
+/// <summary>
+/// A client that only listens sends no audio, but its RTCP receiver reports (about every 5 s, randomised up to 1.5
+/// times that) keep it alive: here with a timeout comfortably above that interval, as the 30 s default is.
+/// </summary>
+[Collection("media")]
+public sealed class ListenOnlyConnectionTests() : MediaTestBase(
+    SpatialAudioServer.Media.Engines.MixEngines.Default,
+    new Dictionary<string, string?>
+    {
+        ["Media:InactiveConnectionTimeout"] = "00:00:12",
+        ["Media:DeadConnectionTimeout"] = "00:00:01",
+    })
+{
+    [Fact]
+    public async Task A_client_that_only_listens_stays()
+    {
+        var room = await CreateRoomAsync();
+        var clients = new List<LoadTest.FakeClient> { await JoinAsync(room.Id, 0), await JoinAsync(room.Id, 1) };
+        await SettleAndMeasureAsync(clients, Others(clients));
+        var listener = clients[1];
+        listener.StopSending(); // no audio packets at all, as an SL viewer without a microphone
+
+        await Task.Delay(TimeSpan.FromSeconds(20)); // well past the 12 s timeout (and the 1 s before removal)
+        var participant = await (await Api.GetAsync($"/api/rooms/{room.Id}/participants/{listener.ParticipantId}")).Read<ParticipantSnapshot>();
+        Assert.Equal(ParticipantState.Connected, participant.State);
+        var talker = clients[0];
+        AssertHears(await SettleAndMeasureAsync([listener], _ => [talker.ToneHz]), _ => [talker.ToneHz]);
     }
 }
 

@@ -52,6 +52,10 @@ future spatial audio). Later: Second Life/Firestorm viewer support via an OpenSi
   (groups V2 on MariaDB `opensim_groups` for this standalone). Ringing across simulators: os-webrtc-sas#1.
   NPCs (PLAN.md Phase 8): web users and bots shown in-world as NPCs, first version (module `WebUserAvatars`, web
   client tick box, load tool `--npc`); voice agents set up from OSSL are ideas only.
+  Room sound from OpenSim: per-region `SasEngine`/`SasAcoustics`/`SasSpatialProfile` in `Regions.ini`, and in-world
+  script functions (`sasSetRoomParameters` …, notecard script `scripts/sas-room-acoustics.lsl`, one controlling object
+  per room kept in the room's metadata); engine and curve changes switch when the room is next empty (PLAN.md Phase 6).
+  ubODE throws a just-made NPC towards <0,0> (core patch 0002; the module puts it back in its first 5 s).
   Test OpenSim standalone runs in `screen -S opensim` from `docs/reference/opensim/bin` (avatars Test One/Test Two).
 - **Phase 5 (hardening) under way** (PLAN.md Phase 5): media on demand (`Media:IdleRoomTimeout`), stale joins removed at
   token expiry, graceful shutdown, signalling rate limits, input limits, security headers, run docs in

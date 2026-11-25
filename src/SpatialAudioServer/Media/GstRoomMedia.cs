@@ -46,6 +46,10 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
             {
                 entry.Room = room;
                 entry.Pipeline?.UpdateRoom(room);
+                if (entry.Participants.Count == 0 && Outdated(entry))
+                {
+                    Stop(entry, "engine or distance curve changed"); // the next participant starts it with the new ones
+                }
             }
         }
     }
@@ -80,7 +84,14 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
             entry.Pipeline?.RemoveParticipant(participantId);
             if (entry.Participants.Count == 0)
             {
-                ScheduleIdleStop(entry);
+                if (Outdated(entry))
+                {
+                    Stop(entry, "room empty; its engine or distance curve changed");
+                }
+                else
+                {
+                    ScheduleIdleStop(entry);
+                }
             }
         }
     }
@@ -180,6 +191,11 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
         log.LogInformation("Room {RoomId}: media started", room.Id);
         return pipeline;
     }
+
+    /// <summary>Under the entry's lock: the running media was started with another engine or distance curve than the room's.</summary>
+    private static bool Outdated(RoomEntry entry) =>
+        entry.Pipeline is { } pipeline
+        && (pipeline.EngineName != entry.Room.Engine || pipeline.SpatialProfile != entry.Room.SpatialProfile);
 
     /// <summary>Under the entry's lock.</summary>
     private void ScheduleIdleStop(RoomEntry entry)

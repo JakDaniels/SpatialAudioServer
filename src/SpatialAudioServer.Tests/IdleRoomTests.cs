@@ -58,6 +58,38 @@ public sealed class IdleRoomTests() : MediaTestBase(
     }
 
     [Fact]
+    public async Task A_new_engine_takes_over_as_soon_as_the_room_is_empty()
+    {
+        var room = await CreateRoomAsync();
+        var clients = new List<LoadTest.FakeClient> { await JoinAsync(room.Id, 0), await JoinAsync(room.Id, 1) };
+        var changed = await (await Api.PatchAsJsonAsync($"/api/rooms/{room.Id}", new { engine = "pairchains" })).Read<Rooms.RoomSnapshot>();
+        Assert.Equal("pairchains", changed.Engine);
+        Assert.Equal(room.Engine, changed.InUse?.Engine); // people are in it: the running media keeps its engine
+        Assert.Equal(room.Engine, (await (await Api.GetAsync($"/api/rooms/{room.Id}/media")).Read<RoomMediaStats>()).Engine);
+        AssertHears(await SettleAndMeasureAsync(clients, Others(clients)), Others(clients));
+
+        foreach (var client in clients)
+        {
+            await client.LeaveAsync(Signal);
+        }
+        await WaitUntilAsync(() => !Media.IsRunning(room.Id), TimeSpan.FromSeconds(0.5)); // at once, not after the idle timeout
+
+        var again = new List<LoadTest.FakeClient> { await JoinAsync(room.Id, 2), await JoinAsync(room.Id, 3) };
+        Assert.Equal("pairchains", (await (await Api.GetAsync($"/api/rooms/{room.Id}/media")).Read<RoomMediaStats>()).Engine);
+        Assert.Null((await (await Api.GetAsync($"/api/rooms/{room.Id}")).Read<Rooms.RoomSnapshot>()).InUse);
+        AssertHears(await SettleAndMeasureAsync(again, Others(again)), Others(again));
+
+        // Empty again, within the idle timeout: the idle media stops at once for a new engine.
+        foreach (var client in again)
+        {
+            await client.LeaveAsync(Signal);
+        }
+        Assert.True(Media.IsRunning(room.Id));
+        (await Api.PatchAsJsonAsync($"/api/rooms/{room.Id}", new { engine = "matrix" })).EnsureSuccessStatusCode();
+        Assert.False(Media.IsRunning(room.Id));
+    }
+
+    [Fact]
     public async Task Deleting_a_room_stops_its_media()
     {
         var room = await CreateRoomAsync();
