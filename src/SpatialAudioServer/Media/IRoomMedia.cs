@@ -57,6 +57,12 @@ public interface IRoomMedia
 
     /// <summary>One element's properties; null without media, while idle, or if no element has that path.</summary>
     Task<GraphElementDetails?> ElementDetailsAsync(Guid roomId, string path);
+
+    /// <summary>
+    /// The room's acoustic values in effect (<see cref="Spatial.AcousticParameters.Values"/>): from its running acoustic
+    /// engine, else what the acoustic engine would make of its settings. Null without media or the plugin.
+    /// </summary>
+    Task<System.Text.Json.Nodes.JsonObject?> AcousticValuesAsync(RoomSnapshot room);
 }
 
 /// <param name="LevelDb">Incoming audio level, dBFS (peak-held RMS), or null when the engine does not measure it or no
@@ -132,6 +138,9 @@ public sealed class NullRoomMedia : IRoomMedia
     public Task<PipelineGraph?> PipelineGraphAsync(Guid roomId, IReadOnlySet<string> expand) => Task.FromResult<PipelineGraph?>(null);
 
     public Task<GraphElementDetails?> ElementDetailsAsync(Guid roomId, string path) => Task.FromResult<GraphElementDetails?>(null);
+
+    public Task<System.Text.Json.Nodes.JsonObject?> AcousticValuesAsync(RoomSnapshot room) =>
+        Task.FromResult<System.Text.Json.Nodes.JsonObject?>(null);
 }
 
 public sealed class MediaUnavailableException() : Exception("Media is disabled on this server (Media:Enabled=false).");

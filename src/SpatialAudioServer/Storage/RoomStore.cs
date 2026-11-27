@@ -8,7 +8,7 @@ namespace SpatialAudioServer.Storage;
 public sealed record RoomRecord(
     Guid Id, string Name, string? ExternalId, int MaxParticipants, string? MetadataJson, DateTimeOffset CreatedAt, string? Engine = null,
     bool Spatial = false, string? ClientPose = null, string? InWorldAvatars = null, string? SpatialProfile = null,
-    string? Acoustics = null);
+    string? Acoustics = null, string? AcousticParametersJson = null);
 
 /// <summary>Room definitions. Rooms persist until deleted and are restored (empty) at start-up.</summary>
 public sealed class RoomStore(Database database)
@@ -18,12 +18,12 @@ public sealed class RoomStore(Database database)
         using var connection = database.Open();
         using var command = connection.Command(
             "INSERT INTO rooms (id, name, external_id, max_participants, metadata, created_at, engine, spatial, client_pose, in_world_avatars, " +
-            "spatial_profile, acoustics) VALUES ($id, $name, $external, $max, $metadata, $created, $engine, $spatial, $pose, $avatars, $profile, " +
-            "$acoustics)",
+            "spatial_profile, acoustics, acoustic_parameters) VALUES ($id, $name, $external, $max, $metadata, $created, $engine, $spatial, $pose, " +
+            "$avatars, $profile, $acoustics, $parameters)",
             ("$id", room.Id.ToString()), ("$name", room.Name), ("$external", room.ExternalId),
             ("$max", room.MaxParticipants), ("$metadata", room.MetadataJson), ("$created", ToDb(room.CreatedAt)), ("$engine", room.Engine),
             ("$spatial", room.Spatial ? 1 : 0), ("$pose", room.ClientPose), ("$avatars", room.InWorldAvatars),
-            ("$profile", room.SpatialProfile), ("$acoustics", room.Acoustics));
+            ("$profile", room.SpatialProfile), ("$acoustics", room.Acoustics), ("$parameters", room.AcousticParametersJson));
         command.ExecuteNonQuery();
     }
 
@@ -40,6 +40,14 @@ public sealed class RoomStore(Database database)
         using var connection = database.Open();
         using var command = connection.Command("UPDATE rooms SET acoustics = $acoustics WHERE id = $id",
             ("$id", id.ToString()), ("$acoustics", value));
+        command.ExecuteNonQuery();
+    }
+
+    public void UpdateAcousticParameters(Guid id, string? json)
+    {
+        using var connection = database.Open();
+        using var command = connection.Command("UPDATE rooms SET acoustic_parameters = $parameters WHERE id = $id",
+            ("$id", id.ToString()), ("$parameters", json));
         command.ExecuteNonQuery();
     }
 
@@ -71,7 +79,7 @@ public sealed class RoomStore(Database database)
         using var connection = database.Open();
         using var command = connection.Command(
             "SELECT id, name, external_id, max_participants, metadata, created_at, engine, spatial, client_pose, in_world_avatars, spatial_profile, " +
-            "acoustics FROM rooms ORDER BY created_at");
+            "acoustics, acoustic_parameters FROM rooms ORDER BY created_at");
         using var reader = command.ExecuteReader();
         var rooms = new List<RoomRecord>();
         while (reader.Read())
@@ -80,7 +88,7 @@ public sealed class RoomStore(Database database)
                 Guid.Parse(reader.GetString(0)), reader.GetString(1), reader.GetNullableString(2),
                 reader.GetInt32(3), reader.GetNullableString(4), FromDb(reader.GetString(5)), reader.GetNullableString(6),
                 reader.GetInt32(7) != 0, reader.GetNullableString(8), reader.GetNullableString(9),
-                reader.GetNullableString(10), reader.GetNullableString(11)));
+                reader.GetNullableString(10), reader.GetNullableString(11), reader.GetNullableString(12)));
         }
         return rooms;
     }

@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
+using System.Text.Json.Nodes;
 using Gst;
 using SpatialAudioServer.Rooms;
 using static SpatialAudioServer.Media.Engines.MediaBlocks;
@@ -54,23 +55,8 @@ internal sealed class AcousticEngine : IMixEngine
             ["max-participants"] = (uint)_slots.Length,
         }) ?? throw new InvalidOperationException($"GStreamer element {Element} is missing.");
         _mixer.SetProperty("latency", (ulong)context.Options.MixerLatencyMs * 1_000_000);
-        if (context.SpatialSettings is { } spatial)
-        {
-            Global.UtilSetObjectArg(_mixer, "distance-model", spatial.DistanceModel.ToString().ToLowerInvariant());
-            _mixer.SetProperty("reference-distance", spatial.ReferenceDistance);
-            _mixer.SetProperty("rolloff", spatial.Rolloff);
-            _mixer.SetProperty("max-range", spatial.MaxRange);
-            if (NativeGObject.HasProperty(_mixer.Handle, "taper"))
-            {
-                _mixer.SetProperty("taper", spatial.Taper);
-            }
-            if (NativeGObject.HasProperty(_mixer.Handle, "near-distance"))
-            {
-                _mixer.SetProperty("near-distance", spatial.NearDistance);
-            }
-        }
-
         SetRoom(context.Acoustics);
+        ApplyParameters(context.AcousticParameters);
 
         _silence = Silence($"silence-{id}");
         _silenceCaps = Make("capsfilter", $"silencecaps-{id}");
@@ -119,7 +105,86 @@ internal sealed class AcousticEngine : IMixEngine
 
     public IReadOnlyDictionary<Guid, double> InputLevels => _levels.ToDictionary(l => l.Key, l => l.Value.Level);
 
-    public void RoomUpdated(RoomSnapshot room) => SetRoom(room.Acoustics);
+    public void RoomUpdated(RoomSnapshot room)
+    {
+        SetRoom(room.Acoustics);
+        ApplyParameters(room.AcousticParameters);
+    }
+
+    /// <summary>What each element property was last set to, so a change sets only what changed.</summary>
+    private readonly Dictionary<string, string> _applied = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _missingWarned = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The room's acoustic parameters onto the element: each set one, and for the rest the value that leaves the
+    /// preset in charge or the room's distance curve. Properties a plugin from before them lacks are skipped (with a
+    /// warning when the room sets them).
+    /// </summary>
+    private void ApplyParameters(JsonObject? parameters)
+    {
+        foreach (var (property, value) in Spatial.AcousticParameters.ElementSettings(parameters, _context.SpatialSettings))
+        {
+            if (_applied.TryGetValue(property, out var was) && was == value)
+            {
+                continue;
+            }
+            if (!NativeGObject.HasProperty(_mixer.Handle, property))
+            {
+                if (parameters?.ContainsKey(Spatial.AcousticParameters.Find(property)!.Key) == true && _missingWarned.Add(property))
+                {
+                    _context.Log.LogWarning("Room {RoomId}: acoustic parameter {Property} needs a newer acousticmultimixer plugin",
+                        _context.RoomId, property);
+                }
+                continue;
+            }
+            Global.UtilSetObjectArg(_mixer, property, value);
+            _applied[property] = value;
+        }
+    }
+
+    /// <summary>Worker: the room's acoustic values in effect (<see cref="Spatial.AcousticParameters.Values"/>).</summary>
+    public JsonObject AcousticValues() => ReadValues(_mixer);
+
+    private static JsonObject ReadValues(Element mixer) =>
+        Spatial.AcousticParameters.Values(
+            NativeGObject.HasProperty(mixer.Handle, "room-parameters") ? NativeGObject.ReadProperty(mixer.Handle, "room-parameters", int.MaxValue) : null,
+            property => NativeGObject.SerializeProperty(mixer.Handle, property));
+
+    /// <summary>
+    /// What a room would sound like, for a room whose media is not running the acoustic engine: a throwaway element
+    /// set up as the engine would, read and dropped. Null without the plugin.
+    /// </summary>
+    public static JsonObject? PreviewValues(string? acoustics, JsonObject? parameters, Spatial.SpatialOptions? curve)
+    {
+        if (ElementFactory.Find(Element) is null)
+        {
+            return null;
+        }
+        var mixer = ElementFactory.MakeWithProperties(Element, new Dictionary<string, object?> { ["max-participants"] = 1u });
+        if (mixer is null)
+        {
+            return null;
+        }
+        try
+        {
+            if (NativeGObject.HasProperty(mixer.Handle, "room"))
+            {
+                Global.UtilSetObjectArg(mixer, "room", acoustics ?? Spatial.RoomAcoustics.Outdoor);
+            }
+            foreach (var (property, value) in Spatial.AcousticParameters.ElementSettings(parameters, curve))
+            {
+                if (NativeGObject.HasProperty(mixer.Handle, property))
+                {
+                    Global.UtilSetObjectArg(mixer, property, value);
+                }
+            }
+            return ReadValues(mixer);
+        }
+        finally
+        {
+            mixer.Dispose();
+        }
+    }
 
     /// <summary>
     /// The element's <c>room</c> (its early reflections) from the room's acoustics; null is outdoor. A plugin from

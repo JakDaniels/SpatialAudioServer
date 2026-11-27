@@ -22,8 +22,8 @@ permissions:
 
 env:
   # The acousticmultimixer plugin (the acoustic engine), as the Windows installers carry it (packages.yml).
-  ACOUSTICMULTIMIXER_VERSION: '0.1.0'
-  ACOUSTICMULTIMIXER_DEB_SHA256: 87ed517acb8555617f03f9610201ddcab183f0f88875f5d5faef437f9bb64d08
+  ACOUSTICMULTIMIXER_VERSION: '0.2.0'
+  ACOUSTICMULTIMIXER_DEB_SHA256: c53c7437e753c420ff9c068a567703f363d3af4f49ec16f2313a11bd6a7db1a6
 
 jobs:
   test:

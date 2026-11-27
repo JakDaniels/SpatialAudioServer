@@ -4,6 +4,12 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+- Server: every acoustic value of an `acoustic` room (reflections, reverb, room size and materials, distance curve)
+  can be set and changed live through the API (`acousticParameters`, `GET /api/rooms/{id}/acoustics`) and an
+  Acoustics panel in the admin UI, so rooms can be tuned while people talk.
+
+## 0.4.0 (2026-11-25)
+
 - Server: a room's `metadata` can be changed with `PATCH` (top-level keys merged, `null` removes one), so
   integrations can keep their own notes on a room, such as which in-world object controls its acoustics.
 - Server: a room's engine and distance curve (`spatialProfile`) can be changed with `PATCH`: an empty room

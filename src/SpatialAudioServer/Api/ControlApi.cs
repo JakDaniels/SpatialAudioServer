@@ -15,7 +15,22 @@ public sealed record RoomDetails(
     Guid Id, string Name, string? ExternalId, int MaxParticipants, System.Text.Json.Nodes.JsonObject? Metadata,
     DateTimeOffset CreatedAt, int ParticipantCount, string Engine, bool Spatial, ClientPose ClientPose,
     IReadOnlyList<ParticipantSnapshot> Participants, InWorldAvatars InWorldAvatars = InWorldAvatars.Off, string? SpatialProfile = null,
-    string? Acoustics = null, RoomInUse? InUse = null);
+    string? Acoustics = null, RoomInUse? InUse = null, System.Text.Json.Nodes.JsonObject? AcousticParameters = null);
+
+/// <summary>
+/// <c>GET /api/rooms/{id}/acoustics</c>: what may be tuned and what the room sounds like.
+/// </summary>
+/// <param name="Acoustics">The room's preset (null = outdoor).</param>
+/// <param name="AcousticParameters">What the room sets (overriding the preset), by key.</param>
+/// <param name="Values">Every parameter's value in effect, by key (null without media or the acousticmultimixer
+/// plugin), with <c>room</c>, <c>reverbRoomLevel</c>, and <c>overridden</c> and <c>derived</c> (the keys set, and those
+/// the room's dimensions give).</param>
+/// <param name="Rendered">The room's engine is <c>acoustic</c>, so these are heard; other engines ignore them.</param>
+/// <param name="Parameters">What each parameter is: key, element property (the in-world notecard key), group, kind,
+/// unit, range, choices.</param>
+public sealed record RoomAcousticsResponse(
+    string? Acoustics, System.Text.Json.Nodes.JsonObject? AcousticParameters, System.Text.Json.Nodes.JsonObject? Values, bool Rendered,
+    IReadOnlyList<string> Presets, IReadOnlyList<AcousticParameter> Parameters);
 
 public sealed record JoinResponse(
     Guid ParticipantId, Guid RoomId, string JoinToken, string SignalUrl, DateTimeOffset ExpiresAt, Guid? ReplacedParticipantId);
@@ -91,7 +106,17 @@ public static class ControlApi
         {
             var (r, participants) = rooms.GetRoom(ResolveRoom(http, rooms));
             return new RoomDetails(r.Id, r.Name, r.ExternalId, r.MaxParticipants, r.Metadata, r.CreatedAt, r.ParticipantCount, r.Engine, r.Spatial,
-                r.ClientPose, participants, r.InWorldAvatars, r.SpatialProfile, r.Acoustics, r.InUse);
+                r.ClientPose, participants, r.InWorldAvatars, r.SpatialProfile, r.Acoustics, r.InUse, r.AcousticParameters);
+        });
+
+        // The room's acoustics: its preset, what it overrides, every value in effect, and what each parameter is. Set
+        // them with PATCH (acoustics, acousticParameters).
+        room.MapGet("/acoustics", async (HttpContext http, RoomManager rooms, IRoomMedia media) =>
+        {
+            var (r, _) = rooms.GetRoom(ResolveRoom(http, rooms));
+            var engine = r.InUse?.Engine ?? r.Engine;
+            return new RoomAcousticsResponse(r.Acoustics, r.AcousticParameters, await media.AcousticValuesAsync(r),
+                engine == AcousticEngine.Name, RoomAcoustics.Names, AcousticParameters.All);
         });
 
         // Viewer keys the integration has removed (its NPCs, guests): SL viewers drop them from their lists.

@@ -191,8 +191,8 @@ jobs:
       GSTREAMER_VERSION: 1.28.8
       GSTREAMER_SHA256: e4c41ee6ee9c6c32a45d198463ec08d79bac3bd5fa58adc93d13fe4a08abc9d9
       # The acousticmultimixer plugin (the acoustic engine), built against that GStreamer; as ci.yml installs it.
-      ACOUSTICMULTIMIXER_VERSION: '0.1.0'
-      ACOUSTICMULTIMIXER_ZIP_SHA256: ad0bad93b40351c9829a1628b7659784ab1cf35e0a9e5a1706723cb96a4036f8
+      ACOUSTICMULTIMIXER_VERSION: '0.2.0'
+      ACOUSTICMULTIMIXER_ZIP_SHA256: d1d4240aa6a4eedbd1d5f5e0d6a34ec61ba694b5503438fdcd0516416e398328
       PEFILE_VERSION: '2024.8.26'
     defaults:
       run:

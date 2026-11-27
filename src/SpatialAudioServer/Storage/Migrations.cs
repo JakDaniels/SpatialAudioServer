@@ -114,6 +114,11 @@ internal static class Migrations
         """
         ALTER TABLE rooms ADD COLUMN acoustics TEXT;
         """,
+
+        // 11: the room's acoustic parameters (AcousticParameters, JSON by key), overriding its preset; NULL = none.
+        """
+        ALTER TABLE rooms ADD COLUMN acoustic_parameters TEXT;
+        """,
     ];
 
     public static int LatestVersion => Steps.Length;

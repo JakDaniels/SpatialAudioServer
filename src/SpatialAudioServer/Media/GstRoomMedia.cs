@@ -132,6 +132,20 @@ public sealed class GstRoomMedia(IOptions<MediaOptions> options, ILogger<GstRoom
     public async Task<GraphElementDetails?> ElementDetailsAsync(Guid roomId, string path) =>
         PipelineOf(roomId, out _) is { } pipeline ? await pipeline.ElementDetailsAsync(path) : null;
 
+    public async Task<System.Text.Json.Nodes.JsonObject?> AcousticValuesAsync(RoomSnapshot room)
+    {
+        if (PipelineOf(room.Id, out _) is { } pipeline && await pipeline.AcousticValuesAsync() is { } running)
+        {
+            return running;
+        }
+        if (!Engines.MixEngines.Exists(Engines.AcousticEngine.Name))
+        {
+            return null;
+        }
+        var curve = room.Spatial ? options.Value.Spatial.WithProfile(room.SpatialProfile) : null;
+        return Engines.AcousticEngine.PreviewValues(room.Acoustics, room.AcousticParameters, curve);
+    }
+
     /// <summary>For tests and stats: (source, listener) pairs the room's engine is mixing.</summary>
     internal async Task<int> MixedPairsAsync(Guid roomId) =>
         PipelineOf(roomId, out _) is { } pipeline ? await pipeline.MixedPairsAsync() : 0;
