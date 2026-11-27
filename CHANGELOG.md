@@ -4,6 +4,8 @@ What changed in each release: the same text as its release notes.
 
 ## Unreleased
 
+## 0.5.0 (2026-11-27)
+
 - Server: every acoustic value of an `acoustic` room (reflections, reverb, room size and materials, distance curve)
   can be set and changed live through the API (`acousticParameters`, `GET /api/rooms/{id}/acoustics`) and an
   Acoustics panel in the admin UI, so rooms can be tuned while people talk.
