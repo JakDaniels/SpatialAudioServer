@@ -87,7 +87,8 @@ public sealed record RoomSnapshot(
     InWorldAvatars InWorldAvatars = InWorldAvatars.Off,
     string? SpatialProfile = null,
     string? Acoustics = null,
-    RoomInUse? InUse = null);
+    RoomInUse? InUse = null,
+    JsonObject? AcousticParameters = null);
 
 /// <summary>
 /// The engine and distance curve the room's media is using, when they differ from the room's settings (changed while
@@ -131,14 +132,17 @@ public sealed record ParticipantSnapshot(
 /// "meeting"); null = the server's default curve. Fixed for the room's life.</param>
 /// <param name="Acoustics">The kind of space, for its early reflections (<c>outdoor</c>, the default: none;
 /// <c>tiny-room</c>, <c>small-room</c>, <c>big-room</c>, <c>hall</c>, <c>long-hall</c>, <c>cave</c>, <c>cathedral</c>); only the <c>acoustic</c> engine renders it. May change later.</param>
+/// <param name="AcousticParameters">Values overriding the preset (<see cref="Media.Spatial.AcousticParameters"/>, by
+/// key: <c>reverbDecay</c>, <c>roomWidth</c> …); only the <c>acoustic</c> engine renders them. May change later.</param>
 public sealed record CreateRoomCommand(
     string? Name, string? ExternalId, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null,
-    ClientPose? ClientPose = null, InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null, string? Acoustics = null);
+    ClientPose? ClientPose = null, InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null, string? Acoustics = null,
+    JsonObject? AcousticParameters = null);
 
 /// <summary>Body of get-or-create by external id. Only used when the room is created; name defaults to the external id.</summary>
 public sealed record EnsureRoomCommand(
     string? Name, int? MaxParticipants, JsonObject? Metadata, string? Engine = null, bool? Spatial = null, ClientPose? ClientPose = null,
-    InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null, string? Acoustics = null);
+    InWorldAvatars? InWorldAvatars = null, string? SpatialProfile = null, string? Acoustics = null, JsonObject? AcousticParameters = null);
 
 /// <summary>Viewer keys (UUIDs) that have gone from a room, e.g. NPCs the integration removed (SL viewers drop them).</summary>
 public sealed record ViewerKeysGoneCommand(IReadOnlyList<string>? Keys);
@@ -150,8 +154,11 @@ public sealed record ViewerKeysGoneCommand(IReadOnlyList<string>? Keys);
 /// <param name="Engine">The mix engine. Stored at once; the room's media changes to it when the room is empty (at once
 /// if it is, else when the last participant leaves).</param>
 /// <param name="SpatialProfile">The distance curve ("default": the server's), applied like <paramref name="Engine"/>.</param>
+/// <param name="AcousticParameters">Merged into the room's acoustic parameters like <paramref name="Metadata"/> (null
+/// removes one, back to the preset's value); a running room's media takes them at once. Refused as a whole if any
+/// value is not valid.</param>
 public sealed record UpdateRoomCommand(InWorldAvatars? InWorldAvatars = null, string? Acoustics = null, JsonObject? Metadata = null,
-    string? Engine = null, string? SpatialProfile = null);
+    string? Engine = null, string? SpatialProfile = null, JsonObject? AcousticParameters = null);
 
 /// <param name="ClientNamed">
 /// The participant may choose its own display name when it joins (an invited guest); otherwise the name given here

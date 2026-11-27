@@ -101,9 +101,13 @@ POST   /api/rooms                         {name, externalId?, maxParticipants?, 
 GET    /api/rooms[?externalId=]            -> [room]
 GET    /api/rooms/{roomId}                 -> room + participants
 DELETE /api/rooms/{roomId}                 -> disconnects everyone, tears down pipeline
-PATCH  /api/rooms/{roomId}                 {inWorldAvatars?, acoustics?, metadata?, engine?, spatialProfile?} (metadata
-                                            merged by top-level key, null removes one; engine and spatialProfile
-                                            switch when the room is empty, `inUse` shows what runs until then)
+PATCH  /api/rooms/{roomId}                 {inWorldAvatars?, acoustics?, acousticParameters?, metadata?, engine?,
+                                            spatialProfile?} (metadata and acousticParameters merged by top-level key,
+                                            null removes one; engine and spatialProfile switch when the room is empty,
+                                            `inUse` shows what runs until then)
+GET    /api/rooms/{roomId}/acoustics       -> {acoustics, acousticParameters, values (every parameter in effect, with
+                                            overridden/derived), rendered, presets, parameters (key, property, group,
+                                            kind, unit, range, choices)}
 
 POST   /api/rooms/{roomId}/participants    {displayName, externalId?(avatar UUID), position?, orientation?, metadata?}
                                             -> {participantId, roomId, joinToken, signalUrl, expiresAt} (201)
@@ -577,6 +581,22 @@ tested without GStreamer.
      create and `PATCH` (null removes an override), returned with the values in effect and their source; the admin
      UI gets a control per value with a reset. The silence gate (acousticmultimixer#2) comes after this, as its
      own piece; per-path reflections from the same dimensions (acousticmultimixer#3) after that.
+     **Done (#31, 2026-11-27):** `Media/Spatial/AcousticParameters.cs` holds the table (JSON key, element property,
+     group, kind, range, choices); `acousticParameters` on create, get-or-create and `PATCH` (keys by JSON name or
+     element property, so notecards can send theirs; numbers and lists also as text; one bad value refuses the
+     change), stored as JSON (migration 11). The acoustic engine sets every property from it on start and on each
+     change, only those that changed; unset ones go back to −1, an empty list, no dimensions, or the room's distance
+     curve (so the distance values are overrides on its profile, live in this engine; other engines ignore all of
+     them). `GET /api/rooms/{id}/acoustics` reads the values in effect from the running element (`room-parameters`
+     and each property, by `gst_value_serialize`), or for an idle room from a throwaway element set up the same way,
+     so clients always see real numbers. Admin UI: an Acoustics panel built from the descriptions (sliders sent while
+     dragging, every 200 ms; lists as text; ↺ back to the preset's or default value; "from size" for derived values).
+     The plugin pins (CI, MSIs) are 0.2.0. In-world (os-webrtc-sas#13): any notecard key besides `room`,
+     `acoustics`, `engine` and `distance-curve` is sent as an acoustic parameter under its element name (the server
+     checks it); no value or `default` removes it. Notecards merge like `PATCH`: a line taken out of a notecard leaves
+     that value as it was (write it with no value to go back). The getter writes every parameter, the unset ones as
+     `#` comments with their current value and where it comes from; the module's errors now name the refused key.
+     `Regions.ini` keeps to presets for now.
      **Publishing the plugin (2026-11-19, #23, #22):** the plugin repository is public and makes its own releases
      (0.1.0: `.deb`/`.rpm` for x64 and arm64, a Windows zip). Here: the server package *recommends* it; `pages.yml`
      adds the plugin's latest published release to the apt/dnf repositories (run it by hand after a plugin release:

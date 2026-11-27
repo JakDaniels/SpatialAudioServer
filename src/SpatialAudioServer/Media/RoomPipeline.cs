@@ -49,7 +49,7 @@ internal sealed class RoomPipeline : IDisposable
         _bus = new BusWatcher(_pipeline, $"room-{roomId.ToString()[..8]}", log);
         Spatial = room.Spatial;
         _engine = MixEngines.Create(room.Engine, new MixEngineContext(roomId, room.MaxParticipants, _pipeline, _worker, options, log, room.Spatial,
-            room.SpatialProfile, room.Acoustics));
+            room.SpatialProfile, room.Acoustics, room.AcousticParameters));
         _viewers = new ViewerData(_worker, options, () => _engine.InputLevels,
             id => _participants.TryGetValue(id, out var p) ? p.Endpoint?.Rtc : null, departures);
         if (options.InactiveConnectionTimeout > TimeSpan.Zero)
@@ -172,6 +172,10 @@ internal sealed class RoomPipeline : IDisposable
 
     /// <summary>The room's acoustics changed.</summary>
     public void UpdateRoom(RoomSnapshot room) => _worker.Post(() => _engine.RoomUpdated(room));
+
+    /// <summary>The acoustic values in effect, when the room's engine is the acoustic one; else null.</summary>
+    public Task<System.Text.Json.Nodes.JsonObject?> AcousticValuesAsync() =>
+        _worker.InvokeAsync(() => (_engine as AcousticEngine)?.AcousticValues());
 
     public void UpdateParticipant(ParticipantSnapshot participant) => _worker.Post(() =>
     {

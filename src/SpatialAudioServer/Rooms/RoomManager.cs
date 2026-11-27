@@ -137,7 +137,7 @@ public sealed class RoomManager(
     {
         var normalized = ExternalIds.Normalize(externalId);
         var create = new CreateRoomCommand(command?.Name ?? normalized, normalized, command?.MaxParticipants, command?.Metadata, command?.Engine,
-            command?.Spatial, command?.ClientPose, command?.InWorldAvatars, command?.SpatialProfile, command?.Acoustics);
+            command?.Spatial, command?.ClientPose, command?.InWorldAvatars, command?.SpatialProfile, command?.Acoustics, command?.AcousticParameters);
         ValidateCreate(create);
 
         RoomSnapshot snapshot;
@@ -160,7 +160,12 @@ public sealed class RoomManager(
     /// </summary>
     public RoomSnapshot UpdateRoom(Guid roomId, UpdateRoomCommand command)
     {
-        new Validation()
+        var validation = new Validation();
+        if (command.AcousticParameters is { } acousticChanges)
+        {
+            AcousticParameters.Merge(null, acousticChanges, (field, message) => validation.Check(field, false, message));
+        }
+        validation
             .OneOf("acoustics", command.Acoustics, RoomAcoustics.IsKnown, RoomAcoustics.Names)
             .OneOf("engine", command.Engine, MixEngines.Exists, MixEngines.All.Select(e => e.Name))
             .OneOf("spatialProfile", command.SpatialProfile,
@@ -186,6 +191,17 @@ public sealed class RoomManager(
                 mediaChanged = true;
                 activity.Event("room.updated", roomId, detail: $"acoustics {acoustics ?? RoomAcoustics.Outdoor}");
                 log.LogInformation("Room {RoomId}: acoustics {Acoustics}", roomId, acoustics ?? RoomAcoustics.Outdoor);
+            }
+            if (command.AcousticParameters is { Count: > 0 } parameters
+                && AcousticParameters.Merge(ParseMetadata(room.AcousticParameters), parameters, (_, _) => { })?.ToJsonString() is var json
+                && json != room.AcousticParameters)
+            {
+                rooms.UpdateAcousticParameters(roomId, json);
+                room.AcousticParameters = json;
+                mediaChanged = true;
+                var keys = string.Join(", ", parameters.Select(p => p.Value is null ? $"{p.Key} (preset)" : $"{p.Key} {p.Value.ToJsonString()}"));
+                activity.Event("room.updated", roomId, detail: $"acoustic parameters {keys}");
+                log.LogInformation("Room {RoomId}: acoustic parameters {Parameters}", roomId, keys);
             }
             var engine = command.Engine?.Trim().ToLowerInvariant() ?? room.Engine;
             var profile = command.SpatialProfile is { } p
@@ -782,8 +798,14 @@ public sealed class RoomManager(
         return removed;
     }
 
-    private void ValidateCreate(CreateRoomCommand command) =>
-        new Validation()
+    private void ValidateCreate(CreateRoomCommand command)
+    {
+        var validation = new Validation();
+        if (command.AcousticParameters is { } parameters)
+        {
+            AcousticParameters.Merge(null, parameters, (field, message) => validation.Check(field, false, message));
+        }
+        validation
             .Required("name", command.Name, Validation.MaxNameLength)
             .Optional("externalId", command.ExternalId, Validation.MaxExternalIdLength)
             .Range("maxParticipants", command.MaxParticipants, 1, limits.Value.MaxParticipantsPerRoom)
@@ -793,6 +815,7 @@ public sealed class RoomManager(
                 mediaOptions.Value.Spatial.Profiles.Keys)
             .OneOf("acoustics", command.Acoustics, RoomAcoustics.IsKnown, RoomAcoustics.Names)
             .ThrowIfInvalid();
+    }
 
     private RoomSnapshot CreateRoomLocked(CreateRoomCommand command)
     {
@@ -806,7 +829,8 @@ public sealed class RoomManager(
             command.Metadata?.ToJsonString(), time.GetUtcNow(),
             command.Engine ?? (command.Spatial == true ? mediaOptions.Value.SpatialEngine : DefaultEngine),
             command.Spatial ?? false, command.ClientPose?.ToString(), command.InWorldAvatars?.ToString(),
-            command.SpatialProfile?.Trim().ToLowerInvariant(), RoomAcoustics.Normalize(command.Acoustics));
+            command.SpatialProfile?.Trim().ToLowerInvariant(), RoomAcoustics.Normalize(command.Acoustics),
+            command.AcousticParameters is { } parameters ? AcousticParameters.Merge(null, parameters, (_, _) => { })?.ToJsonString() : null);
         rooms.Insert(record);
         var room = new Room(record, DefaultEngine);
         _rooms[room.Id] = room;
@@ -872,12 +896,15 @@ public sealed class RoomManager(
 
         public void MediaUses(string engine, string? spatialProfile) => _inUse = (engine, spatialProfile);
         public string? Acoustics { get; set; } = record.Acoustics;
+        /// <summary>The acoustic parameters as stored JSON (parsed per snapshot, as the metadata).</summary>
+        public string? AcousticParameters { get; set; } = record.AcousticParametersJson;
         public Dictionary<Guid, Participant> Participants { get; } = [];
 
         public RoomSnapshot Snapshot() =>
             new(Id, Name, ExternalId, MaxParticipants, ParseMetadata(Metadata), CreatedAt, Participants.Count, Engine, Spatial, ClientPose,
                 InWorldAvatars, SpatialProfile, Acoustics,
-                Participants.Count > 0 && _inUse != (Engine, SpatialProfile) ? new RoomInUse(_inUse.Engine, _inUse.SpatialProfile) : null);
+                Participants.Count > 0 && _inUse != (Engine, SpatialProfile) ? new RoomInUse(_inUse.Engine, _inUse.SpatialProfile) : null,
+                ParseMetadata(AcousticParameters));
 
         public IReadOnlyList<ParticipantSnapshot> ParticipantSnapshots() =>
             Participants.Values.OrderBy(p => p.JoinedAt).Select(p => p.Snapshot()).ToList();

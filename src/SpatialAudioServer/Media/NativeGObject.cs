@@ -132,6 +132,53 @@ internal static unsafe class NativeGObject
         }
     }
 
+    /// <summary>
+    /// One property in GStreamer's serialised form (<c>gst_value_serialize</c>: enums by nick, lists as "&lt; a, b &gt;",
+    /// structures as their text), or null if the object has no such readable property or GStreamer is not loaded.
+    /// </summary>
+    public static string? SerializeProperty(nint obj, string name)
+    {
+        var serialize = Serialize;
+        if (Functions is not { } f || serialize == null || obj == 0)
+        {
+            return null;
+        }
+        fixed (byte* n = Utf8(name))
+        {
+            var spec = f.FindProperty(*(nint*)obj, (nint)n);
+            if (spec == 0 || (*(uint*)(spec + 2 * sizeof(nint)) & ParamReadable) == 0)
+            {
+                return null;
+            }
+            GValue value = default;
+            f.ValueInit(&value, *(nuint*)(spec + 3 * sizeof(nint)));
+            f.GetProperty(obj, (nint)n, &value);
+            var text = serialize(&value);
+            f.ValueUnset(&value);
+            if (text == 0)
+            {
+                return null;
+            }
+            var result = Marshal.PtrToStringUTF8(text);
+            f.Free(text);
+            return result;
+        }
+    }
+
+    private static readonly delegate* unmanaged<GValue*, nint> Serialize = LoadSerialize();
+
+    private static delegate* unmanaged<GValue*, nint> LoadSerialize()
+    {
+        foreach (var library in new[] { "libgstreamer-1.0.so.0", "gstreamer-1.0-0.dll", "libgstreamer-1.0.0.dylib" })
+        {
+            if (NativeLibrary.TryLoad(library, out var handle) && NativeLibrary.TryGetExport(handle, "gst_value_serialize", out var export))
+            {
+                return (delegate* unmanaged<GValue*, nint>)export;
+            }
+        }
+        return null;
+    }
+
     /// <summary>The name of the GstObject held in an object-typed property (e.g. input-selector's active-pad), or null.</summary>
     public static string? ReadObjectName(nint obj, string property)
     {

@@ -76,8 +76,11 @@ internal interface IMixEngine : IDisposable
 /// <summary>What an engine is given to work with. One per room.</summary>
 internal sealed class MixEngineContext(
     Guid roomId, int maxParticipants, Pipeline pipeline, RoomWorker worker, MediaOptions options, ILogger log, bool spatial = false,
-    string? spatialProfile = null, string? acoustics = null)
+    string? spatialProfile = null, string? acoustics = null, System.Text.Json.Nodes.JsonObject? acousticParameters = null)
 {
+    /// <summary>The room's acoustic parameters when the media started (<see cref="Spatial.AcousticParameters"/>).</summary>
+    public System.Text.Json.Nodes.JsonObject? AcousticParameters { get; } = acousticParameters;
+
     /// <summary>The room's acoustic preset when the media started (<see cref="Spatial.RoomAcoustics"/>; null = outdoor).</summary>
     public string? Acoustics { get; } = acoustics;
 

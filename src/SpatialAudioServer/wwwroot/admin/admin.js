@@ -46,6 +46,8 @@ const state = {
   oldestEvent: null,    // id of the oldest event shown (paging)
   paged: false,         // "Older" pressed: stop refreshing the newest page
   editing: false,       // focus in the participants table (a gain being typed)
+  acoustics: null,      // GET /api/rooms/{id}/acoustics
+  acousticsFor: null,   // the room the panel was built for
   timers: [],
 };
 
@@ -168,6 +170,7 @@ $("roomAcoustics").onchange = async () => {
     await request("PATCH", `/api/rooms/${state.selected}`, { acoustics: $("roomAcoustics").value });
     $("roomAcoustics").blur();
     refreshRoom();
+    loadAcoustics();
   } catch (e) { alert(e.message); }
 };
 
@@ -191,6 +194,7 @@ function selectRoom(id) {
   for (const row of $("rooms").tBodies[0].rows) row.classList.toggle("selected", row.dataset.room === id);
   resetEvents();
   refreshRoom();
+  loadAcoustics();
 }
 
 function closeRoom() {
@@ -342,6 +346,131 @@ async function showSessions() {
         </tr>`).join("");
   } catch (e) { alert(e.message); }
 }
+
+// ---------------------------------------------------------------------------------------------- acoustics
+
+// The room's acoustic parameters (GET/PATCH /api/rooms/{id}/acoustics, acousticParameters): a row per parameter, built
+// from the server's descriptions. A row shows the value in effect; changing it overrides the preset (sliders while
+// dragging, a few times a second), ↺ goes back to the preset's (or the dimensions', or the distance curve's).
+
+const ACOUSTIC_GROUPS = {
+  dimensions: ["Room dimensions", "With width, depth and height, these give the reflections and reverb instead of the preset."],
+  reflections: ["Early reflections", ""],
+  reverb: ["Reverb", ""],
+  distance: ["Distance and direction", "Overrides of the room's distance curve."],
+};
+const acousticTimers = new Map();   // key → pending PATCH timer
+
+async function loadAcoustics() {
+  const id = state.selected;
+  if (!id) return;
+  let a;
+  try { a = await request("GET", `/api/rooms/${id}/acoustics`); } catch { return; }
+  if (id !== state.selected) return;
+  state.acoustics = a;
+  if (state.acousticsFor !== id) buildAcoustics(a);
+  showAcoustics(a);
+}
+
+const label = key => key.replace(/([A-Z])/g, " $1").replace(/^./, c => c.toUpperCase());
+
+function buildAcoustics(a) {
+  state.acousticsFor = state.selected;
+  $("acousticsGroups").innerHTML = Object.entries(ACOUSTIC_GROUPS).map(([group, [title, note]]) => `
+    <div class="acoustic-group">
+      <h3>${escapeHtml(title)}</h3>${note ? `<p class="hint">${escapeHtml(note)}</p>` : ""}
+      ${a.parameters.filter(p => p.group === group).map(acousticRow).join("")}
+    </div>`).join("");
+}
+
+function acousticRow(p) {
+  const unit = p.unit ? ` (${p.unit})` : "";
+  const title = `${p.description}${unit}. In-world notecard key: ${p.property}`;
+  let control;
+  if (p.kind === "number") {
+    control = `<input type="range" min="${p.min}" max="${p.sliderMax}" step="${p.step}" data-acoustic="${p.key}">` +
+      `<input type="number" min="${p.min}" max="${p.max}" step="${p.step}" data-acoustic="${p.key}">`;
+  } else if (p.kind === "list") {
+    control = `<input type="text" placeholder="e.g. ${p.maxCount === 2 ? "0.1, 0.6" : "12, 20, 33"}" data-acoustic="${p.key}">`;
+  } else {
+    control = `<select data-acoustic="${p.key}">${p.choices.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}</select>`;
+  }
+  return `
+    <div class="acoustic-row inherited" data-row="${p.key}" title="${escapeHtml(title)}">
+      <label>${escapeHtml(label(p.key))}${escapeHtml(unit)}</label>
+      <span class="control">${control}</span>
+      <span class="source"></span>
+      <button class="small" type="button" data-reset="${p.key}" title="Back to the preset's or default value">↺</button>
+    </div>`;
+}
+
+const formatList = v => Array.isArray(v) ? v.join(", ") : (v ?? "");
+
+function showAcoustics(a) {
+  const values = a.values ?? {};
+  const set = a.acousticParameters ?? {};
+  const derived = new Set(values.derived ?? []);
+  const count = Object.keys(set).length;
+  $("acousticsSummary").textContent = `· ${a.acoustics ?? "outdoor"}${count ? `, ${count} changed` : ""}`;
+  $("acousticsNote").textContent = !a.values
+    ? "Values in effect need the acousticmultimixer plugin on the server; changes are still stored."
+    : !a.rendered ? "This room's engine is not acoustic: these are stored, but heard only with the acoustic engine."
+    : values.reverbRoomLevel != null ? `The room's own reverb level: ${values.reverbRoomLevel} dB.` : "No reverb (outdoors).";
+  for (const p of a.parameters) {
+    const row = document.querySelector(`[data-row="${p.key}"]`);
+    if (!row) continue;
+    const overridden = p.key in set;
+    const value = overridden ? set[p.key] : values[p.key];
+    row.classList.toggle("overridden", overridden);
+    row.classList.toggle("inherited", !overridden);
+    // Where an unset value comes from: the preset (reflections, reverb), else the server's default or the room's curve.
+    const fromPreset = (p.group === "reflections" || p.group === "reverb") && p.key !== "reverbLevel";
+    row.querySelector(".source").textContent = overridden ? "set" : derived.has(p.key) ? "from size"
+      : value == null || (Array.isArray(value) && value.length === 0 && fromPreset) ? "none" : fromPreset ? "preset" : "default";
+    row.querySelector("[data-reset]").disabled = !overridden;
+    for (const input of row.querySelectorAll("[data-acoustic]")) {
+      if (input === document.activeElement || acousticTimers.has(p.key)) continue;
+      input.value = p.kind === "list" ? formatList(value) : (value ?? "");
+    }
+  }
+}
+
+function sendAcoustic(key, value, delay) {
+  clearTimeout(acousticTimers.get(key));
+  acousticTimers.set(key, setTimeout(async () => {
+    acousticTimers.delete(key);
+    try {
+      await request("PATCH", `/api/rooms/${state.selected}`, { acousticParameters: { [key]: value } });
+    } catch (e) { alert(e.message); }
+    loadAcoustics();
+  }, delay));
+}
+
+function acousticValue(p, input) {
+  if (p.kind === "number") return input.value === "" ? null : Number(input.value);
+  if (p.kind === "list") return input.value.trim() === "" ? null : input.value;
+  return input.value;
+}
+
+$("acousticsGroups").addEventListener("input", event => {
+  const input = event.target.closest("[data-acoustic]");
+  const p = input && state.acoustics?.parameters.find(x => x.key === input.dataset.acoustic);
+  if (!p || p.kind !== "number") return;
+  // Keep the slider and the number box together; send while dragging, at most every 200 ms.
+  for (const other of input.closest(".acoustic-row").querySelectorAll("[data-acoustic]")) if (other !== input) other.value = input.value;
+  sendAcoustic(p.key, acousticValue(p, input), 200);
+});
+
+$("acousticsGroups").addEventListener("change", event => {
+  const input = event.target.closest("[data-acoustic]");
+  const p = input && state.acoustics?.parameters.find(x => x.key === input.dataset.acoustic);
+  if (p) sendAcoustic(p.key, acousticValue(p, input), 0);
+});
+
+$("acousticsGroups").addEventListener("click", event => {
+  const reset = event.target.closest("[data-reset]");
+  if (reset) sendAcoustic(reset.dataset.reset, null, 0);
+});
 
 // ---------------------------------------------------------------------------------------------- events
 

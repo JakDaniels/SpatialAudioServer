@@ -43,3 +43,20 @@ button.small { padding: .2rem .5rem; font-size: .82rem; }
 .warn { color: var(--warn); }
 .bad { color: var(--danger); }
 #history h3 { font-size: .95rem; margin: 1rem 0 .25rem; }
+
+/* The room's acoustics panel: one row per parameter; muted while it shows the preset's (or derived) value. */
+#acousticsPanel { margin: .25rem 0 .75rem; }
+#acousticsPanel summary { cursor: pointer; font-weight: 600; }
+#acousticsGroups { display: grid; grid-template-columns: repeat(auto-fit, minmax(30rem, 1fr)); gap: .25rem 2rem; }
+.acoustic-group h3 { font-size: .9rem; margin: .75rem 0 .25rem; }
+.acoustic-group .hint { margin: 0 0 .25rem; font-size: .78rem; }
+.acoustic-row { display: grid; grid-template-columns: 11rem minmax(9rem, 1fr) 3.8rem 1.6rem; gap: .4rem; align-items: center; font-size: .85rem; padding: .1rem 0; }
+.acoustic-row label { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acoustic-row .control { display: flex; gap: .3rem; align-items: center; min-width: 0; }
+.acoustic-row input[type=range] { flex: 1; min-width: 4rem; width: auto; padding: 0; border: 0; background: none; accent-color: var(--accent); }
+.acoustic-row input[type=number] { width: 4.6rem; flex: none; padding: .15rem .3rem; }
+.acoustic-row input[type=text], .acoustic-row select { flex: 1; min-width: 0; padding: .15rem .3rem; }
+.acoustic-row .source { font-size: .75rem; color: var(--muted); white-space: nowrap; }
+.acoustic-row.inherited input, .acoustic-row.inherited select { opacity: .6; }
+.acoustic-row.overridden .source { color: var(--accent); }
+.acoustic-row button { padding: 0 .3rem; font-size: .8rem; }
