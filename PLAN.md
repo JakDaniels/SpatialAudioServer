@@ -548,8 +548,8 @@ tested without GStreamer.
      `sasGetRoomParametersText()` taking the same text. They act on the voice room of the parcel the prim is on (its
      own, else the region's). The notecard is `key = value` lines (`#` or `//` comments): `room = parcel|region`
      (required: which room it is for, so a parcel switched back to the region's channel cannot change the region's
-     room by accident), `acoustics = …`; later room dimensions, absorption, reverb level (with the element's geometry,
-     acousticmultimixer#3). Unknown keys or bad values refuse the whole set. The getter writes everything, including
+     room by accident), `acoustics = …`; and (decided 2026-11-27, os-webrtc-sas#13) every room parameter (Room parameters, below), keyed by the element's
+     property names, an empty value removing the override. Unknown keys or bad values refuse the whole set. The getter writes everything, including
      `engine` and `distance-curve`; it replaces a notecard of that name. **Engine and distance curve (decided
      2026-11-25, #28):** `PATCH` changes them; the media switches when nobody is in the room (at once if empty, else
      when the last participant leaves; the room shows `inUse` meanwhile), so scripts and the configuration change
@@ -565,6 +565,18 @@ tested without GStreamer.
      notecard functions. A ready-made script applies an `Acoustics` notecard on rez, at region start and when the
      notecard changes, and saves the room's settings to it when its owner touches it. Later: console commands; the
      script taking chat commands; per-parcel settings in config (os-webrtc-sas#10).
+     **Room parameters (decided 2026-11-27, [#31](https://github.com/JakDaniels/SpatialAudioServer/issues/31)):**
+     every parameter of an `acoustic` room is exposed to the control API, the admin UI and in-world scripts
+     (os-webrtc-sas#13), and changes while people talk. They are **overrides on the room's preset** (or, for the
+     distance curve, on its profile); unset means the preset's value. All of them: what the element already has
+     (`reverb-level`, `air-absorption`, `near-distance`, `direction-model`, `rear-shadow`, the distance curve), the
+     values inside each preset (reflection delays and levels, the walls' cutoff, bass and treble decay, reverb size,
+     and the room's falloff, spread, diffusion and near floor: acousticmultimixer#7), and room dimensions with
+     surface absorption, from which the element derives those values (acousticmultimixer#8; precedence: override,
+     dimensions, preset). Names follow the element's properties. Stored per room beside `acoustics`, set by
+     create and `PATCH` (null removes an override), returned with the values in effect and their source; the admin
+     UI gets a control per value with a reset. The silence gate (acousticmultimixer#2) comes after this, as its
+     own piece; per-path reflections from the same dimensions (acousticmultimixer#3) after that.
      **Publishing the plugin (2026-11-19, #23, #22):** the plugin repository is public and makes its own releases
      (0.1.0: `.deb`/`.rpm` for x64 and arm64, a Windows zip). Here: the server package *recommends* it; `pages.yml`
      adds the plugin's latest published release to the apt/dnf repositories (run it by hand after a plugin release:
